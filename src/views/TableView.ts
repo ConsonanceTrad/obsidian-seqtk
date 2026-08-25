@@ -99,7 +99,7 @@ export class TableView extends ItemView {
     const filterSel = toolbar.createEl('select', { cls: 'dropdown' });
     filterSel.add(new Option('全部类型', 'all'));
     const allKinds: NodeKind[] = [
-      'concept', 'checklist', 'item', 'event',
+      'concept', 'direction', 'target', 'process', 'project', 'checklist', 'item', 'event',
       'factor', 'requirement', 'clue', 'snapshot',
       'framework-transaction', 'framework-info', 'framework-template',
     ];
@@ -374,7 +374,7 @@ export class TableView extends ItemView {
       return;
     }
     const kinds: NodeKind[] = [
-      'concept', 'checklist', 'item', 'event',
+      'concept', 'direction', 'target', 'process', 'project', 'checklist', 'item', 'event',
       'factor', 'requirement', 'clue', 'snapshot',
       'framework-transaction', 'framework-info', 'framework-template',
     ];

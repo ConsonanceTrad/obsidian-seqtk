@@ -2,6 +2,349 @@
    Like-Duplicant V6 — 视图样式
    ============================================================ */
 
+/* ============================================================
+   节点行视觉效果优化
+   ============================================================ */
+
+/* 行 hover 与展开态背景（行基础布局沿用原有 .seqtk-row 定义） */
+.seqtk-row {
+  transition: background-color 0.2s ease;
+}
+
+.seqtk-row:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+/* 展开态：背景加深 + 左侧指示条（同时覆盖 .seqtk-row 与 .seqtk-frame-item 两类行） */
+.seqtk-row.seqtk-row-expanded,
+.seqtk-frame-item.seqtk-row-expanded {
+  /*background-color: color-mix(in srgb, var(--background-modifier-active) 70%, #000);*/
+  box-shadow: inset 2px 0 0 rgb(0 0 0 / 0.67);
+}
+
+.seqtk-row.seqtk-row-expanded:hover,
+.seqtk-frame-item.seqtk-row-expanded:hover {
+  /*background-color: color-mix(in srgb, var(--background-modifier-active) 70%, #000);*/
+  box-shadow: inset 2px 0 0 rgb(0 0 0 / 0.67);
+}
+
+/* 折叠标识小方块（恒定于行左上角，绝对定位不挤占布局；展开态隐藏） */
+.seqtk-collapse-mark {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  background: var(--text-muted);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.seqtk-row.seqtk-row-expanded .seqtk-collapse-mark,
+.seqtk-frame-item.seqtk-row-expanded .seqtk-collapse-mark {
+  display: none;
+}
+
+/* 展开子树内子行：背景加深 + 左端边框标识（比父行更淡，区分层级） */
+.seqtk-row.seqtk-row-in-expanded,
+.seqtk-frame-item.seqtk-row-in-expanded {
+  background-color: color-mix(in srgb, var(--background-secondary) 55%, var(--background-primary));
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+}
+
+.seqtk-row.seqtk-row-in-expanded:hover,
+.seqtk-frame-item.seqtk-row-in-expanded:hover {
+  background-color: color-mix(in srgb, var(--background-secondary) 55%, var(--background-primary));
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+}
+
+/* 类型徽章：按大类分色（基础样式沿用原有 .seqtk-kind-badge 定义，圆角已降为 4px） */
+.seqtk-kind-badge.kind-framework {
+  background: var(--color-blue);
+  color: var(--text-on-accent);
+  border-color: var(--color-blue);
+}
+
+.seqtk-kind-badge.kind-transaction {
+  background: var(--color-green);
+  color: var(--text-on-accent);
+  border-color: var(--color-green);
+}
+
+.seqtk-kind-badge.kind-evidence {
+  background: var(--color-orange);
+  color: var(--text-on-accent);
+  border-color: var(--color-orange);
+}
+
+.seqtk-kind-badge.kind-mark {
+  background: var(--color-purple);
+  color: var(--text-on-accent);
+  border-color: var(--color-purple);
+}
+
+.seqtk-kind-badge.kind-runtime {
+  background: var(--color-red);
+  color: var(--text-on-accent);
+  border-color: var(--color-red);
+}
+
+.seqtk-kind-badge.kind-script {
+  background: var(--color-base-50);
+  color: var(--text-muted);
+  border-color: var(--background-modifier-border);
+}
+
+/* 正文预览（节点名后；内容宽，上限 220px，半透明弱化视觉焦点） */
+.seqtk-body-preview {
+  flex: 0 1 auto;
+  max-width: 220px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  opacity: 0.4;
+  margin-right: 6px;
+}
+
+/* 弹性间隔：填充剩余空间，使行右侧徽章/状态圆点/按钮靠右 */
+.seqtk-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 修改属性模态框：展示名只读 */
+.seqtk-modal-name-readonly {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* 右栏标题行：标题靠左，操作按钮（如顺序更改模式）置于行末 */
+.seqtk-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 排序模式拖拽：拖动中与插入指示线 / 驳回样式 */
+.seqtk-row.seqtk-dragging {
+  opacity: 0.5;
+}
+
+.seqtk-row.seqtk-drop-before {
+  box-shadow: inset 0 2px 0 0 var(--interactive-accent);
+}
+
+.seqtk-row.seqtk-drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--interactive-accent);
+}
+
+.seqtk-row.seqtk-drop-invalid {
+  outline: 2px solid var(--text-error);
+  outline-offset: -2px;
+}
+
+/* 预期属性徽章 */
+.seqtk-expected-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--background-secondary-alt);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+/* 行内编辑输入框（右键重命名；绝对定位覆盖 desc，不撑大节点行） */
+.seqtk-inline-edit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 4px;
+  font-size: inherit;
+  font-family: inherit;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 3px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* 行内新建子节点：附加行（类型下拉 + 名称输入；左缩进由 JS 按层级设置） */
+.seqtk-inline-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+/* 多子类型：类型下拉（风格与类型标签徽章一致） */
+.seqtk-inline-kind {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 2px 6px;
+  margin: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: var(--color-green);
+  color: var(--text-on-accent);
+  cursor: pointer;
+  outline: none;
+}
+
+.seqtk-inline-kind option {
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* 单子类型：类型预览标签（位于输入框前） */
+.seqtk-inline-kind-preview {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 2px 6px;
+  margin: 0 4px;
+  border-radius: 4px;
+  background: var(--color-green);
+  color: var(--text-on-accent);
+}
+
+/* 新建子框架预览标签：框架语义色为蓝色，覆盖通用绿色 */
+.seqtk-inline-kind-preview.kind-framework {
+  padding: 2px 6px;
+  margin: 0 4px;
+  background: var(--color-blue);
+  border-color: var(--color-blue);
+  font-size: 12px;
+}
+
+.seqtk-inline-name {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin: 0;
+  padding: 0 6px;
+  font-size: inherit;
+  font-family: inherit;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 3px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* 行内编辑正文：行下覆盖式多行浮层（不挤动布局） */
+.seqtk-inline-body {
+  position: relative;
+  height: 0;
+  overflow: visible;
+}
+
+.seqtk-inline-body-area {
+  position: absolute;
+  top: 0;
+  left: 120px;
+  right: 30px;
+  height: 88px;
+  z-index: 20;
+  resize: vertical;
+  padding: 6px 8px;
+  font-size: var(--font-ui-small);
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 4px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* 子框架卡片（右侧栏；内部容纳节点行，行交互完整可用） */
+.seqtk-fw-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 4px;
+}
+
+.seqtk-fw-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+.seqtk-fw-card:hover {
+  border-color: var(--interactive-accent);
+}
+
+/* 嵌套子框架卡片：层级缩进 + 虚线边框 + 浅色背景，与外层实线卡片区分 */
+.seqtk-fw-card .seqtk-fw-card {
+  margin: 0 6px 6px 14px;
+  border-style: dashed;
+  background: var(--background-primary);
+}
+
+/* 状态圆点（四色，替代文字徽章；悬停 title 显示状态名） */
+.seqtk-state-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.seqtk-state-dot.state-plan {
+  background: var(--color-base-50);
+}
+
+.seqtk-state-dot.state-open {
+  background: var(--color-blue);
+}
+
+.seqtk-state-dot.state-done {
+  background: var(--color-green);
+}
+
+.seqtk-state-dot.state-drop {
+  background: var(--color-red);
+}
+
+/* 行末“在右侧打开”按钮（左栏行） */
+.seqtk-open-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 10%, transparent) !important;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+  padding: 3px;
+  padding-left: 5px;
+  padding-bottom: 4px;
+}
+
+.seqtk-open-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+}
+
 /* ── 规划视图 ── */
 .ld-planning-view {
   padding: 8px;
@@ -1502,12 +1845,13 @@
   margin-bottom: 4px;
 }
 
+/* 节点行基础样式（被优化样式覆盖） */
 .seqtk-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 3px 6px;
-  border-radius: var(--radius-s);
   cursor: default;
 }
 
@@ -1515,6 +1859,7 @@
   background: var(--background-modifier-hover);
 }
 
+/* Toggle 样式（不再使用） */
 .seqtk-toggle {
   width: 16px;
   flex-shrink: 0;
@@ -1524,34 +1869,32 @@
   user-select: none;
 }
 
+/* 类型徽章（被优化样式覆盖） */
 .seqtk-kind-badge {
   flex-shrink: 0;
-  font-size: 10px;
-  padding: 0 6px;
-  border-radius: 999px;
+  font-size: 12px;
+  padding: 1px 5px;
+  margin: 0 4px;
+  border-radius: 4px;
   background: var(--background-secondary);
   color: var(--text-muted);
   border: 1px solid var(--background-modifier-border);
 }
 
 .seqtk-desc {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
 }
 
-.seqtk-desc:hover {
-  color: var(--text-accent);
-}
-
+/* 状态徽章（降圆角） */
 .seqtk-state-badge {
   flex-shrink: 0;
   font-size: 10px;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: 4px;
   border: none;
   cursor: pointer;
   color: var(--text-on-accent);
@@ -1713,11 +2056,11 @@
 }
 
 .seqtk-frame-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
-  border-radius: var(--radius-s);
   cursor: pointer;
 }
 
@@ -2206,6 +2549,19 @@
 /* 中控台占位条目 */
 .seqtk-hub-item-placeholder {
   opacity: 0.75;
+}
+
+/* 设置面板 · 分栏布局（左列界面 / 右列中控台管理） */
+.seqtk-settings-compact .seqtk-settings-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  margin-top: 8px;
+}
+
+.seqtk-settings-compact .seqtk-settings-column {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 /* 设置面板 · 中控台管理（紧凑 + 拖拽排序） */

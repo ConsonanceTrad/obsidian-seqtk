@@ -242,9 +242,15 @@ export class NodeFileManager {
 
     await this.vault.process(file, (content: string) => {
       const { data, body } = parseNodeFile(content);
-      Object.assign(data, updates, {
-        modify: new Date().toISOString(),
-      });
+      // 合并更新；undefined 值表示删除该键（支持清空可选字段）
+      for (const [k, v] of Object.entries(updates)) {
+        if (v === undefined) {
+          delete (data as any)[k];
+        } else {
+          (data as any)[k] = v;
+        }
+      }
+      data.modify = new Date().toISOString();
       return serializeNodeFile(data, body);
     });
   }

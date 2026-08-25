@@ -45,7 +45,7 @@ class SelectFrameworkModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h3', { text: this.opts.title });
+    this.setTitle(this.opts.title);
 
     let selected = this.opts.frameworks[0]?.nodeId ?? '';
     new Setting(contentEl)

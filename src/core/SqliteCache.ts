@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS nodes (
   pmarks      TEXT,
   nature      TEXT,
   at          TEXT,
+  expected_time   TEXT,
+  expected_repeat TEXT,
+  expected_span   TEXT,
   body        TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);
@@ -97,6 +100,9 @@ interface NodeRow {
   pmarks: string | null;
   nature: string | null;
   at: string | null;
+  expected_time: string | null;
+  expected_repeat: string | null;
+  expected_span: string | null;
   body: string;
 }
 
@@ -144,6 +150,10 @@ function rowToNode(row: NodeRow): SeqtkNode {
   if (pmarks) node.pmarks = pmarks;
   if (row.nature) node.nature = row.nature;
   if (row.at) node.at = row.at;
+  if (row.expected_time) node.expectedTime = row.expected_time;
+  if (row.expected_repeat) node.expectedRepeat = row.expected_repeat;
+  const expectedSpan = jsonDecode<{ from?: string; to?: string }>(row.expected_span);
+  if (expectedSpan) node.expectedSpan = expectedSpan;
   return node as SeqtkNode;
 }
 
@@ -248,7 +258,7 @@ export class SqliteCache {
     // 补建缺失的表与索引（幂等；对已存在的表/索引不产生任何操作）
     db.run(SCHEMA);
     // 补列：nodes 表按需追加 TEXT 列
-    const ALTER_COLUMNS = ['nature', 'at'];
+    const ALTER_COLUMNS = ['nature', 'at', 'expected_time', 'expected_repeat', 'expected_span'];
     const nodeResult = db.exec('PRAGMA table_info(nodes)');
     const nodeCols: string[] =
       nodeResult.length > 0 ? nodeResult[0].values.map((r) => String(r[1])) : [];
@@ -309,8 +319,9 @@ export class SqliteCache {
     db.run(
       `INSERT OR REPLACE INTO nodes
          (id, kind, desc, open, source, created_at, modified_at,
-          state, estate, clear, tags, indicators, pmarks, nature, at, body)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          state, estate, clear, tags, indicators, pmarks, nature, at,
+          expected_time, expected_repeat, expected_span, body)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         nodeId,
         node.kind,
@@ -327,6 +338,9 @@ export class SqliteCache {
         jsonEncode(raw.pmarks),
         raw.nature ?? null,
         raw.at ?? null,
+        raw.expectedTime ?? null,
+        raw.expectedRepeat ?? null,
+        jsonEncode(raw.expectedSpan),
         body ?? '',
       ]
     );
@@ -512,7 +526,7 @@ export class SqliteCache {
   private buildRelationMap(): Map<string, RelationRef[]> {
     const db = this.requireDb();
     const map = new Map<string, RelationRef[]>();
-    const stmt = db.prepare('SELECT from_id, rel, to_id FROM relations');
+    const stmt = db.prepare('SELECT from_id, rel, to_id FROM relations ORDER BY rowid');
     while (stmt.step()) {
       const r = stmt.getAsObject() as any;
       const list = map.get(r.from_id) ?? [];
@@ -531,8 +545,8 @@ export class SqliteCache {
   getOutgoingRelations(nodeId: string, rel?: RelationType): RelationRef[] {
     const db = this.requireDb();
     const sql = rel
-      ? 'SELECT rel, to_id FROM relations WHERE from_id = ? AND rel = ?'
-      : 'SELECT rel, to_id FROM relations WHERE from_id = ?';
+      ? 'SELECT rel, to_id FROM relations WHERE from_id = ? AND rel = ? ORDER BY rowid'
+      : 'SELECT rel, to_id FROM relations WHERE from_id = ? ORDER BY rowid';
     const params = rel ? [nodeId, rel] : [nodeId];
     const stmt = db.prepare(sql);
     stmt.bind(params);
@@ -549,8 +563,8 @@ export class SqliteCache {
   getIncomingRelations(nodeId: string, rel?: RelationType): RelationRef[] {
     const db = this.requireDb();
     const sql = rel
-      ? 'SELECT from_id, rel FROM relations WHERE to_id = ? AND rel = ?'
-      : 'SELECT from_id, rel FROM relations WHERE to_id = ?';
+      ? 'SELECT from_id, rel FROM relations WHERE to_id = ? AND rel = ? ORDER BY rowid'
+      : 'SELECT from_id, rel FROM relations WHERE to_id = ? ORDER BY rowid';
     const params = rel ? [nodeId, rel] : [nodeId];
     const stmt = db.prepare(sql);
     stmt.bind(params);

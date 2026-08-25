@@ -38,12 +38,16 @@ export type FrameworkKind =
 /**
  * 事务节点类型
  *
- * 项目类层级：concept（构想，顶层）→ 方向 → 目标 → 工序（后续接入）；
- * concept 是项目类独立顶层类型，project 保留作为后续子类型定义。
+ * 项目类层级：concept（构想，顶层）→ direction（方向）→ target（目标）
+ * → process（工序）；工序节点支持同级任意深度嵌套，其余严格逐级向下。
+ * concept 是项目类独立顶层类型，project 保留作为旧版占位（兼容）。
  */
 export type TransactionKind =
   | 'concept'
   | 'project'
+  | 'direction'
+  | 'target'
+  | 'process'
   | 'checklist'
   | 'item'
   | 'event';
@@ -94,7 +98,7 @@ export type NodeCategory =
 /** 各大类包含的细分类型 */
 export const CATEGORY_KINDS: Record<NodeCategory, NodeKind[]> = {
   framework: ['framework-transaction', 'framework-info', 'framework-template'],
-  transaction: ['concept', 'project', 'checklist', 'item', 'event'],
+  transaction: ['concept', 'project', 'direction', 'target', 'process', 'checklist', 'item', 'event'],
   evidence: ['factor', 'requirement', 'clue', 'snapshot'],
   mark: ['mark'],
   runtime: ['runtime-editlog', 'runtime-behaviorlog', 'runtime-flowstate'],
@@ -191,6 +195,10 @@ export const YamlKeys = {
   pmarks: 'pmarks',
   nature: 'nature',
   at: 'at',
+  // ── 预期属性（表意） ──
+  expectedTime: 'expectedTime',
+  expectedRepeat: 'expectedRepeat',
+  expectedSpan: 'expectedSpan',
 } as const;
 
 // ============================================================
@@ -258,6 +266,12 @@ export interface MeaningFields {
   nature?: EventNature;
   /** 时间点（仅 snapshot 状态节点）：记录状态对应的 ISO 时间，与节点 create 时间独立 */
   at?: string;
+  /** 预期时间（仅事务节点）：ISO 日期/时间，描述事务预期何时完成或发生 */
+  expectedTime?: string;
+  /** 预期重复（仅事务节点）：循环规则字符串，描述事务预期重复周期，语法见 utils/cycleRuleParser */
+  expectedRepeat?: string;
+  /** 预期时间段（仅框架节点）：起止 ISO 时间，描述框架整体预期跨度 */
+  expectedSpan?: { from?: string; to?: string };
 }
 
 // ============================================================
@@ -278,10 +292,13 @@ export interface FrameworkNode extends NodeBase, AffiliationFields, MeaningField
  * 事务节点 — 描述待执行的规划分支设计
  *
  * - 构想节点（concept）：项目类顶层，描述一个模糊概念，是「新建项目」创建的类型
- * - 项目节点（project）：构想下的细化层级占位（方向 > 目标 > 工序，后续接入）
+ * - 方向节点（direction）：构想下的细化层级，严格逐级向下到目标
+ * - 目标节点（target）：方向下的细化层级，可容纳事件
+ * - 工序节点（process）：目标下的可执行步骤，支持同级任意深度嵌套
+ * - 项目节点（project）：旧版占位类型，保留兼容
  * - 清单节点（checklist）：一组可重复执行的任务组，通过模板框架、条件清空功能实现复用
  * - 事项节点（item）：从属于清单，清单不支持深嵌套（仅 清单 > 事项）
- * - 事件节点（event）：已完成或临时被派发的任务，可从属于构想/项目
+ * - 事件节点（event）：已完成或临时被派发的任务，可从属于框架或目标
  */
 export interface TransactionNode extends NodeBase, AffiliationFields, MeaningFields {
   kind: TransactionKind;
@@ -366,6 +383,9 @@ export const NODE_FOLDER_MAP: Record<NodeKind, string> = {
   'framework-template': 'Template',
   concept: 'Concept',
   project: 'Project',
+  direction: 'Direction',
+  target: 'Target',
+  process: 'Process',
   checklist: 'Checklist',
   item: 'Item',
   event: 'Event',
@@ -460,6 +480,9 @@ export const NODE_KIND_LABELS: Record<NodeKind, string> = {
   'framework-template': '模板框架',
   concept: '构想',
   project: '项目',
+  direction: '方向',
+  target: '目标',
+  process: '工序',
   checklist: '清单',
   item: '事项',
   event: '事件',
@@ -531,6 +554,9 @@ export interface PluginSettings {
   /** 归档父节点时是否弹出子孙节点计数确认提示 */
   archiveConfirmPrompt: boolean;
 
+  /** 是否在事务设计左侧栏显示「全部事务」入口（默认隐藏） */
+  showAllOverview: boolean;
+
   /** 中控台管理：各章节的显隐与组内顺序（key=章节名；空 = 默认全部显示/registry 顺序） */
   hub: Record<string, { hidden: string[]; order: string[] }>;
 }
@@ -545,5 +571,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   statusFollow: true,
   statusFollowTarget: 'done',
   archiveConfirmPrompt: true,
+  showAllOverview: false,
   hub: {},
 };

@@ -14,6 +14,7 @@ import {
   isFrameworkKind,
   isTransactionKind,
 } from '../../types/index';
+import { describeCycleRule, validateCycleRule } from '../../utils/cycleRuleParser';
 
 /** 创建后行为 */
 export type CreateAfterAction = 'direct' | 'edit-body';
@@ -25,6 +26,12 @@ export interface TransactionCreateInput {
   state: SeqtkState;
   /** 事件性质（仅 kind=event 时提供） */
   nature?: EventNature;
+  /** 预期时间（仅事务节点）：ISO 日期/时间 */
+  expectedTime?: string;
+  /** 预期重复（仅事务节点）：cycleRuleParser 语法规则字符串 */
+  expectedRepeat?: string;
+  /** 预期时间段（仅框架节点）：起止 ISO 时间 */
+  expectedSpan?: { from?: string; to?: string };
   /** 创建后行为（默认 direct=直接创建，不跳转） */
   afterCreate: CreateAfterAction;
 }
@@ -35,6 +42,12 @@ export interface TransactionEditInput {
   state: SeqtkState;
   /** 事件性质（仅 event 节点提供） */
   nature?: EventNature;
+  /** 预期时间（仅事务节点）：ISO 日期/时间 */
+  expectedTime?: string;
+  /** 预期重复（仅事务节点）：cycleRuleParser 语法规则字符串 */
+  expectedRepeat?: string;
+  /** 预期时间段（仅框架节点）：起止 ISO 时间 */
+  expectedSpan?: { from?: string; to?: string };
 }
 
 function stateOptions(): { value: SeqtkState; label: string }[] {
@@ -57,6 +70,12 @@ export class TransactionCreateModal extends Modal {
   private nature: EventNature = 'temp';
   private natureSetting: Setting | null = null;
   private stateSel: DropdownComponent | null = null;
+  // 预期属性
+  private expectedTime = '';
+  private expectedRepeat = '';
+  private expectedSpanFrom = '';
+  private expectedSpanTo = '';
+  private expectedFieldsEl: HTMLElement | null = null;
 
   constructor(
     app: App,
@@ -75,7 +94,7 @@ export class TransactionCreateModal extends Modal {
     contentEl.empty();
     contentEl.addClass('seqtk-modal');
 
-    contentEl.createEl('h3', { text: '新建节点' });
+    this.setTitle('新建节点');
 
     // 类型 + 名称靠左，状态靠右（类似节点行的展示形式）
     const row = contentEl.createDiv('seqtk-inline-row');
@@ -90,6 +109,7 @@ export class TransactionCreateModal extends Modal {
       this.kind = v as NodeKind;
       this.updateNatureVisibility();
       this.updateStateVisibility();
+      this.renderExpectedFields();
     });
 
     const nameInput = new TextComponent(left);
@@ -120,6 +140,10 @@ export class TransactionCreateModal extends Modal {
       });
     this.updateNatureVisibility();
 
+    // 预期属性字段区（按类型动态显示：事务=预期时间+预期重复；框架=预期时间段）
+    this.expectedFieldsEl = contentEl.createDiv('seqtk-expected-fields');
+    this.renderExpectedFields();
+
     // 三个并列按钮：创建（默认）/ 创建并编辑描述 / 取消
     new Setting(contentEl)
       .addButton((b) => {
@@ -147,6 +171,42 @@ export class TransactionCreateModal extends Modal {
     }
   }
 
+  /** 按当前类型渲染预期属性字段区：事务=预期时间+预期重复；框架=预期时间段 */
+  private renderExpectedFields(): void {
+    const el = this.expectedFieldsEl;
+    if (!el) return;
+    el.empty();
+    if (isTransactionKind(this.kind)) {
+      new Setting(el).setName('预期时间').addText((t) => {
+        t.inputEl.type = 'date';
+        t.setValue(this.expectedTime);
+        t.onChange((v) => { this.expectedTime = v; });
+      });
+      const repDesc = this.expectedRepeat ? describeCycleRule(this.expectedRepeat) : '如 D-r3（每3日）、W-r2-i4D（每两周第4日）';
+      const rep = new Setting(el).setName('预期重复').setDesc(repDesc);
+      rep.addText((t) => {
+        t.setPlaceholder('D-r3');
+        t.setValue(this.expectedRepeat);
+        t.onChange((v) => {
+          this.expectedRepeat = v;
+          rep.setDesc(v ? describeCycleRule(v) : '如 D-r3（每3日）、W-r2-i4D（每两周第4日）');
+        });
+      });
+    } else if (isFrameworkKind(this.kind)) {
+      new Setting(el).setName('预期时间段').setDesc('起止日期').addText((t) => {
+        t.inputEl.type = 'date';
+        t.setPlaceholder('起');
+        t.setValue(this.expectedSpanFrom);
+        t.onChange((v) => { this.expectedSpanFrom = v; });
+      }).addText((t) => {
+        t.inputEl.type = 'date';
+        t.setPlaceholder('止');
+        t.setValue(this.expectedSpanTo);
+        t.onChange((v) => { this.expectedSpanTo = v; });
+      });
+    }
+  }
+
   private confirm(afterCreate: CreateAfterAction): void {
     if (!this.desc.trim()) {
       new Setting(this.contentEl).setDesc('名称不能为空');
@@ -157,6 +217,16 @@ export class TransactionCreateModal extends Modal {
       desc: this.desc.trim(),
       state: this.state,
       ...(this.kind === 'event' ? { nature: this.nature } : {}),
+      ...(isTransactionKind(this.kind) ? {
+        ...(this.expectedTime ? { expectedTime: this.expectedTime } : {}),
+        ...(this.expectedRepeat ? { expectedRepeat: this.expectedRepeat } : {}),
+      } : {}),
+      ...(isFrameworkKind(this.kind) && (this.expectedSpanFrom || this.expectedSpanTo) ? {
+        expectedSpan: {
+          ...(this.expectedSpanFrom ? { from: this.expectedSpanFrom } : {}),
+          ...(this.expectedSpanTo ? { to: this.expectedSpanTo } : {}),
+        },
+      } : {}),
       afterCreate,
     });
     this.close();
@@ -176,6 +246,11 @@ export class TransactionEditModal extends Modal {
   private state: SeqtkState;
   private body: string;
   private nature: EventNature;
+  // 预期属性
+  private expectedTime = '';
+  private expectedRepeat = '';
+  private expectedSpanFrom = '';
+  private expectedSpanTo = '';
 
   constructor(
     app: App,
@@ -190,6 +265,11 @@ export class TransactionEditModal extends Modal {
     this.desc = opts.node.desc;
     this.state = opts.node.state ?? 'plan';
     this.nature = (opts.node as any).nature ?? 'temp';
+    this.expectedTime = (opts.node as any).expectedTime ?? '';
+    this.expectedRepeat = (opts.node as any).expectedRepeat ?? '';
+    const span = (opts.node as any).expectedSpan;
+    this.expectedSpanFrom = span?.from ?? '';
+    this.expectedSpanTo = span?.to ?? '';
   }
 
   onOpen(): void {
@@ -197,15 +277,16 @@ export class TransactionEditModal extends Modal {
     contentEl.empty();
     contentEl.addClass('seqtk-modal');
 
-    contentEl.createEl('h3', { text: `编辑 · ${NODE_KIND_LABELS[this.opts.node.kind]}` });
+    this.setTitle(`编辑 · ${NODE_KIND_LABELS[this.opts.node.kind]}`);
 
-    // 名称靠左，状态靠右（类似节点行的展示形式）
+    // 名称靠左，状态靠右（类似节点行的展示形式）；展示名不可在属性模态框中更改（改名走行内重命名）
     const row = contentEl.createDiv('seqtk-inline-row');
     const left = row.createDiv('seqtk-inline-left');
 
     const nameInput = new TextComponent(left);
     nameInput.setValue(this.desc);
-    nameInput.onChange((v) => { this.desc = v; });
+    nameInput.inputEl.readOnly = true;
+    nameInput.inputEl.addClass('seqtk-modal-name-readonly');
 
     // 状态下拉（仅框架/事务类型显示）
     if (kindUsesState(this.opts.node.kind)) {
@@ -229,6 +310,9 @@ export class TransactionEditModal extends Modal {
         });
     }
 
+    // 预期属性字段区（事务=预期时间+预期重复；框架=预期时间段）
+    this.renderExpectedFields(contentEl);
+
     const actions = new Setting(contentEl);
     if (this.opts.onOpenFile) {
       actions.addButton((b) => {
@@ -243,6 +327,39 @@ export class TransactionEditModal extends Modal {
     });
   }
 
+  /** 按节点类型渲染预期属性字段区：事务=预期时间+预期重复；框架=预期时间段 */
+  private renderExpectedFields(container: HTMLElement): void {
+    if (isTransactionKind(this.opts.node.kind)) {
+      new Setting(container).setName('预期时间').addText((t) => {
+        t.inputEl.type = 'date';
+        t.setValue(this.expectedTime);
+        t.onChange((v) => { this.expectedTime = v; });
+      });
+      const repDesc = this.expectedRepeat ? describeCycleRule(this.expectedRepeat) : '如 D-r3（每3日）、W-r2-i4D（每两周第4日）';
+      const rep = new Setting(container).setName('预期重复').setDesc(repDesc);
+      rep.addText((t) => {
+        t.setPlaceholder('D-r3');
+        t.setValue(this.expectedRepeat);
+        t.onChange((v) => {
+          this.expectedRepeat = v;
+          rep.setDesc(v ? describeCycleRule(v) : '如 D-r3（每3日）、W-r2-i4D（每两周第4日）');
+        });
+      });
+    } else if (isFrameworkKind(this.opts.node.kind)) {
+      new Setting(container).setName('预期时间段').setDesc('起止日期').addText((t) => {
+        t.inputEl.type = 'date';
+        t.setPlaceholder('起');
+        t.setValue(this.expectedSpanFrom);
+        t.onChange((v) => { this.expectedSpanFrom = v; });
+      }).addText((t) => {
+        t.inputEl.type = 'date';
+        t.setPlaceholder('止');
+        t.setValue(this.expectedSpanTo);
+        t.onChange((v) => { this.expectedSpanTo = v; });
+      });
+    }
+  }
+
   /** 保存元数据并跳转到文件编辑正文 */
   private confirmAndOpen(): void {
     if (!this.desc.trim()) return;
@@ -250,6 +367,14 @@ export class TransactionEditModal extends Modal {
       desc: this.desc.trim(),
       state: this.state,
       ...(this.opts.node.kind === 'event' ? { nature: this.nature } : {}),
+      // 编辑场景无条件发送预期字段，空值由保存方删除键以支持清空
+      ...(isTransactionKind(this.opts.node.kind) ? {
+        expectedTime: this.expectedTime,
+        expectedRepeat: this.expectedRepeat,
+      } : {}),
+      ...(isFrameworkKind(this.opts.node.kind) ? {
+        expectedSpan: { from: this.expectedSpanFrom, to: this.expectedSpanTo },
+      } : {}),
     });
     this.opts.onOpenFile?.();
     this.close();
@@ -261,6 +386,14 @@ export class TransactionEditModal extends Modal {
       desc: this.desc.trim(),
       state: this.state,
       ...(this.opts.node.kind === 'event' ? { nature: this.nature } : {}),
+      // 编辑场景无条件发送预期字段，空值由保存方删除键以支持清空
+      ...(isTransactionKind(this.opts.node.kind) ? {
+        expectedTime: this.expectedTime,
+        expectedRepeat: this.expectedRepeat,
+      } : {}),
+      ...(isFrameworkKind(this.opts.node.kind) ? {
+        expectedSpan: { from: this.expectedSpanFrom, to: this.expectedSpanTo },
+      } : {}),
     });
     this.close();
   }

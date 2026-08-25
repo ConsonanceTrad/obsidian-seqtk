@@ -39,7 +39,7 @@ class FlowPromptModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass('seqtk-modal');
-    contentEl.createEl('h3', { text: '输入' });
+    this.setTitle('输入');
     const inputs: TextComponent[] = [];
     for (const f of this.fields) {
       new Setting(contentEl).setName(f.label).addText((tc) => {

@@ -12,6 +12,7 @@ import { App, PluginSettingTab, Setting } from 'obsidian';
 import SeqtkPlugin from '../main';
 import { PANEL_REGISTRY, HUB_CATEGORIES } from '../views/panelRegistry';
 import type { PanelEntry } from '../views/panelRegistry';
+import { DesignView, VIEW_TYPE_DESIGN } from '../views/DesignView';
 
 interface HubCfg {
   hidden: string[];
@@ -33,8 +34,31 @@ export class SeqtkSettingTab extends PluginSettingTab {
 
     containerEl.createEl('h2', { text: 'SeqTK 设置' });
 
-    containerEl.createEl('h3', { text: '中控台管理' });
-    containerEl.createEl('div', {
+    // 分栏：左列「界面」+ 右列「中控台管理」
+    const columns = containerEl.createDiv('seqtk-settings-columns');
+
+    // ── 左列：界面 ──
+    const uiCol = columns.createDiv('seqtk-settings-column');
+    uiCol.createEl('h3', { text: '界面' });
+    new Setting(uiCol)
+      .setName('显示「全部事务」入口')
+      .setDesc('在事务设计左侧栏显示「全部事务」入口及未选中框架时的总览（默认隐藏，打开设计视图时显示空提示）')
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.showAllOverview).onChange(async (v) => {
+          this.plugin.settings.showAllOverview = v;
+          await this.plugin.saveSettings();
+          // 通知已打开的设计视图按新设置刷新（入口显隐与初始占位）
+          for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_DESIGN)) {
+            if (leaf.view instanceof DesignView) {
+              leaf.view.refreshSettings();
+            }
+          }
+        }));
+
+    // ── 右列：中控台管理 ──
+    const hubCol = columns.createDiv('seqtk-settings-column');
+    hubCol.createEl('h3', { text: '中控台管理' });
+    hubCol.createEl('div', {
       cls: 'setting-item-description',
       text: '控制中控台各分栏中面板的显示与组内顺序（隐藏仅影响中控台展示，命令仍可用）。拖动行调整顺序。',
     });
@@ -42,11 +66,11 @@ export class SeqtkSettingTab extends PluginSettingTab {
     for (const cat of HUB_CATEGORIES) {
       const entries = PANEL_REGISTRY.filter((e) => e.category === cat);
       if (entries.length === 0) continue;
-      containerEl.createEl('h4', { text: cat });
+      hubCol.createEl('h4', { text: cat });
       const cfg = this.getCfg(cat);
       const ordered = this.orderedEntries(entries, cfg.order);
       for (const entry of ordered) {
-        this.renderEntryRow(entry, cfg, entries);
+        this.renderEntryRow(hubCol, entry, cfg, entries);
       }
     }
   }
@@ -68,11 +92,11 @@ export class SeqtkSettingTab extends PluginSettingTab {
     return [...byOrder, ...rest];
   }
 
-  private renderEntryRow(entry: PanelEntry, cfg: HubCfg, groupEntries: PanelEntry[]): void {
+  private renderEntryRow(col: HTMLElement, entry: PanelEntry, cfg: HubCfg, groupEntries: PanelEntry[]): void {
     const hidden = cfg.hidden.includes(entry.viewType);
     const name = entry.title + (entry.placeholder ? '（规划中）' : '') + (hidden ? '（已隐藏）' : '');
 
-    const setting = new Setting(this.containerEl)
+    const setting = new Setting(col)
       .setName(name)
       .setDesc(entry.description)
       .addToggle((t) =>

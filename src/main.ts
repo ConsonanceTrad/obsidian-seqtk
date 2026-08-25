@@ -77,7 +77,7 @@ export default class SeqtkPlugin extends Plugin {
     // 注册事务设计视图（设计模式 + 模板模式，取代旧事务面板）
     this.registerView(
       VIEW_TYPE_DESIGN,
-      (leaf) => new DesignView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
+      (leaf) => new DesignView(leaf, this.nodeCache, this.fileManager, this.operationQueue, this.settings),
     );
     this.registerView(
       VIEW_TYPE_TEMPLATE,

@@ -41,7 +41,7 @@ class RouteDescModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h3', { text: '建立线路关联' });
+    this.setTitle('建立线路关联');
     contentEl.createEl('div', { cls: 'seqtk-empty', text: `${this.opts.fromDesc} → ${this.opts.toDesc}` });
     const ta = contentEl.createEl('textarea', { cls: 'seqtk-body-input', attr: { rows: '3', placeholder: '关联描述…' } });
     new Setting(contentEl).addButton((b) => {
@@ -71,7 +71,7 @@ class ConfirmModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h3', { text: this.opts.title });
+    this.setTitle(this.opts.title);
     contentEl.createEl('p', { text: this.opts.message });
     new Setting(contentEl).addButton((b) => {
       b.setButtonText('确认').setCta().onClick(() => {

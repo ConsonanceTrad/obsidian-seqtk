@@ -9,12 +9,15 @@
  * - 链接管理：勾选建立/断开证据间 links（双向维护两节点）
  */
 
-import { App, ItemView, Modal, Notice, Setting, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Modal, Notice, Setting, WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
 import type { NodeKind, SeqtkNode } from '../types/index';
-import { NODE_KIND_LABELS } from '../types/index';
+import { NODE_KIND_LABELS, getCategoryOf } from '../types/index';
 import type { NodeCache } from '../core/NodeCache';
 import type { NodeFileManager } from '../core/NodeFileManager';
 import type { OperationQueue } from '../core/OperationQueue';
+import { describeCycleRule } from '../utils/cycleRuleParser';
+import { formatShortDate } from '../utils/formatDate';
+import { tooltipBodyText } from '../utils/tooltip';
 import { TransactionCreateModal, TransactionEditModal } from './components/TransactionModals';
 
 export const VIEW_TYPE_APPEND = 'seqtk-append';
@@ -50,7 +53,7 @@ class LinkManageModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h3', { text: `链接管理 · ${this.opts.evidenceDesc}` });
+    this.setTitle(`链接管理 · ${this.opts.evidenceDesc}`);
 
     if (this.opts.candidates.length === 0) {
       contentEl.createEl('div', { cls: 'seqtk-empty', text: '该事务下暂无其他证据' });
@@ -168,36 +171,70 @@ export class AppendView extends ItemView {
   }
 
   /** 递归渲染事务树（所有类型子节点均可作为证据宿主） */
-  private renderTxnNode(nodeId: string, data: SeqtkNode, depth: number): void {
+  private renderTxnNode(nodeId: string, data: SeqtkNode, depth: number, inExpandedTree = false): void {
     const row = this.leftEl.createDiv('seqtk-frame-item');
     if (this.selectedTxnId === nodeId) row.addClass('seqtk-frame-item-active');
     row.style.paddingLeft = `${8 + depth * 14}px`;
+    const isExpanded = this.expanded.has(nodeId);
+    if (isExpanded) row.addClass('seqtk-row-expanded');
+    if (inExpandedTree) row.addClass('seqtk-row-in-expanded');
 
     // 左栏仅展示事务类子节点，证据节点不在此显示
     const children = this.nodeCache.getChildren(nodeId)
       .filter((c): c is { kind: NodeKind; nodeId: string; data: SeqtkNode } =>
         !!c.data && TXN_KINDS.includes(c.data.kind as NodeKind));
     const hasChildren = children.length > 0;
-    const toggle = row.createSpan('seqtk-toggle');
-    if (hasChildren) {
-      toggle.setText(this.expanded.has(nodeId) ? '▾' : '▸');
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.toggleExpand(nodeId);
-      });
+
+    // 折叠标识小方块（有子项时显示；展开态由 CSS 隐藏）
+    if (hasChildren) row.createSpan('seqtk-collapse-mark');
+
+    // 左栏：行单击=展开/折叠（直接响应，无延迟）；行末按钮=在右侧打开
+    row.addEventListener('click', () => {
+      if (hasChildren) this.toggleExpand(nodeId);
+    });
+
+    row.createEl('span', { cls: `seqtk-kind-badge kind-${getCategoryOf(data.kind)}`, text: NODE_KIND_LABELS[data.kind] });
+
+    const desc = row.createEl('span', { cls: 'seqtk-desc', text: data.desc });
+    // 节点行悬浮：仅显示目标时间点与重复规则（都无则不显示）
+    const hints: string[] = [];
+    if ((data as any).expectedTime) hints.push(`目标时间: ${(data as any).expectedTime}`);
+    if ((data as any).expectedRepeat) hints.push(`重复规则: ${(data as any).expectedRepeat}`);
+    if (hints.length > 0) setTooltip(desc, hints.join(' · '));
+
+    // 正文预览（节点名后，超长省略截断）
+    const bodyPreview = this.nodeCache.getNodeBody(nodeId);
+    if (bodyPreview) {
+      const preview = row.createEl('span', { cls: 'seqtk-body-preview', text: bodyPreview });
+      setTooltip(preview, tooltipBodyText(bodyPreview));
+    }
+    // 弹性间隔：填充剩余空间，使右侧徽章/打开按钮靠右
+    row.createSpan('seqtk-spacer');
+
+    // 预期属性徽章（事务节点）
+    if ((data as any).expectedTime) {
+      const timeBadge = row.createEl('span', { cls: 'seqtk-expected-badge', text: `🗓 ${formatShortDate((data as any).expectedTime)}` });
+      setTooltip(timeBadge, `预期时间: ${(data as any).expectedTime}`);
+    }
+    if ((data as any).expectedRepeat) {
+      const repeatBadge = row.createEl('span', { cls: 'seqtk-expected-badge', text: `♺ ${describeCycleRule((data as any).expectedRepeat)}` });
+      setTooltip(repeatBadge, `预期重复: ${(data as any).expectedRepeat}`);
     }
 
-    row.createEl('span', { cls: 'seqtk-kind-badge', text: NODE_KIND_LABELS[data.kind] });
-    row.createEl('span', { cls: 'seqtk-desc', text: data.desc });
-    row.addEventListener('click', () => {
+    // 行末：在右侧打开（选中并在右侧显现）
+    const openBtn = row.createEl('button', { cls: 'seqtk-open-btn' });
+    setTooltip(openBtn, '在右侧打开');
+    setIcon(openBtn, 'right-arrow');
+    openBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       this.selectedTxnId = nodeId;
       this.renderLeft();
       this.renderRight();
     });
 
-    if (hasChildren && this.expanded.has(nodeId)) {
+    if (hasChildren && isExpanded) {
       for (const c of children) {
-        this.renderTxnNode(c.nodeId, c.data, depth + 1);
+        this.renderTxnNode(c.nodeId, c.data, depth + 1, true);
       }
     }
   }
@@ -268,7 +305,7 @@ export class AppendView extends ItemView {
     }
     row.createEl('span', { cls: 'seqtk-kind-badge', text: kindLabel });
     const desc = row.createEl('span', { cls: 'seqtk-desc', text: ev.data.desc });
-    desc.title = ev.nodeId;
+    setTooltip(desc, ev.nodeId);
 
     row.createEl('button', { text: '编辑', cls: 'seqtk-btn seqtk-btn-small' })
       .addEventListener('click', () => this.openEditEvidence(ev));
