@@ -557,6 +557,9 @@ export interface PluginSettings {
   /** 是否在事务设计左侧栏显示「全部事务」入口（默认隐藏） */
   showAllOverview: boolean;
 
+  /** 左侧栏顶级框架顺序（nodeId 数组；未列入的按创建时间排尾部） */
+  topFrameworkOrder: string[];
+
   /** 中控台管理：各章节的显隐与组内顺序（key=章节名；空 = 默认全部显示/registry 顺序） */
   hub: Record<string, { hidden: string[]; order: string[] }>;
 }
@@ -572,5 +575,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   statusFollowTarget: 'done',
   archiveConfirmPrompt: true,
   showAllOverview: false,
+  topFrameworkOrder: [],
   hub: {},
 };

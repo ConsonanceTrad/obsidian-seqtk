@@ -48,12 +48,17 @@ interface TreeNode {
   children: TreeNode[];
 }
 
+/** 证据类型（对象/条件/信息/状态）：可跨父拖拽随意更改从属 */
+const EVIDENCE_KINDS: NodeKind[] = ['factor', 'requirement', 'clue', 'snapshot'];
+
 export class DesignView extends ItemView {
   private leftEl!: HTMLElement;
   private rightEl!: HTMLElement;
   private unsub: (() => void) | null = null;
-  /** 展开状态（nodeId 集合，默认全部展开） */
-  private expanded = new Set<string>();
+  /** 左栏展开状态（nodeId 集合） */
+  private expandedLeft = new Set<string>();
+  /** 右栏展开状态（nodeId 集合，与左栏独立） */
+  private expandedRight = new Set<string>();
   /** 当前选中的框架 nodeId；null 表示「全部事务总览」 */
   private selectedFrameworkId: string | null = null;
   /** 顺序更改模式：开启后按 follows 混合渲染并支持拖拽排序 */
@@ -62,6 +67,8 @@ export class DesignView extends ItemView {
   private dragSource: { sourceId: string; parentId: string } | null = null;
   /** 行内新建期间抑制 nodeStore 触发的全量重渲染（由局部插入替代，避免画面闪烁） */
   private suppressRender = false;
+  /** 顶级框架排序（nodeId 顺序，持久化于 settings.topFrameworkOrder） */
+  private topOrder: string[] = [];
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -69,8 +76,10 @@ export class DesignView extends ItemView {
     private fileManager: NodeFileManager,
     private operationQueue: OperationQueue,
     private settings: PluginSettings,
+    private onTopOrderChange?: (order: string[]) => void,
   ) {
     super(leaf);
+    this.topOrder = [...(this.settings.topFrameworkOrder ?? [])];
   }
 
   getViewType(): string {
@@ -160,6 +169,8 @@ export class DesignView extends ItemView {
     menu.addItem((item) =>
       item.setTitle('新建事件').setIcon('plus')
         .onClick(() => this.beginInlineCreateBlank('event', this.rightEl, parentId)));
+    // 追加信息：二级子菜单（对象/条件/信息/状态），行内创建证据类型（插入右栏末尾）
+    this.appendEvidenceMenu(menu, (k) => this.beginInlineCreateBlank(k, this.rightEl, parentId));
     menu.addSeparator();
 
     menu.addItem((item) =>
@@ -231,7 +242,16 @@ export class DesignView extends ItemView {
         roots.push(this.buildFrameworkNode(nodeId, data));
       }
     }
-    return roots.sort((a, b) => (a.data.create ?? '').localeCompare(b.data.create ?? ''));
+    // 顶级排序：topFrameworkOrder 中出现的按数组顺序，未列入的（新框架）按创建时间排尾部
+    const order = new Map(this.topOrder.map((id, i) => [id, i]));
+    return roots.sort((a, b) => {
+      const ia = order.get(a.nodeId);
+      const ib = order.get(b.nodeId);
+      if (ia !== undefined && ib !== undefined) return ia - ib;
+      if (ia !== undefined) return -1;
+      if (ib !== undefined) return 1;
+      return (a.data.create ?? '').localeCompare(b.data.create ?? '');
+    });
   }
 
   private buildFrameworkNode(nodeId: string, data: SeqtkNode): TreeNode {
@@ -243,24 +263,84 @@ export class DesignView extends ItemView {
     return { nodeId, data, children: this.sortByFollows(data, children) };
   }
 
-  private renderFrameNode(node: TreeNode, depth: number, inExpandedTree = false): HTMLElement {
+  private renderFrameNode(node: TreeNode, depth: number, inExpandedTree = false, parentNodeId?: string): HTMLElement {
     const row = this.leftEl.createDiv('seqtk-frame-item');
     row.dataset.nodeId = node.nodeId;
     if (this.selectedFrameworkId === node.nodeId) {
       row.addClass('seqtk-frame-item-active');
     }
     row.style.paddingLeft = `${8 + depth * 14}px`;
-    const isExpanded = this.expanded.has(node.nodeId);
-    if (isExpanded) row.addClass('seqtk-row-expanded');
-    if (inExpandedTree) row.addClass('seqtk-row-in-expanded');
-
     const hasChildren = node.children.length > 0;
+    const isExpanded = this.expandedLeft.has(node.nodeId);
+    // 仅有子节点的框架才显示展开态/展开树标识（空子框架左侧不显现展开边框标识）
+    if (hasChildren) {
+      if (isExpanded) row.addClass('seqtk-row-expanded');
+      if (inExpandedTree) row.addClass('seqtk-row-in-expanded');
+    }
+
     // 折叠标识小方块（有子项时显示；展开态由 CSS 隐藏）
     if (hasChildren) row.createSpan('seqtk-collapse-mark');
 
     // 左栏：行单击=展开/折叠（直接响应，无延迟）；行末按钮=在右侧打开
     row.addEventListener('click', () => {
-      if (hasChildren) this.toggleExpand(node.nodeId);
+      if (hasChildren) this.toggleExpand(node.nodeId, 'left');
+    });
+
+    // 左栏拖拽排序（默认启用）：同父同级排序（子框架→父 follows，顶级→topFrameworkOrder）
+    row.draggable = true;
+    row.dataset.parentId = parentNodeId ?? '';
+    row.addEventListener('dragstart', (e) => {
+      this.dragSource = { sourceId: node.nodeId, parentId: parentNodeId ?? '' };
+      const dt = e.dataTransfer;
+      if (dt) {
+        dt.setData('text/plain', JSON.stringify(this.dragSource));
+        dt.effectAllowed = 'move';
+      }
+      row.addClass('seqtk-dragging');
+    });
+    row.addEventListener('dragend', () => {
+      row.removeClass('seqtk-dragging');
+      this.dragSource = null;
+      this.clearDropIndicators();
+    });
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      this.clearDropIndicators();
+      let valid = false;
+      const source = this.dragSource;
+      if (source) {
+        const target = this.resolveDropTarget(e);
+        // 仅同父同级排序（跨父/跨级驳回）
+        if (target && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
+          valid = true;
+          target.row.addClass(target.before ? 'seqtk-drop-before' : 'seqtk-drop-after');
+        } else if (target) {
+          target.row.addClass('seqtk-drop-invalid');
+        }
+      }
+      if (e.dataTransfer) e.dataTransfer.dropEffect = valid ? 'move' : 'none';
+    });
+    row.addEventListener('dragleave', () => {
+      row.removeClass('seqtk-drop-before');
+      row.removeClass('seqtk-drop-after');
+      row.removeClass('seqtk-drop-invalid');
+    });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      this.clearDropIndicators();
+      const source = this.dragSource;
+      const target = this.resolveDropTarget(e);
+      if (!source) return;
+      if (target && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
+        if (source.parentId) {
+          // 子框架：父 follows 排序
+          this.moveChildInFollows(source.parentId, source.sourceId, target.nodeId, target.before);
+        } else {
+          // 顶级框架：topFrameworkOrder 排序
+          this.moveTopInOrder(source.sourceId, target.nodeId, target.before);
+        }
+      }
+      this.dragSource = null;
     });
 
     // 事务框架在事务设计中显示为"框架"
@@ -308,22 +388,89 @@ export class DesignView extends ItemView {
 
     if (hasChildren && isExpanded) {
       for (const child of node.children) {
-        this.renderFrameNode(child, depth + 1, true);
+        this.renderFrameNode(child, depth + 1, true, node.nodeId);
       }
     }
     return row;
   }
 
-  private showFrameMenu(e: MouseEvent, node: TreeNode): void {
+  /**
+   * 追加信息：二级子菜单（对象/条件/信息/状态），点击后执行 onPick(kind) 行内创建对应证据类型。
+   * 节点行菜单、右侧框架菜单、右栏空白菜单共用。
+   */
+  private appendEvidenceMenu(menu: Menu, onPick: (k: NodeKind) => void): void {
+    const EVIDENCE_ICONS: Record<string, string> = {
+      factor: 'box',
+      requirement: 'check-square',
+      clue: 'info',
+      snapshot: 'camera',
+    };
+    let usedEvidenceSubmenu = false;
+    menu.addItem((item) => {
+      item.setTitle('追加信息').setIcon('plus');
+      const setSubmenu = (item as any).setSubmenu as (() => Menu) | undefined;
+      if (typeof setSubmenu === 'function') {
+        const sub = setSubmenu.call(item) as Menu;
+        for (const k of EVIDENCE_KINDS) {
+          sub.addItem((si) =>
+            si.setTitle(NODE_KIND_LABELS[k]).setIcon(EVIDENCE_ICONS[k]).onClick(() => onPick(k)));
+        }
+        usedEvidenceSubmenu = true;
+      } else {
+        item.setIsLabel(true);
+      }
+    });
+    if (!usedEvidenceSubmenu) {
+      for (const k of EVIDENCE_KINDS) {
+        menu.addItem((item) =>
+          item.setTitle(NODE_KIND_LABELS[k]).setIcon(EVIDENCE_ICONS[k]).onClick(() => onPick(k)));
+      }
+    }
+  }
+
+  private showFrameMenu(e: MouseEvent, node: TreeNode, side: 'left' | 'right' = 'left'): void {
     const menu = new Menu();
-    menu.addItem((item) =>
-      item.setTitle('新建子项').setIcon('plus')
-        .onClick(() => this.openCreate(undefined, node.nodeId, node.data.kind)));
+    // 展开/收起置顶：描述与图标随即将执行的行为变化（折叠→展开，展开→收起）；展开状态按栏独立
+    if (node.children.length > 0) {
+      const isExpanded = (side === 'left' ? this.expandedLeft : this.expandedRight).has(node.nodeId);
+      menu.addItem((item) =>
+        item.setTitle(isExpanded ? '收起' : '展开').setIcon(isExpanded ? 'fold-vertical' : 'unfold-vertical')
+          .onClick(() => this.toggleExpandAll(node, side)));
+    }
+    const splitCreate = side === 'right';
+    if (splitCreate) {
+      // 右侧框架菜单：新建子项拆分为四个行内创建入口（不开模态框）
+      const inlineCreate = (k: NodeKind): void => {
+        const row = (e.target as HTMLElement).closest('.seqtk-row');
+        if (row) this.beginInlineCreate(node, row as HTMLElement, [k], 'right');
+      };
+      menu.addItem((item) =>
+        item.setTitle('新建构思').setIcon('lightbulb').onClick(() => inlineCreate('concept')));
+      menu.addItem((item) =>
+        item.setTitle('新建清单').setIcon('list-checks').onClick(() => inlineCreate('checklist')));
+      menu.addItem((item) =>
+        item.setTitle('新建事件').setIcon('calendar').onClick(() => inlineCreate('event')));
+      this.appendEvidenceMenu(menu, inlineCreate);
+    } else {
+      // 左栏框架菜单：新建子框架（行内添加，蓝色"框架"预览标签 + 名称输入，保持旧版行为）
+      menu.addItem((item) =>
+        item.setTitle('新建子框架').setIcon('folder-plus')
+          .onClick(() => {
+            const row = (e.target as HTMLElement).closest('.seqtk-frame-item');
+            if (row) this.beginInlineCreate(node, row as HTMLElement, ['framework-transaction'], 'left');
+          }));
+    }
     menu.addItem((item) =>
       item.setTitle('重命名').setIcon('pencil')
         .onClick(() => {
-          const row = (e.target as HTMLElement).closest('.seqtk-frame-item');
-          if (row) this.beginInlineEditFrame(node, row as HTMLElement);
+          // 右栏框架行为 .seqtk-row，左栏为 .seqtk-frame-item，按行类选择对应行内编辑
+          const row = (e.target as HTMLElement).closest<HTMLElement>('.seqtk-row, .seqtk-frame-item');
+          if (!row) return;
+          if (row.classList.contains('seqtk-frame-item')) {
+            this.beginInlineEditFrame(node, row);
+          } else {
+            this.beginInlineEdit(node, row);
+          }
         }));
     menu.addItem((item) =>
       item.setTitle('修改属性').setIcon('settings-2')
@@ -485,7 +632,7 @@ export class DesignView extends ItemView {
     const row = card.createDiv('seqtk-row');
     row.dataset.nodeId = node.nodeId;
     row.style.paddingLeft = `${8 + depth * 18}px`;
-    const isExpanded = this.expanded.has(node.nodeId);
+    const isExpanded = this.expandedRight.has(node.nodeId);
     if (isExpanded) row.addClass('seqtk-row-expanded');
     if (inExpandedTree) row.addClass('seqtk-row-in-expanded');
 
@@ -495,7 +642,7 @@ export class DesignView extends ItemView {
 
     // 右栏：行单击=展开/折叠（直接响应）；重命名入口在右键菜单
     row.addEventListener('click', () => {
-      if (hasChildren) this.toggleExpand(node.nodeId);
+      if (hasChildren) this.toggleExpand(node.nodeId, 'right');
     });
 
     // 排序模式：拖拽排序（仅直接子项，parentNodeId 存在时）
@@ -505,7 +652,7 @@ export class DesignView extends ItemView {
       row.addEventListener('dragstart', (e) => {
         // 组件状态保存拖拽源（dragover/drop 阶段 dataTransfer.getData 不可靠）
         this.dragSource = { sourceId: node.nodeId, parentId: parentNodeId };
-        console.log('[SeqTK] dragstart', this.dragSource);
+        // console.log('[SeqTK] dragstart', this.dragSource);
         const dt = e.dataTransfer;
         if (dt) {
           dt.setData('text/plain', JSON.stringify(this.dragSource));
@@ -514,7 +661,7 @@ export class DesignView extends ItemView {
         row.addClass('seqtk-dragging');
       });
       row.addEventListener('dragend', () => {
-        console.log('[SeqTK] dragend, dragSource=', this.dragSource);
+        // console.log('[SeqTK] dragend, dragSource=', this.dragSource);
         row.removeClass('seqtk-dragging');
         this.dragSource = null;
         this.clearDropIndicators();
@@ -526,15 +673,16 @@ export class DesignView extends ItemView {
         const source = this.dragSource;
         if (source) {
           const target = this.resolveDropTarget(e);
-          if (target && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
+          if (target && this.canDrop(source, target)) {
             valid = true;
-            target.row.addClass(target.before ? 'seqtk-drop-before' : 'seqtk-drop-after');
+            // 上半 → 目标下方同级（after 指示线）；下半 → 目标子级（child 缩进指示）
+            target.row.addClass(target.before ? 'seqtk-drop-after' : 'seqtk-drop-child');
           } else if (target) {
-            // 非容许目标（跨父/自身）：驳回
+            // 非容许目标（跨父不允许/自身）：驳回
             target.row.addClass('seqtk-drop-invalid');
           }
           if (target) {
-            console.log('[SeqTK] dragover source=', source, 'target=', { nodeId: target.nodeId, parentId: target.parentId, before: target.before }, 'valid=', valid);
+            // console.log('[SeqTK] dragover source=', source, 'target=', { nodeId: target.nodeId, parentId: target.parentId, before: target.before }, 'valid=', valid);
           }
         }
         if (e.dataTransfer) e.dataTransfer.dropEffect = valid ? 'move' : 'none';
@@ -542,6 +690,7 @@ export class DesignView extends ItemView {
       row.addEventListener('dragleave', () => {
         row.removeClass('seqtk-drop-before');
         row.removeClass('seqtk-drop-after');
+        row.removeClass('seqtk-drop-child');
         row.removeClass('seqtk-drop-invalid');
       });
       row.addEventListener('drop', (e) => {
@@ -549,10 +698,20 @@ export class DesignView extends ItemView {
         this.clearDropIndicators();
         const source = this.dragSource;
         const target = this.resolveDropTarget(e);
-        console.log('[SeqTK] drop source=', source, 'target=', target ? { nodeId: target.nodeId, parentId: target.parentId, before: target.before } : null);
+        // console.log('[SeqTK] drop source=', source, 'target=', target ? { nodeId: target.nodeId, parentId: target.parentId, before: target.before } : null);
         if (!source) return;
-        if (target && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
-          this.moveChildInFollows(source.parentId, source.sourceId, target.nodeId, target.before);
+        if (target && this.canDrop(source, target)) {
+          if (target.before) {
+            // 上半：添加到目标下方同级（目标父集合中目标之后）
+            if (target.parentId === source.parentId) {
+              this.moveChildInFollows(source.parentId, source.sourceId, target.nodeId, false);
+            } else {
+              this.moveChildAcrossParents(source.parentId, source.sourceId, target.parentId, target.nodeId, false);
+            }
+          } else {
+            // 下半：添加到目标下方子级（目标作为新父，插入其子列表尾部）
+            this.moveChildAcrossParents(source.parentId, source.sourceId, target.nodeId, '', false);
+          }
         }
         this.dragSource = null;
       });
@@ -563,7 +722,7 @@ export class DesignView extends ItemView {
       ? '框架'
       : NODE_KIND_LABELS[node.data.kind];
     if (node.data.kind === 'event') {
-      kindLabel = `${kindLabel}·${EVENT_NATURE_LABELS[node.data.nature ?? 'temp']}`;
+      kindLabel = EVENT_NATURE_LABELS[node.data.nature ?? 'temp'];
     } else if (node.data.kind === 'snapshot' && (node.data as any).at) {
       kindLabel = `${kindLabel}·${String((node.data as any).at).slice(5, 16)}`;
     }
@@ -629,9 +788,9 @@ export class DesignView extends ItemView {
 
     row.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      // 框架行用框架菜单（新建子框架/编辑/归档/删除），其余用节点行菜单
+      // 框架行用框架菜单（新建子框架/编辑/归档/删除；右侧拆分为行内新建入口），其余用节点行菜单
       if (isFrameworkKind(node.data.kind)) {
-        this.showFrameMenu(e, node);
+        this.showFrameMenu(e, node, 'right');
       } else {
         this.showRowMenu(e, node);
       }
@@ -655,12 +814,16 @@ export class DesignView extends ItemView {
     const descEl = row.querySelector<HTMLElement>('.seqtk-desc');
     if (!descEl) return;
 
-    // desc 保留原位占位（行高不变），input 绝对定位覆盖其上
-    descEl.style.position = 'relative';
+    // 名称改为不可见但保留占位（行高不变，避免下方行上移）；隐藏正文预览/弹性间隔，输入框插入名称原位并占满至行末徽章前
+    descEl.style.visibility = 'hidden';
+    const preview = row.querySelector<HTMLElement>('.seqtk-body-preview');
+    if (preview) preview.style.display = 'none';
+    const spacer = row.querySelector<HTMLElement>('.seqtk-spacer');
+    if (spacer) spacer.style.display = 'none';
     const input = document.createElement('input');
     input.className = 'seqtk-inline-edit';
     input.value = node.data.desc;
-    descEl.appendChild(input);
+    row.insertBefore(input, descEl);
     input.focus();
     input.select();
 
@@ -700,11 +863,16 @@ export class DesignView extends ItemView {
     const descEl = row.querySelector<HTMLElement>('.seqtk-desc');
     if (!descEl) return;
 
-    descEl.style.position = 'relative';
+    // 隐藏名称与正文预览/弹性间隔，输入框插入名称原位并占满至行末按钮前（行高由 padding 维持）
+    descEl.style.display = 'none';
+    const preview = row.querySelector<HTMLElement>('.seqtk-body-preview');
+    if (preview) preview.style.display = 'none';
+    const spacer = row.querySelector<HTMLElement>('.seqtk-spacer');
+    if (spacer) spacer.style.display = 'none';
     const input = document.createElement('input');
     input.className = 'seqtk-inline-edit';
     input.value = node.data.desc;
-    descEl.appendChild(input);
+    row.insertBefore(input, descEl);
     input.focus();
     input.select();
 
@@ -750,9 +918,10 @@ export class DesignView extends ItemView {
     if (container.querySelector('.seqtk-inline-add')) return;
     const addRow = container.createDiv('seqtk-inline-add');
     addRow.style.paddingLeft = '8px';
-    // 框架类型：显示"框架"标签 + 蓝色语义类（覆盖通用绿色）
+    // 框架类型：显示"框架"标签 + 蓝色语义类；证据类型：橙色（与行徽章一致）
     const isFw = kind === 'framework-transaction';
-    const previewCls = isFw ? 'seqtk-inline-kind-preview kind-framework' : 'seqtk-inline-kind-preview';
+    const catCls = isFw ? ' kind-framework' : getCategoryOf(kind) === 'evidence' ? ' kind-evidence' : '';
+    const previewCls = `seqtk-inline-kind-preview${catCls}`;
     const previewText = isFw ? '框架' : NODE_KIND_LABELS[kind];
     addRow.createEl('span', { cls: previewCls, text: previewText });
     const input = addRow.createEl('input', { cls: 'seqtk-inline-name', placeholder: `输入${NODE_KIND_LABELS[kind]}名称…` });
@@ -777,10 +946,11 @@ export class DesignView extends ItemView {
       void (async () => {
         this.suppressRender = true;
         try {
+          const side = container === this.leftEl ? 'left' : 'right';
           const nodeId = await this.createNode(
             { kind, desc: name, state: 'plan', afterCreate: 'direct' },
             parentId,
-            { skipRender: true },
+            { skipRender: true, side },
           );
           if (!nodeId) { addRow.remove(); return; }
           const nodeData = this.nodeCache.getNode(nodeId);
@@ -811,24 +981,35 @@ export class DesignView extends ItemView {
   /**
    * 行内新建子节点：若父节点收起则先展开；在子列表末尾插入附加行
    * （类型预览 + 名称输入），Enter 创建、Esc/blur 取消。
+   *
+   * @param kindsOverride 固定子类型列表（如「追加信息」菜单），缺省按父节点类型推导
+   * @param side 所在栏（左栏 .seqtk-frame-item / 右栏 .seqtk-row），决定展开状态与渲染方式
    */
-  private beginInlineCreate(node: TreeNode, row: HTMLElement): void {
+  private beginInlineCreate(node: TreeNode, row: HTMLElement, kindsOverride?: NodeKind[], side: 'left' | 'right' = 'right'): void {
+    const isLeft = side === 'left';
+    const rowSel = isLeft ? '.seqtk-frame-item' : '.seqtk-row';
+    const expandedSet = isLeft ? this.expandedLeft : this.expandedRight;
+    const containerEl = isLeft ? this.leftEl : this.rightEl;
     if (row.parentElement?.querySelector('.seqtk-inline-add')) return;
-    const kinds = this.getChildKinds(node.data.kind);
+    const kinds = kindsOverride ?? this.getChildKinds(node.data.kind);
     if (kinds.length === 0) return;
 
     // 收起状态：先展开父节点并重渲染，再定位新行
-    if (!this.expanded.has(node.nodeId)) {
-      this.expanded.add(node.nodeId);
-      this.renderRight();
-      const newRow = this.rightEl.querySelector<HTMLElement>(`.seqtk-row[data-node-id="${node.nodeId}"]`);
+    if (!expandedSet.has(node.nodeId)) {
+      expandedSet.add(node.nodeId);
+      if (isLeft) this.renderLeft(); else this.renderRight();
+      const newRow = containerEl.querySelector<HTMLElement>(`${rowSel}[data-node-id="${node.nodeId}"]`);
       if (!newRow) return;
       row = newRow;
     }
 
     const addRow = row.parentElement!.createDiv('seqtk-inline-add');
-    // 缩进对齐新子节点层级：父行缩进 + 18px
-    addRow.style.paddingLeft = `${(parseFloat(row.style.paddingLeft) || 8) + 18}px`;
+    // 缩进对齐新子节点层级：父行缩进 + 步长（右栏行 18px / 左栏框架行 14px）
+    addRow.style.paddingLeft = `${(parseFloat(row.style.paddingLeft) || 8) + (isLeft ? 14 : 18)}px`;
+    // 附加行总高与父行（同层级普通行）精确对齐，避免插入时行高度跳动
+    addRow.style.boxSizing = 'border-box';
+    const rowHeight = row.offsetHeight;
+    if (rowHeight > 0) addRow.style.minHeight = `${rowHeight}px`;
 
     // 定位子列表末尾：该节点子树渲染的最后一行之后
     const subtreeIds = new Set<string>();
@@ -839,7 +1020,8 @@ export class DesignView extends ItemView {
     collect(node);
     let anchor: HTMLElement = row;
     let sib = row.nextElementSibling;
-    while (sib && sib.classList.contains('seqtk-row') && subtreeIds.has((sib as HTMLElement).dataset.nodeId ?? '')) {
+    const rowCls = isLeft ? 'seqtk-frame-item' : 'seqtk-row';
+    while (sib && sib.classList.contains(rowCls) && subtreeIds.has((sib as HTMLElement).dataset.nodeId ?? '')) {
       anchor = sib as HTMLElement;
       sib = sib.nextElementSibling;
     }
@@ -852,10 +1034,20 @@ export class DesignView extends ItemView {
       for (const k of kinds) sel.createEl('option', { value: k, text: NODE_KIND_LABELS[k] });
       sel.addEventListener('change', () => { kind = sel.value as NodeKind; setPlaceholder(); input.focus(); });
     } else {
-      // 单子类型：类型预览标签
-      addRow.createEl('span', { cls: 'seqtk-inline-kind-preview', text: NODE_KIND_LABELS[kind] });
+      // 单子类型：类型预览标签（框架显示蓝色"框架"；证据类型橙色，与行徽章一致）
+      const isFw = kind === 'framework-transaction';
+      const catCls = isFw ? ' kind-framework' : getCategoryOf(kind) === 'evidence' ? ' kind-evidence' : '';
+      const previewText = isFw ? '框架' : NODE_KIND_LABELS[kind];
+      addRow.createEl('span', { cls: `seqtk-inline-kind-preview${catCls}`, text: previewText });
     }
     const input = addRow.createEl('input', { cls: 'seqtk-inline-name' });
+    // 显式约束输入框高度 = 附加行内容区高度（border-box；左右栏纵向 padding 分别为 6/8px），
+    // 避免输入框按字号放大而撑高附加行导致跳动（rowHeight 已在 addRow 创建处测得）
+    if (rowHeight > 0) {
+      const vPad = isLeft ? 8 : 6;
+      input.style.height = `${rowHeight - vPad}px`;
+      input.style.boxSizing = 'border-box';
+    }
     const setPlaceholder = (): void => { input.placeholder = `输入${NODE_KIND_LABELS[kind]}名称…`; };
     setPlaceholder();
     input.focus();
@@ -876,9 +1068,14 @@ export class DesignView extends ItemView {
           const nodeId = await this.createNode(
             { kind, desc: name, state: 'plan', afterCreate: 'direct' },
             node.nodeId,
-            { skipRender: true },
+            { skipRender: true, side },
           );
           if (!nodeId) { addRow.remove(); return; }
+          if (isLeft) {
+            // 左栏仅展示框架：重绘左栏即可（列表小、无闪烁；非框架子项不出现在左栏属正常语义）
+            this.renderLeft();
+            return;
+          }
           const nodeData = this.nodeCache.getNode(nodeId);
           if (!nodeData) { addRow.remove(); return; }
           const container = row.parentElement!;
@@ -947,40 +1144,43 @@ export class DesignView extends ItemView {
     );
   }
 
-  private toggleExpand(nodeId: string): void {
-    if (this.expanded.has(nodeId)) {
-      this.expanded.delete(nodeId);
+  /** 按栏切换展开/收起（左右栏展开状态相互独立） */
+  private toggleExpand(nodeId: string, side: 'left' | 'right'): void {
+    const set = side === 'left' ? this.expandedLeft : this.expandedRight;
+    if (set.has(nodeId)) {
+      set.delete(nodeId);
     } else {
-      this.expanded.add(nodeId);
+      set.add(nodeId);
     }
     this.renderLeft();
     this.renderRight();
   }
 
-  /** 展开或收起该节点的全部子孙节点（依据自身当前展开状态切换） */
-  private toggleExpandAll(node: TreeNode): void {
+  /** 按栏展开或收起该节点的全部子孙节点（依据该栏当前展开状态切换） */
+  private toggleExpandAll(node: TreeNode, side: 'left' | 'right'): void {
+    const set = side === 'left' ? this.expandedLeft : this.expandedRight;
     const ids: string[] = [];
     const collect = (n: TreeNode): void => {
       ids.push(n.nodeId);
       for (const c of n.children) collect(c);
     };
     collect(node);
-    if (this.expanded.has(node.nodeId)) {
-      for (const id of ids) this.expanded.delete(id);
+    if (set.has(node.nodeId)) {
+      for (const id of ids) set.delete(id);
     } else {
-      for (const id of ids) this.expanded.add(id);
+      for (const id of ids) set.add(id);
     }
     this.renderLeft();
     this.renderRight();
   }
 
-  /** 解析拖拽落点：目标行 + 插入位置（上半=前、下半=后）；非直接子项行返回 null */
+  /** 解析拖拽落点：目标行（右栏 .seqtk-row / 左栏 .seqtk-frame-item）+ 插入位置（上半=前、下半=后）；顶级行 parentId 为空串 */
   private resolveDropTarget(e: DragEvent): { row: HTMLElement; nodeId: string; parentId: string; before: boolean } | null {
-    const el = (e.target as HTMLElement).closest<HTMLElement>('.seqtk-row');
+    const el = (e.target as HTMLElement).closest<HTMLElement>('.seqtk-row, .seqtk-frame-item');
     if (!el) return null;
     const nodeId = el.dataset.nodeId ?? '';
     const parentId = el.dataset.parentId ?? '';
-    if (!nodeId || !parentId) return null;
+    if (!nodeId) return null;
     const rect = el.getBoundingClientRect();
     const before = e.clientY < rect.top + rect.height / 2;
     return { row: el, nodeId, parentId, before };
@@ -990,19 +1190,19 @@ export class DesignView extends ItemView {
   private moveChildInFollows(parentId: string, sourceId: string, targetId: string, before: boolean): void {
     const parent = this.nodeCache.getNode(parentId);
     if (!parent) {
-      console.log('[SeqTK] moveChildInFollows: 父节点不存在', parentId);
+      // console.log('[SeqTK] moveChildInFollows: 父节点不存在', parentId);
       return;
     }
     const follows = [...(parent.follows ?? [])];
     const srcIdx = follows.indexOf(sourceId);
-    console.log('[SeqTK] moveChildInFollows parent=', parentId, 'source=', sourceId, 'target=', targetId, 'before=', before, 'follows=', follows, 'srcIdx=', srcIdx);
+    // console.log('[SeqTK] moveChildInFollows parent=', parentId, 'source=', sourceId, 'target=', targetId, 'before=', before, 'follows=', follows, 'srcIdx=', srcIdx);
     if (srcIdx < 0) return;
     follows.splice(srcIdx, 1);
     let insertAt = follows.indexOf(targetId);
     if (insertAt < 0) insertAt = follows.length;
     if (!before) insertAt += 1;
     follows.splice(insertAt, 0, sourceId);
-    console.log('[SeqTK] moveChildInFollows 新 follows=', follows);
+    // console.log('[SeqTK] moveChildInFollows 新 follows=', follows);
     this.operationQueue.enqueue(
       () => this.nodeCache.updateNode(parentId, { follows, modify: new Date().toISOString() }),
       async () => { await this.fileManager.updateNode(parent.kind, parentId, { follows }); },
@@ -1010,14 +1210,119 @@ export class DesignView extends ItemView {
     this.renderRight();
   }
 
-  /** 清除所有拖拽指示样式 */
+  /**
+   * 顶级框架排序：以当前渲染顺序（topFrameworkOrder + 未列入按创建时间）重建数组，
+   * 将 sourceId 移到 targetId 前/后，更新 topOrder 并回调保存到 settings。
+   */
+  private moveTopInOrder(sourceId: string, targetId: string, before: boolean): void {
+    const roots = this.buildFrameworkTree();
+    const order = roots.map((r) => r.nodeId);
+    const srcIdx = order.indexOf(sourceId);
+    if (srcIdx < 0) return;
+    order.splice(srcIdx, 1);
+    let insertAt = order.indexOf(targetId);
+    if (insertAt < 0) insertAt = order.length;
+    if (!before) insertAt += 1;
+    order.splice(insertAt, 0, sourceId);
+    this.topOrder = order;
+    this.onTopOrderChange?.(order);
+    this.renderLeft();
+  }
+
+  /**
+   * 拖拽落点判定（按目标行位置分两种插入语义）：
+   * - 目标行上半（before=true）→ 添加到目标下方同级（目标父集合中目标之后）
+   * - 目标行下半（before=false）→ 添加到目标下方子级（目标作为新父）
+   * 跨父/跨级约束：证据类型可随意；event 仅限框架与目标（target）之间；其余按层级规则。
+   */
+  private canDrop(
+    source: { sourceId: string; parentId: string },
+    target: { nodeId: string; parentId: string; before: boolean },
+  ): boolean {
+    if (target.nodeId === source.sourceId) return false;
+    const src = this.nodeCache.getNode(source.sourceId);
+    if (!src) return false;
+
+    // 下半：成为目标节点的子级（新父 = target）
+    if (!target.before) {
+      const targetKind = this.nodeCache.getNode(target.nodeId)?.kind;
+      if (!targetKind) return false;
+      if (EVIDENCE_KINDS.includes(src.kind as NodeKind)) return true;
+      if (src.kind === 'event') return isFrameworkKind(targetKind) || targetKind === 'target';
+      return this.getChildKinds(targetKind).includes(src.kind);
+    }
+
+    // 上半：目标父集合中目标之后（同父排序 / 跨父按类型约束）
+    if (target.parentId === source.parentId) return true;
+    const srcParentKind = this.nodeCache.getNode(source.parentId)?.kind;
+    const tgtParentKind = this.nodeCache.getNode(target.parentId)?.kind;
+    if (EVIDENCE_KINDS.includes(src.kind as NodeKind)) return true;
+    if (src.kind === 'event') {
+      const isFramework = (k: NodeKind | undefined): boolean => !!k && isFrameworkKind(k);
+      return (isFramework(srcParentKind) && tgtParentKind === 'target')
+        || (srcParentKind === 'target' && isFramework(tgtParentKind));
+    }
+    return false;
+  }
+
+  /**
+   * 跨父移动：旧父 follows 移除 sourceId → 新父 follows 在目标行前/后插入 → source 节点 parent 更新，
+   * 三者均走 OperationQueue（缓存立即 + MD 延迟写盘）；展开新父并重渲染。
+   */
+  private moveChildAcrossParents(
+    sourceParentId: string,
+    sourceId: string,
+    targetParentId: string,
+    targetId: string,
+    before: boolean,
+  ): void {
+    const srcParent = this.nodeCache.getNode(sourceParentId);
+    if (srcParent) {
+      const oldFollows = [...(srcParent.follows ?? [])];
+      const i = oldFollows.indexOf(sourceId);
+      if (i >= 0) {
+        oldFollows.splice(i, 1);
+        this.operationQueue.enqueue(
+          () => this.nodeCache.updateNode(sourceParentId, { follows: oldFollows, modify: new Date().toISOString() }),
+          async () => { await this.fileManager.updateNode(srcParent.kind, sourceParentId, { follows: oldFollows }); },
+        );
+      }
+    }
+    const tgtParent = this.nodeCache.getNode(targetParentId);
+    if (tgtParent) {
+      const newFollows = [...(tgtParent.follows ?? [])];
+      let insertAt = newFollows.indexOf(targetId);
+      if (insertAt < 0) insertAt = newFollows.length;
+      if (!before) insertAt += 1;
+      newFollows.splice(insertAt, 0, sourceId);
+      this.operationQueue.enqueue(
+        () => this.nodeCache.updateNode(targetParentId, { follows: newFollows, modify: new Date().toISOString() }),
+        async () => { await this.fileManager.updateNode(tgtParent.kind, targetParentId, { follows: newFollows }); },
+      );
+    }
+    const src = this.nodeCache.getNode(sourceId);
+    if (src) {
+      this.operationQueue.enqueue(
+        () => this.nodeCache.updateNode(sourceId, { parent: targetParentId, modify: new Date().toISOString() }),
+        async () => { await this.fileManager.updateNode(src.kind, sourceId, { parent: targetParentId }); },
+      );
+    }
+    // 展开新父（右栏拖拽）并刷新视图
+    this.expandedRight.add(targetParentId);
+    this.renderRight();
+  }
+
+  /** 清除左右栏所有拖拽指示样式 */
   private clearDropIndicators(): void {
-    this.rightEl.querySelectorAll('.seqtk-drop-before, .seqtk-drop-after, .seqtk-drop-invalid')
-      .forEach((el) => {
-        el.removeClass('seqtk-drop-before');
-        el.removeClass('seqtk-drop-after');
-        el.removeClass('seqtk-drop-invalid');
-      });
+    for (const root of [this.leftEl, this.rightEl]) {
+      root.querySelectorAll('.seqtk-drop-before, .seqtk-drop-after, .seqtk-drop-child, .seqtk-drop-invalid')
+        .forEach((el) => {
+          el.removeClass('seqtk-drop-before');
+          el.removeClass('seqtk-drop-after');
+          el.removeClass('seqtk-drop-child');
+          el.removeClass('seqtk-drop-invalid');
+        });
+    }
   }
 
   // ============================================================
@@ -1091,7 +1396,7 @@ export class DesignView extends ItemView {
   private async createNode(
     input: { kind: NodeKind; desc: string; state: SeqtkState; nature?: EventNature; expectedTime?: string; expectedRepeat?: string; expectedSpan?: { from?: string; to?: string }; afterCreate: 'direct' | 'edit-body' },
     parentId?: string,
-    opts?: { skipRender?: boolean },
+    opts?: { skipRender?: boolean; side?: 'left' | 'right' },
   ): Promise<string | undefined> {
     const now = new Date().toISOString();
     const data = {
@@ -1136,7 +1441,10 @@ export class DesignView extends ItemView {
 
     // 新建子项后默认展开父节点，供查看新节点（行内新建由调用方局部插入，跳过全量渲染）
     if (parentId) {
-      this.expanded.add(parentId);
+      // 展开状态按栏维护：side 指定时仅展开对应栏，缺省（模态框创建）两栏都展开
+      if (opts?.side === 'left') this.expandedLeft.add(parentId);
+      else if (opts?.side === 'right') this.expandedRight.add(parentId);
+      else { this.expandedLeft.add(parentId); this.expandedRight.add(parentId); }
       if (!opts?.skipRender) {
         this.renderLeft();
         this.renderRight();
@@ -1259,10 +1567,11 @@ export class DesignView extends ItemView {
     const menu = new Menu();
 
     if (node.children.length > 0) {
-      const isExpanded = this.expanded.has(node.nodeId);
+      const isExpanded = this.expandedRight.has(node.nodeId);
+      // 描述与图标随即将执行的行为变化：折叠→显示"展开"，展开→显示"收起"
       menu.addItem((item) =>
-        item.setTitle('展开/收起').setIcon(isExpanded ? 'fold-vertical' : 'unfold-vertical')
-          .onClick(() => this.toggleExpandAll(node)));
+        item.setTitle(isExpanded ? '收起' : '展开').setIcon(isExpanded ? 'fold-vertical' : 'unfold-vertical')
+          .onClick(() => this.toggleExpandAll(node, 'right')));
     }
     if (this.getChildKinds(node.data.kind).length > 0) {
       menu.addItem((item) =>
@@ -1272,6 +1581,11 @@ export class DesignView extends ItemView {
             if (row) this.beginInlineCreate(node, row as HTMLElement);
           }));
     }
+    // 追加信息：二级子菜单（对象/条件/信息/状态），点击后行内创建对应证据类型（不开模态框）
+    this.appendEvidenceMenu(menu, (k) => {
+      const row = (e.target as HTMLElement).closest('.seqtk-row');
+      if (row) this.beginInlineCreate(node, row as HTMLElement, [k]);
+    });
     menu.addItem((item) =>
       item.setTitle('重命名').setIcon('pencil')
         .onClick(() => {

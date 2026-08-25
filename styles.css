@@ -45,16 +45,14 @@
   display: none;
 }
 
-/* 展开子树内子行：背景加深 + 左端边框标识（比父行更淡，区分层级） */
+/* 展开子树内子行：无背景色，仅左端边框标识（区分层级） */
 .seqtk-row.seqtk-row-in-expanded,
 .seqtk-frame-item.seqtk-row-in-expanded {
-  background-color: color-mix(in srgb, var(--background-secondary) 55%, var(--background-primary));
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interactive-accent) 45%, transparent);
 }
 
 .seqtk-row.seqtk-row-in-expanded:hover,
 .seqtk-frame-item.seqtk-row-in-expanded:hover {
-  background-color: color-mix(in srgb, var(--background-secondary) 55%, var(--background-primary));
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interactive-accent) 45%, transparent);
 }
 
@@ -95,9 +93,9 @@
   border-color: var(--background-modifier-border);
 }
 
-/* 正文预览（节点名后；内容宽，上限 220px，半透明弱化视觉焦点） */
+/* 正文预览（节点名后；内容宽，上限 220px，半透明弱化视觉焦点；flex-shrink 权重大于名称，行宽不足时先被压缩/隐藏） */
 .seqtk-body-preview {
-  flex: 0 1 auto;
+  flex: 0 5 auto;
   max-width: 220px;
   min-width: 0;
   overflow: hidden;
@@ -127,22 +125,39 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* 向下滚动时固定于右栏顶部（sticky 相对可滚动容器） */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--background-primary);
+  padding: 4px 0;
 }
 
-/* 排序模式拖拽：拖动中与插入指示线 / 驳回样式 */
-.seqtk-row.seqtk-dragging {
+/* 排序模式拖拽：拖动中与插入指示线 / 驳回样式（右栏行 + 左栏框架行） */
+.seqtk-row.seqtk-dragging,
+.seqtk-frame-item.seqtk-dragging {
   opacity: 0.5;
 }
 
-.seqtk-row.seqtk-drop-before {
+.seqtk-row.seqtk-drop-before,
+.seqtk-frame-item.seqtk-drop-before {
   box-shadow: inset 0 2px 0 0 var(--interactive-accent);
 }
 
-.seqtk-row.seqtk-drop-after {
+.seqtk-row.seqtk-drop-after,
+.seqtk-frame-item.seqtk-drop-after {
   box-shadow: inset 0 -2px 0 0 var(--interactive-accent);
 }
 
-.seqtk-row.seqtk-drop-invalid {
+/* 拖到目标行下半：成为目标子级（底部指示线 + 缩进示意；仅右栏） */
+.seqtk-row.seqtk-drop-child {
+  box-shadow:
+    inset 0 -2px 0 0 var(--interactive-accent),
+    inset 12px 0 0 0 color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+}
+
+.seqtk-row.seqtk-drop-invalid,
+.seqtk-frame-item.seqtk-drop-invalid {
   outline: 2px solid var(--text-error);
   outline-offset: -2px;
 }
@@ -160,16 +175,18 @@
   white-space: nowrap;
 }
 
-/* 行内编辑输入框（右键重命名；绝对定位覆盖 desc，不撑大节点行） */
+/* 行内编辑输入框（右键重命名；作为行 flex 子项从名称原位延伸至行末徽章前；行高与文字行高对齐，避免文字上移） */
 .seqtk-inline-edit {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   padding: 0 4px;
   font-size: inherit;
   font-family: inherit;
+  line-height: inherit;
+  height: 100%;
+  /* 视觉位置整体上移 2px（transform 平移不改变布局，不影响其他渲染） */
+  transform: translateY(-2px);
   color: var(--text-normal);
   background: var(--background-primary);
   border: 1px solid var(--interactive-accent);
@@ -178,19 +195,26 @@
   outline: none;
 }
 
-/* 行内新建子节点：附加行（类型下拉 + 名称输入；左缩进由 JS 按层级设置） */
+/* 行内新建子节点：附加行（类型下拉 + 名称输入；左缩进由 JS 按层级设置；padding/margin 与普通行一致，避免行高度跳动） */
 .seqtk-inline-add {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 3px 6px;
+  margin: 2px 0;
+}
+
+/* 左栏附加行：与 .seqtk-frame-item 盒模型一致（padding 4px 6px / margin 0） */
+.seqtk-split-left .seqtk-inline-add {
   padding: 4px 6px;
+  margin: 0;
 }
 
 /* 多子类型：类型下拉（风格与类型标签徽章一致） */
 .seqtk-inline-kind {
   flex-shrink: 0;
   font-size: 12px;
-  padding: 2px 6px;
+  padding: 2px 8px;
   margin: 0 4px;
   border: none;
   border-radius: 4px;
@@ -209,7 +233,7 @@
 .seqtk-inline-kind-preview {
   flex-shrink: 0;
   font-size: 12px;
-  padding: 2px 6px;
+  padding: 2px 8px;
   margin: 0 4px;
   border-radius: 4px;
   background: var(--color-green);
@@ -218,21 +242,33 @@
 
 /* 新建子框架预览标签：框架语义色为蓝色，覆盖通用绿色 */
 .seqtk-inline-kind-preview.kind-framework {
-  padding: 2px 6px;
+  padding: 2px 8px;
   margin: 0 4px;
   background: var(--color-blue);
   border-color: var(--color-blue);
   font-size: 12px;
 }
 
+/* 行内新建预览标签：证据类型（对象/条件/信息/状态）橙色，与行徽章一致 */
+.seqtk-inline-kind-preview.kind-evidence {
+  padding: 2px 8px;
+  margin: 0 4px;
+  background: var(--color-orange);
+  border-color: var(--color-orange);
+}
+
 .seqtk-inline-name {
   flex: 1;
   min-width: 0;
-  height: 24px;
+  /* 内容高与行文本行高一致（与重命名输入框同策略），避免附加行高度跳动 */
+  height: 1.5em;
+  line-height: inherit;
   margin: 0;
   padding: 0 6px;
   font-size: inherit;
   font-family: inherit;
+  /* 视觉位置整体上移 2px（transform 平移不改变布局，不影响其他渲染） */
+  transform: translateY(-2px);
   color: var(--text-normal);
   background: var(--background-primary);
   border: 1px solid var(--interactive-accent);
@@ -1852,6 +1888,7 @@
   align-items: center;
   gap: 6px;
   padding: 3px 6px;
+  margin: 2px 0;
   cursor: default;
 }
 
@@ -1873,7 +1910,7 @@
 .seqtk-kind-badge {
   flex-shrink: 0;
   font-size: 12px;
-  padding: 1px 5px;
+  padding: 1px 7px;
   margin: 0 4px;
   border-radius: 4px;
   background: var(--background-secondary);
@@ -1882,7 +1919,7 @@
 }
 
 .seqtk-desc {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1893,7 +1930,7 @@
 .seqtk-state-badge {
   flex-shrink: 0;
   font-size: 10px;
-  padding: 1px 8px;
+  padding: 1px 7px;
   border-radius: 4px;
   border: none;
   cursor: pointer;
@@ -2037,11 +2074,22 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  /* 隐藏滚动条（滚动能力保留） */
+  scrollbar-width: none;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   padding: 8px;
   display: flex;
   flex-direction: column;
+}
+
+.seqtk-split-right::-webkit-scrollbar {
+  display: none;
+}
+
+/* 右栏为纵向 flex 容器：子项（框架卡片/节点行）禁止垂直收缩，避免内容被挤压 */
+.seqtk-split-right > * {
+  flex-shrink: 0;
 }
 
 .seqtk-split-title {

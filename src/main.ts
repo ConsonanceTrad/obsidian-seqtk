@@ -10,7 +10,7 @@
  * - 关系：Follows（直属下属）、Parent（直属上级）、Links（无向关联）、Progress（标记插入）
  */
 
-import { Plugin, Notice } from 'obsidian';
+import { Plugin, Notice, WorkspaceLeaf } from 'obsidian';
 import type { PluginSettings } from './types/index';
 import { DEFAULT_SETTINGS } from './types/index';
 import { NodeFileManager } from './core/NodeFileManager';
@@ -31,6 +31,7 @@ import { RecycleView, VIEW_TYPE_RECYCLE } from './views/RecycleView';
 import { PlaceholderView, VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './views/PlaceholderView';
 import { SeqtkSettingTab } from './settings/SeqtkSettingTab';
 import { HubView, VIEW_TYPE_HUB, VIEW_TYPE_HUB_SIDE } from './views/HubView';
+import { PANEL_REGISTRY } from './views/panelRegistry';
 // ────────────────────────────────────────────────────────────
 // 操作口（视图 / 设置面板）待按新概念重新设计
 // ────────────────────────────────────────────────────────────
@@ -65,19 +66,31 @@ export default class SeqtkPlugin extends Plugin {
     });
 
     // 注册中控台面板（主编辑区 + 侧边栏，两者可共存）
+    const openPanel = (vt: string): void => void this.activateView(vt);
     this.registerView(
       VIEW_TYPE_HUB,
-      (leaf) => new HubView(leaf, VIEW_TYPE_HUB, this.settings.hub),
+      (leaf) => new HubView(leaf, VIEW_TYPE_HUB, this.settings.hub, openPanel),
     );
     this.registerView(
       VIEW_TYPE_HUB_SIDE,
-      (leaf) => new HubView(leaf, VIEW_TYPE_HUB_SIDE, this.settings.hub),
+      (leaf) => new HubView(leaf, VIEW_TYPE_HUB_SIDE, this.settings.hub, openPanel),
     );
 
     // 注册事务设计视图（设计模式 + 模板模式，取代旧事务面板）
     this.registerView(
       VIEW_TYPE_DESIGN,
-      (leaf) => new DesignView(leaf, this.nodeCache, this.fileManager, this.operationQueue, this.settings),
+      (leaf) => new DesignView(
+        leaf,
+        this.nodeCache,
+        this.fileManager,
+        this.operationQueue,
+        this.settings,
+        // 顶级框架排序变更 → 更新 settings 并持久化
+        (order) => {
+          this.settings.topFrameworkOrder = order;
+          void this.saveSettings();
+        },
+      ),
     );
     this.registerView(
       VIEW_TYPE_TEMPLATE,
@@ -138,9 +151,9 @@ export default class SeqtkPlugin extends Plugin {
       (leaf) => new RecycleView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
     );
 
-    // 中控台 ribbon（唯一可视化入口；其他面板不设 ribbon，仅指令 + 中控台打开）
+    // 中控台 ribbon（唯一可视化入口；默认打开在左侧边栏，便于信息阅览与跳转）
     this.addRibbonIcon('layout-dashboard', '打开中控台', () => {
-      this.activateView(VIEW_TYPE_HUB);
+      this.activateView(VIEW_TYPE_HUB_SIDE, 'left');
     });
 
     // 设置面板（中控台管理：显隐/组内顺序）
@@ -159,15 +172,11 @@ export default class SeqtkPlugin extends Plugin {
     };
 
     // 注册命令（各面板不设 ribbon，仅通过内置指令与中控台打开）
-    this.addCommand({
-      id: 'open-hub',
-      name: '打开中控台',
-      callback: () => this.activateView(VIEW_TYPE_HUB, 'tab'),
-    });
+    // 中控台仅保留左侧边栏入口，取消主编辑区中控台
     this.addCommand({
       id: 'open-hub-side',
-      name: '打开中控台（侧边栏）',
-      callback: () => this.activateView(VIEW_TYPE_HUB_SIDE, 'right'),
+      name: '打开中控台',
+      callback: () => this.activateView(VIEW_TYPE_HUB_SIDE, 'left'),
     });
     this.addCommand({
       id: 'open-design',
@@ -463,7 +472,7 @@ export default class SeqtkPlugin extends Plugin {
    * @param viewType 视图类型
    * @param location 打开位置：tab=主编辑区，right=右侧边栏（用于中控台双开共存）
    */
-  private async activateView(viewType: string, location: 'tab' | 'right' = 'tab'): Promise<void> {
+  private async activateView(viewType: string, location: 'tab' | 'left' | 'right' = 'tab'): Promise<void> {
     const { workspace } = this.app;
 
     // 已打开 → 直接 reveal
@@ -473,10 +482,37 @@ export default class SeqtkPlugin extends Plugin {
       return;
     }
 
+    // 主区标签页：同一大类已打开的面板在其原位转变，避免标签页过多
+    if (location === 'tab') {
+      const entry = PANEL_REGISTRY.find((e) => e.viewType === viewType);
+      if (entry) {
+        const sameCatTypes = PANEL_REGISTRY
+          .filter((p) => p.category === entry.category)
+          .map((p) => p.viewType);
+        let sameCatLeaf: WorkspaceLeaf | null = null;
+        for (const vt of sameCatTypes) {
+          // 排除侧边栏 leaf，仅取主区标签页
+          const mainLeaf = workspace.getLeavesOfType(vt)
+            .find((l) => !((l.getRoot() as { inSidebar?: boolean })?.inSidebar ?? false));
+          if (mainLeaf) {
+            sameCatLeaf = mainLeaf;
+            break;
+          }
+        }
+        if (sameCatLeaf) {
+          await sameCatLeaf.setViewState({ type: viewType, active: true });
+          workspace.revealLeaf(sameCatLeaf);
+          return;
+        }
+      }
+    }
+
     // 未打开 → 在指定位置新建叶子
     const leaf = location === 'right'
       ? workspace.getRightLeaf(false)
-      : workspace.getLeaf('tab');
+      : location === 'left'
+        ? workspace.getLeftLeaf(false)
+        : workspace.getLeaf('tab');
     if (leaf) {
       await leaf.setViewState({ type: viewType, active: true });
       workspace.revealLeaf(leaf);

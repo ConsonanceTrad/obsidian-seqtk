@@ -24,6 +24,8 @@ export class HubView extends ItemView {
     private viewType: string = VIEW_TYPE_HUB,
     /** 中控台管理设置（显隐与组内顺序） */
     private hubSettings?: PluginSettings['hub'],
+    /** 打开面板回调（由插件提供：同大类标签页原位转变 + 打开/聚焦） */
+    private onOpenPanel?: (viewType: string) => void,
   ) {
     super(leaf);
   }
@@ -95,8 +97,13 @@ export class HubView extends ItemView {
     // 无订阅，无需清理
   }
 
-  /** 打开指定视图类型的面板（已打开则聚焦，否则新标签页） */
+  /** 打开指定视图类型的面板（有回调时委托插件统一逻辑：同大类原位转变/聚焦/新建） */
   private openPanel(viewType: string): void {
+    if (this.onOpenPanel) {
+      this.onOpenPanel(viewType);
+      return;
+    }
+    // 兜底（无回调）：已打开则聚焦，否则新标签页
     const { workspace } = this.app;
     const existing = workspace.getLeavesOfType(viewType)[0] ?? null;
     if (existing) {

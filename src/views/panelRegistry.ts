@@ -22,7 +22,7 @@ import { VIEW_TYPE_RECYCLE } from './RecycleView';
 import { VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './PlaceholderView';
 
 /** 中控台分栏章节（顺序即展示顺序，对应操作口目录章节） */
-export const HUB_CATEGORIES = ['事务设计', '证据管理', '规则设计', '智能协作', '节点通用'] as const;
+export const HUB_CATEGORIES = ['事务设计', '证据管理', '规则设计', '节点通用'] as const;
 
 export type HubCategory = typeof HUB_CATEGORIES[number];
 
@@ -133,19 +133,16 @@ export const PANEL_REGISTRY: PanelEntry[] = [
     placeholder: true,
   },
   // ============================================================
-  // 智能协作
+  // 节点通用
   // ============================================================
   {
     viewType: VIEW_TYPE_COLLAB,
     title: '智能协作',
     icon: 'bot',
     description: '智能体身份与工作流记录：工作控制、记忆审查、术语管理。',
-    category: '智能协作',
+    category: '节点通用',
     placeholder: true,
   },
-  // ============================================================
-  // 节点通用
-  // ============================================================
   {
     viewType: VIEW_TYPE_RECYCLE,
     title: '回收模式',
