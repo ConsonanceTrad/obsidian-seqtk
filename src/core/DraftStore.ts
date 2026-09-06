@@ -9,7 +9,7 @@
 
 import type { App } from 'obsidian';
 import type { NodeFileManager } from './NodeFileManager';
-import { DRAFT_FILE_NAME, DRAFT_FILE_VERSION } from '../types/draft';
+import { DRAFT_FILE_NAME, DRAFT_FILE_VERSION, migrateAxisTimes } from '../types/draft';
 import type { FlowDraft, FlowDraftsFile } from '../types/draft';
 
 export class DraftStore {
@@ -23,7 +23,7 @@ export class DraftStore {
     return `${this.fileManager.rootFolder}/${DRAFT_FILE_NAME}`;
   }
 
-  /** 读取全部草稿（文件缺失或损坏时返回空数组） */
+  /** 读取全部草稿（文件缺失或损坏时返回空数组）；读入时执行时间层级迁移并回写 */
   async load(): Promise<FlowDraft[]> {
     try {
       const adapter = this.app.vault.adapter;
@@ -31,6 +31,14 @@ export class DraftStore {
       const raw = await adapter.read(this.filePath);
       const parsed = JSON.parse(raw) as FlowDraftsFile;
       if (!parsed || !Array.isArray(parsed.drafts)) return [];
+      // 迁移：时间块不再持有时间，起止归事件轴（旧数据存在时回写一次）
+      let changed = false;
+      for (const draft of parsed.drafts) {
+        for (const axis of draft.axes) {
+          if (migrateAxisTimes(axis)) changed = true;
+        }
+      }
+      if (changed) await this.save(parsed.drafts);
       return parsed.drafts;
     } catch (err) {
       console.warn('[SeqTK][Draft] 读取流程草稿失败，按空草稿处理:', err);

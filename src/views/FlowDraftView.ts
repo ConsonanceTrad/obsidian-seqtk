@@ -4,12 +4,13 @@
  * 双栏：
  * - 左栏：草稿列表（新建 / 切换 / 重命名 / 删除）
  * - 右栏：泳道板 —— 一条草稿含多条并行事件轴（横向并列、横向滚动），
- *   每条轴自上而下排列「起止时间块」；块可拖拽重排 / 跨轴移动，
- *   可按编号（手动顺序）或按起止时间升降序排列。
+ *   每条事件轴持有轴级「起止时间段」，自上而下排列顺序块；块可拖拽
+ *   重排 / 跨轴移动，按编号或按轴起止时间对泳道排序。
  *
  * 定位（与流程设计 / 流程推送区分）：
  * - 纯 UI 草稿，无专属语法、不涉及提醒
- * - 块内容：起止时间（快速敲定时间）+ 只读关联节点（可点击跳文件）+ 备注/直接文本
+ * - 事件轴：起止时间段（快速敲定时间）
+ * - 顺序块：表达轴内执行顺序，可只读关联节点（可点击跳文件）+ 输入文本，自身无时间
  * - 数据持久化：rootFolder/flow-drafts.json（DraftStore），不创建、不修改任何节点
  */
 
@@ -24,7 +25,7 @@ import {
   createFlowDraft,
   createTimeBlock,
   genDraftId,
-  sortBlocksByTime,
+  sortAxesByTime,
 } from '../types/draft';
 import type { EventAxis, FlowDraft, TimeBlock } from '../types/draft';
 
@@ -171,7 +172,7 @@ interface NodeCandidate {
 
 /**
  * 节点选择弹窗 — 输入即搜（NodeCache.search），列表展示 kind 徽章 + 名称 + nodeId。
- * 仅用于把节点「只读关联」到时间块，不修改节点本身。
+ * 仅用于把节点「只读关联」到顺序块，不修改节点本身。
  */
 class NodePickModal extends Modal {
   private searchInput!: HTMLInputElement;
@@ -406,18 +407,18 @@ export class FlowDraftView extends ItemView {
       return;
     }
 
-    // 排序（作用于当前草稿全部事件轴的块；结果即新的手动顺序）
+    // 排序（作用于当前草稿的事件轴，按轴级起止时间对泳道排序；结果即新的左右顺序）
     const ascBtn = this.toolbarEl.createEl('button', { cls: 'seqtk-btn seqtk-btn-small', text: '时间 ↑' });
     const descBtn = this.toolbarEl.createEl('button', { cls: 'seqtk-btn seqtk-btn-small', text: '时间 ↓' });
-    setTooltip(ascBtn, '将所有事件轴的时间块按起止时间升序重排（无时间的块排尾部）');
-    setTooltip(descBtn, '按起止时间降序重排');
+    setTooltip(ascBtn, '按各事件轴的起止时间对泳道升序重排（无时间的轴排尾部）');
+    setTooltip(descBtn, '按各事件轴的起止时间对泳道降序重排');
     ascBtn.addEventListener('click', () => this.applyTimeSort(false));
     descBtn.addEventListener('click', () => this.applyTimeSort(true));
 
     const addAxisBtn = this.toolbarEl.createEl('button', { cls: 'seqtk-btn seqtk-btn-small seqtk-btn-primary', text: '+ 事件轴' });
     addAxisBtn.addEventListener('click', () => this.addAxis());
 
-    const addBlockBtn = this.toolbarEl.createEl('button', { cls: 'seqtk-btn seqtk-btn-small', text: '+ 时间块' });
+    const addBlockBtn = this.toolbarEl.createEl('button', { cls: 'seqtk-btn seqtk-btn-small', text: '+ 顺序块' });
     addBlockBtn.addEventListener('click', () => {
       const target = d.axes[0];
       if (target) this.addBlock(target.id);
@@ -426,7 +427,7 @@ export class FlowDraftView extends ItemView {
 
     const hint = this.toolbarEl.createEl('span', {
       cls: 'seqtk-draft-hint',
-      text: '块编号即当前顺序；拖拽块可重排或跨轴移动；时间块起止用于快速敲定时间',
+      text: '事件轴持有起止时间段（用于快速敲定时间）；块表示轴内执行顺序，可关联节点或输入文本',
     });
     hint.setAttribute('aria-hidden', 'true');
 
@@ -512,7 +513,7 @@ export class FlowDraftView extends ItemView {
     const nBlocks = draft.axes.reduce((s, a) => s + a.blocks.length, 0);
     new DraftConfirmModal(this.app, {
       title: '删除草稿',
-      message: `确定删除草稿「${draft.title}」？将同时移除其 ${draft.axes.length} 条事件轴、${nBlocks} 个时间块。此操作不可撤销。`,
+      message: `确定删除草稿「${draft.title}」？将同时移除其 ${draft.axes.length} 条事件轴、${nBlocks} 个顺序块。此操作不可撤销。`,
       onConfirm: () => {
         this.drafts = this.drafts.filter((x) => x.id !== draft.id);
         if (this.selectedDraftId === draft.id) {
@@ -567,7 +568,10 @@ export class FlowDraftView extends ItemView {
       btn.addEventListener('click', () => this.deleteAxis(axis.id));
     });
 
-    // ── 轴体（块列表；drag 事件委派到此处统一处理插入位） ──
+    // ── 轴级时间段（轴持有起止，用于快速敲定时间） ──
+    this.renderAxisTimeArea(lane, axis);
+
+    // ── 轴体（顺序块列表；drag 事件委派到此处统一处理插入位） ──
     const body = lane.createDiv('seqtk-draft-lane-body');
     body.dataset.axisId = axis.id;
 
@@ -577,16 +581,41 @@ export class FlowDraftView extends ItemView {
 
     if (axis.blocks.length === 0) {
       const emptyHint = body.createDiv('seqtk-draft-lane-empty');
-      emptyHint.textContent = '空轴 — 把块拖到这里，或添加时间块';
+      emptyHint.textContent = '空轴 — 把块拖到这里，或添加顺序块';
     }
 
-    const addBtn = body.createEl('button', { cls: 'seqtk-btn seqtk-btn-small seqtk-draft-add-block', text: '+ 时间块' });
+    const addBtn = body.createEl('button', { cls: 'seqtk-btn seqtk-btn-small seqtk-draft-add-block', text: '+ 顺序块' });
     addBtn.addEventListener('click', () => this.addBlock(axis.id));
 
     this.attachLaneDrag(body, axis.id);
   }
 
-  /** 时间块卡片 */
+  /** 轴级时间段编辑区：起/止 datetime-local（可缺省）+ 快捷 chips + 时长 */
+  private renderAxisTimeArea(lane: HTMLElement, axis: EventAxis): void {
+    const area = lane.createDiv('seqtk-draft-lane-times');
+    this.renderAxisTimeRow(area, '起', axis, 'from');
+    this.renderAxisTimeRow(area, '止', axis, 'to');
+    const metaRow = area.createDiv('seqtk-draft-meta-row');
+    metaRow.createEl('span', { cls: 'seqtk-draft-time-label', text: '时长' });
+    metaRow.createEl('span', { cls: 'seqtk-draft-span', text: spanText(axis.from, axis.to) });
+
+    // 快捷敲定「起」：未设止或止早于起时自动补 +1h
+    const chips = area.createDiv('seqtk-draft-chips');
+    const quick: { label: string; offsetMin: number; tip: string }[] = [
+      { label: '现在', offsetMin: 0, tip: '起 = 此刻' },
+      { label: '明天', offsetMin: 24 * 60, tip: '起 = 24 小时后' },
+      { label: '+30分', offsetMin: 30, tip: '起 = 30 分钟后' },
+      { label: '+1时', offsetMin: 60, tip: '起 = 1 小时后' },
+      { label: '+1天', offsetMin: 24 * 60, tip: '起 = 1 天后' },
+    ];
+    for (const q of quick) {
+      const chip = chips.createEl('button', { cls: 'seqtk-draft-chip', text: q.label });
+      setTooltip(chip, `${q.tip}；止为空或早于起时自动顺延 1 小时`);
+      chip.addEventListener('click', () => this.applyQuickStart(axis.id, q.offsetMin));
+    }
+  }
+
+  /** 顺序块卡片 */
   private renderBlock(axis: EventAxis, block: TimeBlock): void {
     const body = this.boardEl.querySelector<HTMLElement>(`.seqtk-draft-lane-body[data-axis-id="${axis.id}"]`);
     if (!body) return;
@@ -618,44 +647,21 @@ export class FlowDraftView extends ItemView {
         btn.addEventListener('click', () => this.clearNodeLink(block));
       });
     }
-    head.createEl('button', { cls: 'seqtk-draft-icon-btn', attr: { 'aria-label': '复制时间块' } }, (btn) => {
+    head.createEl('button', { cls: 'seqtk-draft-icon-btn', attr: { 'aria-label': '复制块' } }, (btn) => {
       setIcon(btn, 'copy');
       btn.addEventListener('click', () => this.duplicateBlock(axis.id, block.id));
     });
-    head.createEl('button', { cls: 'seqtk-draft-icon-btn seqtk-draft-icon-danger', attr: { 'aria-label': '删除时间块' } }, (btn) => {
+    head.createEl('button', { cls: 'seqtk-draft-icon-btn seqtk-draft-icon-danger', attr: { 'aria-label': '删除块' } }, (btn) => {
       setIcon(btn, 'x');
       btn.addEventListener('click', () => this.deleteBlock(axis.id, block.id));
     });
 
-    // ── 时间编辑区（起 / 止，可缺省） ──
-    const times = card.createDiv('seqtk-draft-times');
-    this.renderTimeRow(times, '起', block, 'from');
-    this.renderTimeRow(times, '止', block, 'to');
-    const metaRow = times.createDiv('seqtk-draft-meta-row');
-    metaRow.createEl('span', { cls: 'seqtk-draft-time-label', text: '时长' });
-    metaRow.createEl('span', { cls: 'seqtk-draft-span', text: spanText(block.from, block.to) });
-
-    // 快捷敲定：设置「起」，未设止或止早于起时自动补 +1h
-    const chips = card.createDiv('seqtk-draft-chips');
-    const quick: { label: string; offsetMin: number; tip: string }[] = [
-      { label: '现在', offsetMin: 0, tip: '起 = 此刻' },
-      { label: '明天', offsetMin: 24 * 60, tip: '起 = 24 小时后' },
-      { label: '+30分', offsetMin: 30, tip: '起 = 30 分钟后' },
-      { label: '+1时', offsetMin: 60, tip: '起 = 1 小时后' },
-      { label: '+1天', offsetMin: 24 * 60, tip: '起 = 1 天后' },
-    ];
-    for (const q of quick) {
-      const chip = chips.createEl('button', { cls: 'seqtk-draft-chip', text: q.label });
-      setTooltip(chip, `${q.tip}；止为空或早于起时自动顺延 1 小时`);
-      chip.addEventListener('click', () => this.applyQuickStart(axis.id, block.id, q.offsetMin));
-    }
-
-    // ── 备注 / 直接文本 ──
+    // ── 步骤文本（块仅表示执行顺序，无自身时间） ──
     const textarea = card.createEl('textarea', {
       cls: 'seqtk-draft-text',
       attr: {
         rows: '2',
-        placeholder: '备注 / 直接输入文本（可空）…',
+        placeholder: '步骤文本 / 备注…',
       },
     });
     textarea.value = block.text ?? '';
@@ -681,27 +687,27 @@ export class FlowDraftView extends ItemView {
     });
   }
 
-  /** 时间输入行：label + datetime-local + 清除按钮；change 只更新模型不整表重渲染 */
-  private renderTimeRow(container: HTMLElement, label: string, block: TimeBlock, side: 'from' | 'to'): void {
+  /** 轴级时间输入行：label + datetime-local + 清除按钮；change 只更新模型不整表重渲染 */
+  private renderAxisTimeRow(container: HTMLElement, label: string, axis: EventAxis, side: 'from' | 'to'): void {
     const row = container.createDiv('seqtk-draft-time-row');
     row.createEl('span', { cls: 'seqtk-draft-time-label', text: label });
     const input = row.createEl('input', {
       cls: 'seqtk-draft-time-input',
       attr: { type: 'datetime-local' },
     });
-    input.value = isoToInput(block[side]);
+    input.value = isoToInput(axis[side]);
     input.addEventListener('change', () => {
-      block[side] = inputToIso(input.value);
+      axis[side] = inputToIso(input.value);
       this.markModified();
-      this.updateCardMeta(block.id);
+      this.updateAxisMeta(axis.id);
     });
     row.createEl('button', { cls: 'seqtk-draft-icon-btn seqtk-draft-clear-btn', attr: { 'aria-label': '清除' } }, (btn) => {
       setIcon(btn, 'x');
       btn.addEventListener('click', () => {
-        block[side] = undefined;
+        axis[side] = undefined;
         input.value = '';
         this.markModified();
-        this.updateCardMeta(block.id);
+        this.updateAxisMeta(axis.id);
       });
     });
   }
@@ -735,20 +741,15 @@ export class FlowDraftView extends ItemView {
     el.title = `${node.desc}\n${block.nodeId}\n点击打开节点文件`;
   }
 
-  /** 局部刷新块卡的元信息（时长等，输入时不打断焦点） */
-  private updateCardMeta(blockId: string): void {
-    const card = this.boardEl.querySelector<HTMLElement>(`.seqtk-draft-block[data-block-id="${blockId}"]`);
-    if (!card) return;
+  /** 局部刷新轴的时长文本（编辑起止时调用，不打断块输入焦点） */
+  private updateAxisMeta(axisId: string): void {
+    const lane = this.boardEl.querySelector<HTMLElement>(`.seqtk-draft-lane[data-axis-id="${axisId}"]`);
+    if (!lane) return;
     const d = this.selectedDraft;
-    if (!d) return;
-    for (const a of d.axes) {
-      const block = a.blocks.find((b) => b.id === blockId);
-      if (block) {
-        const spanEl = card.querySelector('.seqtk-draft-span');
-        if (spanEl) spanEl.setText(spanText(block.from, block.to));
-        return;
-      }
-    }
+    const axis = d?.axes.find((a) => a.id === axisId);
+    if (!axis) return;
+    const spanEl = lane.querySelector('.seqtk-draft-span');
+    if (spanEl) spanEl.setText(spanText(axis.from, axis.to));
   }
 
   // ============================================================
@@ -758,9 +759,8 @@ export class FlowDraftView extends ItemView {
   private applyTimeSort(desc: boolean): void {
     const d = this.selectedDraft;
     if (!d) return;
-    for (const a of d.axes) {
-      a.blocks = sortBlocksByTime(a.blocks, desc);
-    }
+    // 按轴级起止时间对泳道（事件轴左右顺序）排序，结果即新的手动顺序
+    d.axes = sortAxesByTime(d.axes, desc);
     this.markModified();
     this.renderBoard();
   }
@@ -814,7 +814,7 @@ export class FlowDraftView extends ItemView {
     if (!d || !axis) return;
     new DraftConfirmModal(this.app, {
       title: '删除事件轴',
-      message: `确定删除事件轴「${axis.title}」？将同时移除其中 ${axis.blocks.length} 个时间块。`,
+      message: `确定删除事件轴「${axis.title}」？将同时移除其中 ${axis.blocks.length} 个顺序块。`,
       onConfirm: () => {
         d.axes = d.axes.filter((a) => a.id !== axisId);
         this.markModified();
@@ -888,25 +888,24 @@ export class FlowDraftView extends ItemView {
     this.renderBoard();
   }
 
-  /** 快捷设定「起」；止为空或早于新起时自动补 1 小时 */
-  private applyQuickStart(axisId: string, blockId: string, offsetMin: number): void {
+  /** 快捷设定事件轴「起」；止为空或早于新起时自动补 1 小时 */
+  private applyQuickStart(axisId: string, offsetMin: number): void {
     const d = this.selectedDraft;
     const axis = d?.axes.find((a) => a.id === axisId);
-    const block = axis?.blocks.find((b) => b.id === blockId);
-    if (!d || !axis || !block) return;
+    if (!d || !axis) return;
     const from = new Date(Date.now() + offsetMin * 60000);
-    block.from = from.toISOString();
-    if (!block.to || new Date(block.to).getTime() <= from.getTime()) {
-      block.to = new Date(from.getTime() + 3600000).toISOString();
+    axis.from = from.toISOString();
+    if (!axis.to || new Date(axis.to).getTime() <= from.getTime()) {
+      axis.to = new Date(from.getTime() + 3600000).toISOString();
     }
     this.markModified();
-    // 刷新本卡时间输入值 + 元信息
-    const card = this.boardEl.querySelector<HTMLElement>(`.seqtk-draft-block[data-block-id="${blockId}"]`);
-    if (card) {
-      const inputs = card.querySelectorAll<HTMLInputElement>('.seqtk-draft-time-input');
-      if (inputs[0]) inputs[0].value = isoToInput(block.from);
-      if (inputs[1]) inputs[1].value = isoToInput(block.to);
-      this.updateCardMeta(blockId);
+    // 刷新本轴时间输入值 + 时长
+    const lane = this.boardEl.querySelector<HTMLElement>(`.seqtk-draft-lane[data-axis-id="${axisId}"]`);
+    if (lane) {
+      const inputs = lane.querySelectorAll<HTMLInputElement>('.seqtk-draft-time-input');
+      if (inputs[0]) inputs[0].value = isoToInput(axis.from);
+      if (inputs[1]) inputs[1].value = isoToInput(axis.to);
+      this.updateAxisMeta(axisId);
     }
   }
 

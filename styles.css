@@ -3243,3 +3243,21 @@
 .seqtk-draft-prompt-input {
   width: 100%;
 }
+
+/* 轴级时间段编辑区（事件轴持有起止时间段，顺序块不携带时间） */
+.seqtk-draft-lane-times {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.seqtk-draft-lane-times .seqtk-draft-time-input {
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-draft-lane-times .seqtk-draft-chip {
+  font-size: var(--font-ui-smaller);
+}
