@@ -156,6 +156,11 @@
     inset 12px 0 0 0 color-mix(in srgb, var(--interactive-accent) 25%, transparent);
 }
 
+/* 拖到右栏空白处：改为选中框架直属子节点（整体高亮提示） */
+.seqtk-split-right.seqtk-drop-blank {
+  box-shadow: inset 0 0 0 2px var(--interactive-accent);
+}
+
 .seqtk-row.seqtk-drop-invalid,
 .seqtk-frame-item.seqtk-drop-invalid {
   outline: 2px solid var(--text-error);
@@ -2828,3 +2833,413 @@
   flex-shrink: 0;
 }
 
+
+/* ============================================================
+   FlowDraftView — 流程草稿（规则设计）
+   泳道板：多条并行事件轴 + 自上而下的起止时间块
+   ============================================================ */
+
+/* 工具栏（右栏顶部） */
+.seqtk-draft-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.seqtk-draft-toolbar-title {
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  margin-right: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.seqtk-draft-toolbar-title-dim {
+  color: var(--text-muted);
+}
+
+.seqtk-draft-save-state {
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.seqtk-draft-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  margin-left: 8px;
+}
+
+/* 泳道板（横向滚动容器） */
+.seqtk-draft-board {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.seqtk-draft-board-empty {
+  margin: 40px auto;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-ui-medium);
+}
+
+.seqtk-draft-board-empty-sub {
+  margin-top: 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+/* 事件轴（泳道） */
+.seqtk-draft-lane {
+  flex: 0 0 300px;
+  width: 300px;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+}
+
+.seqtk-draft-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+
+.seqtk-draft-lane-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-draft-lane-body {
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seqtk-draft-lane-body.seqtk-drop-tail {
+  background: var(--background-modifier-hover);
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: -4px;
+  border-radius: var(--radius-s);
+}
+
+.seqtk-draft-lane-empty {
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+.seqtk-draft-add-block {
+  width: 100%;
+}
+
+/* 图标小按钮 */
+.seqtk-draft-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.seqtk-draft-icon-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.seqtk-draft-icon-btn.seqtk-draft-icon-danger:hover {
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+}
+
+/* 时间块卡片 */
+.seqtk-draft-block {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: default;
+}
+
+.seqtk-draft-block:hover {
+  border-color: var(--background-modifier-border-hover);
+}
+
+.seqtk-draft-block.seqtk-dragging {
+  opacity: 0.5;
+}
+
+/* 拖拽插入指示：块上沿 / 下沿 */
+.seqtk-draft-block.seqtk-drop-before {
+  box-shadow: 0 -3px 0 0 var(--interactive-accent);
+}
+
+.seqtk-draft-block.seqtk-drop-after {
+  box-shadow: 0 3px 0 0 var(--interactive-accent);
+}
+
+.seqtk-draft-block-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.seqtk-draft-index {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-weight: var(--font-semibold);
+  flex-shrink: 0;
+}
+
+.seqtk-draft-grip {
+  display: inline-flex;
+  color: var(--text-faint);
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.seqtk-draft-grip:active {
+  cursor: grabbing;
+}
+
+/* 关联节点引用（head 中伸缩占位） */
+.seqtk-draft-node-ref {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.seqtk-draft-node-ref.seqtk-draft-node-ref-linked {
+  cursor: pointer;
+}
+
+.seqtk-draft-node-name {
+  font-size: var(--font-ui-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seqtk-draft-node-name.seqtk-draft-node-placeholder {
+  color: var(--text-faint);
+}
+
+.seqtk-draft-node-ref.is-missing .seqtk-draft-node-name {
+  color: var(--text-error);
+  text-decoration: line-through;
+}
+
+/* 时间编辑区 */
+.seqtk-draft-times {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.seqtk-draft-time-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.seqtk-draft-time-label {
+  width: 18px;
+  flex-shrink: 0;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.seqtk-draft-time-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-ui-smaller);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 2px 4px;
+  color: var(--text-normal);
+}
+
+.seqtk-draft-clear-btn {
+  width: 18px;
+  height: 18px;
+}
+
+.seqtk-draft-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.seqtk-draft-span {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-accent);
+}
+
+/* 快捷敲定 chips */
+.seqtk-draft-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.seqtk-draft-chip {
+  font-size: var(--font-ui-smaller);
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.seqtk-draft-chip:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* 备注 / 直接文本 */
+.seqtk-draft-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 30px;
+  font-size: var(--font-ui-small);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 3px 5px;
+  color: var(--text-normal);
+}
+
+.seqtk-draft-text:focus {
+  border-color: var(--interactive-accent);
+}
+
+/* 左栏草稿列表 */
+.seqtk-draft-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+
+.seqtk-draft-list-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.seqtk-draft-list-item-active {
+  background: var(--background-modifier-hover);
+  border-left-color: var(--interactive-accent);
+}
+
+.seqtk-draft-list-title {
+  font-size: var(--font-ui-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seqtk-draft-list-meta {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+/* 节点选择弹窗 */
+.seqtk-draft-node-search {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.seqtk-draft-node-list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.seqtk-draft-node-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.seqtk-draft-node-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.seqtk-draft-node-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-draft-node-item-id {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.seqtk-draft-node-empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-draft-prompt-input {
+  width: 100%;
+}

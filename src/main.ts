@@ -27,6 +27,7 @@ import { OverviewView, VIEW_TYPE_OVERVIEW } from './views/OverviewView';
 import { RouteView, VIEW_TYPE_ROUTE } from './views/RouteView';
 import { FlowView, VIEW_TYPE_FLOW } from './views/FlowView';
 import { FlowPushView, VIEW_TYPE_FLOW_PUSH } from './views/FlowPushView';
+import { FlowDraftView, VIEW_TYPE_FLOW_DRAFT } from './views/FlowDraftView';
 import { RecycleView, VIEW_TYPE_RECYCLE } from './views/RecycleView';
 import { PlaceholderView, VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './views/PlaceholderView';
 import { SeqtkSettingTab } from './settings/SeqtkSettingTab';
@@ -123,6 +124,10 @@ export default class SeqtkPlugin extends Plugin {
     this.registerView(
       VIEW_TYPE_FLOW_PUSH,
       (leaf) => new FlowPushView(leaf, this.nodeCache),
+    );
+    this.registerView(
+      VIEW_TYPE_FLOW_DRAFT,
+      (leaf) => new FlowDraftView(leaf, this.nodeCache, this.fileManager),
     );
     // 未实现功能口：占位视图
     this.registerView(VIEW_TYPE_EXEC_DESIGN, (leaf) => new PlaceholderView(leaf, {
@@ -222,6 +227,11 @@ export default class SeqtkPlugin extends Plugin {
       id: 'open-flow-push',
       name: '打开流程推送（侧边栏）',
       callback: () => this.activateView(VIEW_TYPE_FLOW_PUSH, 'right'),
+    });
+    this.addCommand({
+      id: 'open-flow-draft',
+      name: '打开流程草稿',
+      callback: () => this.activateView(VIEW_TYPE_FLOW_DRAFT),
     });
     // 未实现功能口命令
     this.addCommand({

@@ -67,6 +67,8 @@ export class DesignView extends ItemView {
   private dragSource: { sourceId: string; parentId: string } | null = null;
   /** 行内新建期间抑制 nodeStore 触发的全量重渲染（由局部插入替代，避免画面闪烁） */
   private suppressRender = false;
+  /** 拖拽中右键取消处理器（document contextmenu，捕获阶段） */
+  private dragCancelHandler: ((e: MouseEvent) => void) | null = null;
   /** 顶级框架排序（nodeId 顺序，持久化于 settings.topFrameworkOrder） */
   private topOrder: string[] = [];
 
@@ -119,12 +121,52 @@ export class DesignView extends ItemView {
       this.showRightBlankMenu(e);
     });
 
+    // 右栏空白落点：拖拽到空白处 → 改为选中框架的直属子节点（仅容许框架目标的类型生效）
+    this.rightEl.addEventListener('dragover', (e) => {
+      // 行内落点由行自身处理，此处仅处理空白区域
+      if ((e.target as HTMLElement).closest('.seqtk-row')) return;
+      const source = this.dragSource;
+      if (!source || !this.canDropToFrameworkBlank(source)) return;
+      e.preventDefault();
+      this.clearDropIndicators();
+      this.rightEl.addClass('seqtk-drop-blank');
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    });
+    this.rightEl.addEventListener('drop', (e) => {
+      if ((e.target as HTMLElement).closest('.seqtk-row')) return;
+      const source = this.dragSource;
+      if (!source || !this.canDropToFrameworkBlank(source)) return;
+      e.preventDefault();
+      this.clearDropIndicators();
+      this.moveChildAcrossParents(source.parentId, source.sourceId, this.selectedFrameworkId!, '', false);
+      this.dragSource = null;
+    });
+    this.rightEl.addEventListener('dragleave', (e) => {
+      // 离开右栏时清理空白落点指示
+      if (!this.rightEl.contains(e.relatedTarget as Node)) {
+        this.rightEl.removeClass('seqtk-drop-blank');
+      }
+    });
+
     this.unsub = this.nodeCache.nodeStore.subscribe(() => {
       // 行内新建期间由局部插入维护 DOM，跳过全量重渲染避免闪烁
       if (this.suppressRender) return;
       this.renderLeft();
       this.renderRight();
     });
+
+    // 拖拽进行中：右键点击取消本次拖拽（阻止默认菜单并清理状态）
+    this.dragCancelHandler = (e: MouseEvent) => {
+      if (!this.dragSource) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.dragSource = null;
+      this.clearDropIndicators();
+      this.leftEl.querySelectorAll('.seqtk-dragging').forEach((el) => el.removeClass('seqtk-dragging'));
+      this.rightEl.querySelectorAll('.seqtk-dragging').forEach((el) => el.removeClass('seqtk-dragging'));
+    };
+    document.addEventListener('contextmenu', this.dragCancelHandler, true);
+
     this.renderLeft();
     this.renderRight();
   }
@@ -190,6 +232,10 @@ export class DesignView extends ItemView {
   async onClose(): Promise<void> {
     this.unsub?.();
     this.unsub = null;
+    if (this.dragCancelHandler) {
+      document.removeEventListener('contextmenu', this.dragCancelHandler, true);
+      this.dragCancelHandler = null;
+    }
   }
 
   // ============================================================
@@ -310,10 +356,10 @@ export class DesignView extends ItemView {
       const source = this.dragSource;
       if (source) {
         const target = this.resolveDropTarget(e);
-        // 仅同父同级排序（跨父/跨级驳回）
-        if (target && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
+        // 左栏仅同父同级排序：上方→目标前、下方→目标后；中心（子级）与跨父/跨级驳回
+        if (target && target.parentId === source.parentId && target.nodeId !== source.sourceId && target.zone !== 'middle') {
           valid = true;
-          target.row.addClass(target.before ? 'seqtk-drop-before' : 'seqtk-drop-after');
+          target.row.addClass(target.zone === 'above' ? 'seqtk-drop-before' : 'seqtk-drop-after');
         } else if (target) {
           target.row.addClass('seqtk-drop-invalid');
         }
@@ -331,13 +377,15 @@ export class DesignView extends ItemView {
       const source = this.dragSource;
       const target = this.resolveDropTarget(e);
       if (!source) return;
-      if (target && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
+      // 左栏仅同父同级排序（above/below），middle（子级）不执行
+      if (target && target.zone !== 'middle' && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
+        const before = target.zone === 'above';
         if (source.parentId) {
           // 子框架：父 follows 排序
-          this.moveChildInFollows(source.parentId, source.sourceId, target.nodeId, target.before);
+          this.moveChildInFollows(source.parentId, source.sourceId, target.nodeId, before);
         } else {
           // 顶级框架：topFrameworkOrder 排序
-          this.moveTopInOrder(source.sourceId, target.nodeId, target.before);
+          this.moveTopInOrder(source.sourceId, target.nodeId, before);
         }
       }
       this.dragSource = null;
@@ -675,14 +723,13 @@ export class DesignView extends ItemView {
           const target = this.resolveDropTarget(e);
           if (target && this.canDrop(source, target)) {
             valid = true;
-            // 上半 → 目标下方同级（after 指示线）；下半 → 目标子级（child 缩进指示）
-            target.row.addClass(target.before ? 'seqtk-drop-after' : 'seqtk-drop-child');
+            // 三段式指示：上方→同级前（before 顶线）、中心→子级（child 缩进）、下方→同级后（after 底线）
+            if (target.zone === 'above') target.row.addClass('seqtk-drop-before');
+            else if (target.zone === 'below') target.row.addClass('seqtk-drop-after');
+            else target.row.addClass('seqtk-drop-child');
           } else if (target) {
             // 非容许目标（跨父不允许/自身）：驳回
             target.row.addClass('seqtk-drop-invalid');
-          }
-          if (target) {
-            // console.log('[SeqTK] dragover source=', source, 'target=', { nodeId: target.nodeId, parentId: target.parentId, before: target.before }, 'valid=', valid);
           }
         }
         if (e.dataTransfer) e.dataTransfer.dropEffect = valid ? 'move' : 'none';
@@ -698,19 +745,20 @@ export class DesignView extends ItemView {
         this.clearDropIndicators();
         const source = this.dragSource;
         const target = this.resolveDropTarget(e);
-        // console.log('[SeqTK] drop source=', source, 'target=', target ? { nodeId: target.nodeId, parentId: target.parentId, before: target.before } : null);
+        // console.log('[SeqTK] drop source=', source, 'target=', target ? { nodeId: target.nodeId, parentId: target.parentId, zone: target.zone } : null);
         if (!source) return;
         if (target && this.canDrop(source, target)) {
-          if (target.before) {
-            // 上半：添加到目标下方同级（目标父集合中目标之后）
-            if (target.parentId === source.parentId) {
-              this.moveChildInFollows(source.parentId, source.sourceId, target.nodeId, false);
-            } else {
-              this.moveChildAcrossParents(source.parentId, source.sourceId, target.parentId, target.nodeId, false);
-            }
-          } else {
-            // 下半：添加到目标下方子级（目标作为新父，插入其子列表尾部）
+          if (target.zone === 'middle') {
+            // 中心：添加到目标子级末尾（目标作为新父）
             this.moveChildAcrossParents(source.parentId, source.sourceId, target.nodeId, '', false);
+          } else {
+            // 上方/下方：添加到目标同级（前/后）
+            const before = target.zone === 'above';
+            if (target.parentId === source.parentId) {
+              this.moveChildInFollows(source.parentId, source.sourceId, target.nodeId, before);
+            } else {
+              this.moveChildAcrossParents(source.parentId, source.sourceId, target.parentId, target.nodeId, before);
+            }
           }
         }
         this.dragSource = null;
@@ -783,7 +831,18 @@ export class DesignView extends ItemView {
         cls: `seqtk-state-dot state-${state}`,
       });
       setTooltip(stateBtn, NODE_STATE_LABELS[state]);
-      stateBtn.addEventListener('click', (e) => { e.stopPropagation(); this.showStateMenu(e, node); });
+      stateBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // 单击状态原点：规划/进行 → 完成；完成 → 规划（循环切换）
+        const next = state === 'done' ? 'plan' : 'done';
+        this.setNodeState(node.nodeId, next);
+      });
+      // 右键状态原点：保留完整状态菜单（不删菜单功能）
+      stateBtn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showStateMenu(e, node);
+      });
     }
 
     row.addEventListener('contextmenu', (e) => {
@@ -1174,16 +1233,17 @@ export class DesignView extends ItemView {
     this.renderRight();
   }
 
-  /** 解析拖拽落点：目标行（右栏 .seqtk-row / 左栏 .seqtk-frame-item）+ 插入位置（上半=前、下半=后）；顶级行 parentId 为空串 */
-  private resolveDropTarget(e: DragEvent): { row: HTMLElement; nodeId: string; parentId: string; before: boolean } | null {
+  /** 解析拖拽落点：目标行（右栏 .seqtk-row / 左栏 .seqtk-frame-item）+ 三段式区域（上方=同级前、中心=子级末尾、下方=同级后）；顶级行 parentId 为空串 */
+  private resolveDropTarget(e: DragEvent): { row: HTMLElement; nodeId: string; parentId: string; zone: 'above' | 'middle' | 'below' } | null {
     const el = (e.target as HTMLElement).closest<HTMLElement>('.seqtk-row, .seqtk-frame-item');
     if (!el) return null;
     const nodeId = el.dataset.nodeId ?? '';
     const parentId = el.dataset.parentId ?? '';
     if (!nodeId) return null;
     const rect = el.getBoundingClientRect();
-    const before = e.clientY < rect.top + rect.height / 2;
-    return { row: el, nodeId, parentId, before };
+    const ratio = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0;
+    const zone: 'above' | 'middle' | 'below' = ratio < 1 / 3 ? 'above' : ratio > 2 / 3 ? 'below' : 'middle';
+    return { row: el, nodeId, parentId, zone };
   }
 
   /** 在同父 follows 中把 sourceId 移到 targetId 前/后，持久化并重渲染 */
@@ -1195,9 +1255,9 @@ export class DesignView extends ItemView {
     }
     const follows = [...(parent.follows ?? [])];
     const srcIdx = follows.indexOf(sourceId);
-    // console.log('[SeqTK] moveChildInFollows parent=', parentId, 'source=', sourceId, 'target=', targetId, 'before=', before, 'follows=', follows, 'srcIdx=', srcIdx);
-    if (srcIdx < 0) return;
-    follows.splice(srcIdx, 1);
+    // 数据不一致容错：source 不在父 follows 中（历史遗留/缺失）时跳过移除，仍按目标位置插入——
+    // "添加到同级"始终生效，并顺带修复父 follows 数据
+    if (srcIdx >= 0) follows.splice(srcIdx, 1);
     let insertAt = follows.indexOf(targetId);
     if (insertAt < 0) insertAt = follows.length;
     if (!before) insertAt += 1;
@@ -1230,21 +1290,21 @@ export class DesignView extends ItemView {
   }
 
   /**
-   * 拖拽落点判定（按目标行位置分两种插入语义）：
-   * - 目标行上半（before=true）→ 添加到目标下方同级（目标父集合中目标之后）
-   * - 目标行下半（before=false）→ 添加到目标下方子级（目标作为新父）
+   * 拖拽落点判定（三段式区域）：
+   * - above/below（上方/下方）→ 添加到同级（目标前/后）
+   * - middle（中心）→ 添加到目标子级末尾（目标作为新父）
    * 跨父/跨级约束：证据类型可随意；event 仅限框架与目标（target）之间；其余按层级规则。
    */
   private canDrop(
     source: { sourceId: string; parentId: string },
-    target: { nodeId: string; parentId: string; before: boolean },
+    target: { nodeId: string; parentId: string; zone: 'above' | 'middle' | 'below' },
   ): boolean {
     if (target.nodeId === source.sourceId) return false;
     const src = this.nodeCache.getNode(source.sourceId);
     if (!src) return false;
 
-    // 下半：成为目标节点的子级（新父 = target）
-    if (!target.before) {
+    // 中心：成为目标节点的子级（新父 = target，插入子列表末尾）
+    if (target.zone === 'middle') {
       const targetKind = this.nodeCache.getNode(target.nodeId)?.kind;
       if (!targetKind) return false;
       if (EVIDENCE_KINDS.includes(src.kind as NodeKind)) return true;
@@ -1252,7 +1312,7 @@ export class DesignView extends ItemView {
       return this.getChildKinds(targetKind).includes(src.kind);
     }
 
-    // 上半：目标父集合中目标之后（同父排序 / 跨父按类型约束）
+    // 上方/下方：目标父集合中目标前/后（同父排序 / 跨父按类型约束）
     if (target.parentId === source.parentId) return true;
     const srcParentKind = this.nodeCache.getNode(source.parentId)?.kind;
     const tgtParentKind = this.nodeCache.getNode(target.parentId)?.kind;
@@ -1263,6 +1323,22 @@ export class DesignView extends ItemView {
         || (srcParentKind === 'target' && isFramework(tgtParentKind));
     }
     return false;
+  }
+
+  /**
+   * 空白落点判定：source 可否改为选中框架的直属子节点（仅对容许目标为框架的类型生效）。
+   * 证据任意；event 仅框架；其余按选中框架的 getChildKinds 层级规则。未选中框架（总览）不生效。
+   */
+  private canDropToFrameworkBlank(source: { sourceId: string; parentId: string }): boolean {
+    const fwId = this.selectedFrameworkId;
+    if (!fwId) return false;
+    const fw = this.nodeCache.getNode(fwId);
+    if (!fw) return false;
+    const src = this.nodeCache.getNode(source.sourceId);
+    if (!src) return false;
+    if (EVIDENCE_KINDS.includes(src.kind as NodeKind)) return true;
+    if (src.kind === 'event') return isFrameworkKind(fw.kind);
+    return this.getChildKinds(fw.kind).includes(src.kind);
   }
 
   /**
@@ -1312,9 +1388,10 @@ export class DesignView extends ItemView {
     this.renderRight();
   }
 
-  /** 清除左右栏所有拖拽指示样式 */
+  /** 清除左右栏所有拖拽指示样式（含右栏空白落点指示） */
   private clearDropIndicators(): void {
     for (const root of [this.leftEl, this.rightEl]) {
+      root.removeClass('seqtk-drop-blank');
       root.querySelectorAll('.seqtk-drop-before, .seqtk-drop-after, .seqtk-drop-child, .seqtk-drop-invalid')
         .forEach((el) => {
           el.removeClass('seqtk-drop-before');
@@ -1407,6 +1484,8 @@ export class DesignView extends ItemView {
       create: now,
       modify: now,
       ...(input.kind === 'event' && input.nature ? { nature: input.nature } : {}),
+      // 状态（快照）节点：自动附加时间点 at（创建时刻）
+      ...(input.kind === 'snapshot' ? { at: now } : {}),
       // 预期属性（事务→预期时间+预期重复；框架→预期时间段）
       ...(isTransactionKind(input.kind) ? {
         ...(input.expectedTime ? { expectedTime: input.expectedTime } : {}),
@@ -1578,7 +1657,10 @@ export class DesignView extends ItemView {
         item.setTitle('新建子项').setIcon('plus')
           .onClick(() => {
             const row = (e.target as HTMLElement).closest('.seqtk-row');
-            if (row) this.beginInlineCreate(node, row as HTMLElement);
+            if (!row) return;
+            // target（目标）新建子项固定为工序（process）
+            const kinds: NodeKind[] | undefined = node.data.kind === 'target' ? ['process'] : undefined;
+            this.beginInlineCreate(node, row as HTMLElement, kinds);
           }));
     }
     // 追加信息：二级子菜单（对象/条件/信息/状态），点击后行内创建对应证据类型（不开模态框）

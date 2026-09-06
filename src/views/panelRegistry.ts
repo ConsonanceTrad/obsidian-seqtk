@@ -18,6 +18,7 @@ import { VIEW_TYPE_OVERVIEW } from './OverviewView';
 import { VIEW_TYPE_ROUTE } from './RouteView';
 import { VIEW_TYPE_FLOW } from './FlowView';
 import { VIEW_TYPE_FLOW_PUSH } from './FlowPushView';
+import { VIEW_TYPE_FLOW_DRAFT } from './FlowDraftView';
 import { VIEW_TYPE_RECYCLE } from './RecycleView';
 import { VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './PlaceholderView';
 
@@ -114,6 +115,13 @@ export const PANEL_REGISTRY: PanelEntry[] = [
     title: '流程推送',
     icon: 'bell',
     description: '根据指定流程脚本，在右侧边栏展示被推送的任务序列。',
+    category: '规则设计',
+  },
+  {
+    viewType: VIEW_TYPE_FLOW_DRAFT,
+    title: '流程草稿',
+    icon: 'calendar-range',
+    description: '草稿板：多条并行事件轴，时间块起止用于快速敲定时间；块可只读关联节点或直接输入文本。无专属语法、不涉及提醒。',
     category: '规则设计',
   },
   {

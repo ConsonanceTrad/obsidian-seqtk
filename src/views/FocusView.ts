@@ -10,7 +10,7 @@
 
 import { App, ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
 import type { NodeKind, SeqtkNode } from '../types/index';
-import { NODE_KIND_LABELS, getCategoryOf } from '../types/index';
+import { NODE_KIND_LABELS, getCategoryOf, isFrameworkKind } from '../types/index';
 import type { NodeCache } from '../core/NodeCache';
 import type { NodeFileManager } from '../core/NodeFileManager';
 import type { OperationQueue } from '../core/OperationQueue';
@@ -26,8 +26,8 @@ export const VIEW_TYPE_FOCUS = 'seqtk-focus';
 /** 证据类型 */
 const EVIDENCE_KINDS: NodeKind[] = ['factor', 'requirement', 'clue', 'snapshot'];
 
-/** 事务类型 */
-const TXN_KINDS: NodeKind[] = ['concept', 'checklist', 'item', 'event'];
+/** 事务类型（树节点：框架内的构思/事件、构思树 direction→target→process、清单事项等） */
+const TXN_KINDS: NodeKind[] = ['concept', 'direction', 'target', 'process', 'checklist', 'item', 'event'];
 
 /** 布局缓存文件名（存放于插件用户数据文件夹 rootFolder 下） */
 const LAYOUT_CACHE_FILE = 'layout-cache.json';
@@ -141,16 +141,34 @@ export class FocusView extends ItemView {
       return;
     }
 
+    /** 顶级判定：无父或父非框架（挂在框架下的节点在框架树中展示） */
+    const isTopLevel = (nodeId: string): boolean => {
+      const parent = this.nodeCache.getParent(nodeId);
+      return !parent || !isFrameworkKind(parent.data.kind);
+    };
+
     let total = 0;
-    for (const kind of ['concept', 'checklist'] as NodeKind[]) {
-      const roots = this.nodeCache.getByKind(kind);
-      if (roots.length === 0) continue;
-      this.leftEl.createEl('div', { cls: 'seqtk-section-title', text: NODE_KIND_LABELS[kind] });
-      for (const { nodeId, data } of roots) {
+
+    // 事务框架：框架树（顶级框架 → 子框架递归 → 内部事务/证据）
+    const fwRoots = this.nodeCache.getByKind('framework-transaction').filter(({ nodeId }) => isTopLevel(nodeId));
+    if (fwRoots.length > 0) {
+      this.leftEl.createEl('div', { cls: 'seqtk-section-title', text: '事务框架' });
+      for (const { nodeId, data } of fwRoots) {
         this.renderTxnNode(nodeId, data, 0);
         total++;
       }
     }
+
+    // 构思：顶级 concept 树（concept → direction → target → process）
+    const conceptRoots = this.nodeCache.getByKind('concept').filter(({ nodeId }) => isTopLevel(nodeId));
+    if (conceptRoots.length > 0) {
+      this.leftEl.createEl('div', { cls: 'seqtk-section-title', text: '构思' });
+      for (const { nodeId, data } of conceptRoots) {
+        this.renderTxnNode(nodeId, data, 0);
+        total++;
+      }
+    }
+
     if (total === 0) {
       this.leftEl.createEl('div', { cls: 'seqtk-empty', text: '暂无事务' });
     }
@@ -164,10 +182,10 @@ export class FocusView extends ItemView {
     if (isExpanded) row.addClass('seqtk-row-expanded');
     if (inExpandedTree) row.addClass('seqtk-row-in-expanded');
 
-    // 左栏仅展示事务类子节点，证据节点不在此显示
+    // 左栏仅展示事务类子节点与子框架（证据节点不在此显示）
     const children = this.nodeCache.getChildren(nodeId)
       .filter((c): c is { kind: NodeKind; nodeId: string; data: SeqtkNode } =>
-        !!c.data && TXN_KINDS.includes(c.data.kind as NodeKind));
+        !!c.data && (TXN_KINDS.includes(c.data.kind as NodeKind) || isFrameworkKind(c.data.kind)));
     const hasChildren = children.length > 0;
 
     // 折叠标识小方块（有子项时显示；展开态由 CSS 隐藏）
@@ -268,7 +286,8 @@ export class FocusView extends ItemView {
         if (parentId) followsEdges.push({ source: parentId, target: txnId, directed: true });
         for (const child of this.nodeCache.getChildren(txnId)) {
           if (!child.data) continue;
-          if (TXN_KINDS.includes(child.data.kind as NodeKind)) {
+          // 事务子节点与子框架递归纳入（证据挂为直属）
+          if (TXN_KINDS.includes(child.data.kind as NodeKind) || isFrameworkKind(child.data.kind)) {
             collect(child.nodeId, txnId);
           } else if (EVIDENCE_KINDS.includes(child.data.kind as NodeKind)) {
             evNodes.set(child.nodeId, child.data);
