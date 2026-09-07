@@ -36,6 +36,10 @@ export interface TreeRowContext {
   hasChildren: boolean;
   /** 当前是否展开（决定子树是否渲染） */
   isExpanded: boolean;
+  /** 是否是其父节点 children 中的最后一项（引导线父列在转角收尾，└） */
+  isLast?: boolean;
+  /** 是否是其父节点 children 中的第一项（父列竖线额外上探到父行横线连接，TS 注入 --guide-rise） */
+  isFirst?: boolean;
 }
 
 export interface LeftTreeOptions {
@@ -50,16 +54,18 @@ export interface LeftTreeOptions {
 
 /** 顺序递归渲染左树（固定树形态：行 + 按展开状态递归子树） */
 export function renderLeftTree(container: HTMLElement, roots: TreeNode[], opts: LeftTreeOptions): void {
-  for (const root of roots) visit(root, 0, false, '');
+  for (const root of roots) visit(root, 0, false, '', false, false);
 
-  function visit(node: TreeNode, depth: number, inExpandedTree: boolean, parentNodeId: string): void {
+  function visit(node: TreeNode, depth: number, inExpandedTree: boolean, parentNodeId: string, isLast: boolean, isFirst: boolean): void {
     const hasChildren = node.children.length > 0;
     const isExpanded = opts.isExpanded(node.nodeId);
-    const ctx: TreeRowContext = { node, depth, inExpandedTree, parentNodeId, hasChildren, isExpanded };
+    const ctx: TreeRowContext = { node, depth, inExpandedTree, parentNodeId, hasChildren, isExpanded, isLast, isFirst };
     const row = opts.makeRow(ctx);
     if (row) container.appendChild(row);
     if (hasChildren && isExpanded) {
-      for (const child of node.children) visit(child, depth + 1, true, node.nodeId);
+      node.children.forEach((child, i) => {
+        visit(child, depth + 1, true, node.nodeId, i === node.children.length - 1, i === 0);
+      });
     }
   }
 }

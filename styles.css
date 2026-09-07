@@ -15,20 +15,25 @@
   background-color: var(--background-modifier-hover);
 }
 
-/* 展开态：背景加深 + 左侧指示条（同时覆盖 .seqtk-row 与 .seqtk-frame-item 两类行） */
-.seqtk-row.seqtk-row-expanded,
-.seqtk-frame-item.seqtk-row-expanded {
+/* 展开态：背景加深 + 左侧指示条（同时覆盖 .seqtk-row 与 .seqtk-frame-item 两类行）。
+   仅顶级（depth 0）展开行保留指示条——子节点行的「有子」信息已由转角方块与可见子树表达，
+   故以 :not(.seqtk-row-in-expanded) 排除（所有非顶级行均带 in-expanded 类）。 */
+.seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded),
+.seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded) {
   /*background-color: color-mix(in srgb, var(--background-modifier-active) 70%, #000);*/
   box-shadow: inset 2px 0 0 rgb(0 0 0 / 0.67);
 }
 
-.seqtk-row.seqtk-row-expanded:hover,
-.seqtk-frame-item.seqtk-row-expanded:hover {
+.seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded):hover,
+.seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded):hover {
   /*background-color: color-mix(in srgb, var(--background-modifier-active) 70%, #000);*/
   box-shadow: inset 2px 0 0 rgb(0 0 0 / 0.67);
 }
 
-/* 折叠标识小方块（恒定于行左上角，绝对定位不挤占布局；展开态隐藏） */
+/* 折叠标识小方块（有子节点且未展开时显示；展开态隐藏）：
+   顶级（最外侧）节点保持在行左上角；展开祖先链内的行则坐在引导线 L 形转角的竖线上
+   （横竖线交汇点），作为「此处向下还有内容被折叠」的断点标记。
+   绝对定位不挤占布局；z-index 盖过转角横线端，竖线入、横线出，方块如线路节点。 */
 .seqtk-collapse-mark {
   position: absolute;
   top: 2px;
@@ -38,6 +43,14 @@
   background: var(--text-muted);
   opacity: 0.3;
   pointer-events: none;
+  z-index: 2;
+}
+
+/* 非顶级行：方块中心对准父列竖线（x = w-step-7），坐在 L 形转角上 */
+.seqtk-row.seqtk-row-in-expanded .seqtk-collapse-mark,
+.seqtk-frame-item.seqtk-row-in-expanded .seqtk-collapse-mark {
+  top: calc(50% - 2px);
+  left: calc(var(--tree-guide-w, 0px) - var(--tree-guide-step, 14px) - 8.5px);
 }
 
 .seqtk-row.seqtk-row-expanded .seqtk-collapse-mark,
@@ -45,16 +58,8 @@
   display: none;
 }
 
-/* 展开子树内子行：无背景色，仅左端边框标识（区分层级） */
-.seqtk-row.seqtk-row-in-expanded,
-.seqtk-frame-item.seqtk-row-in-expanded {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interactive-accent) 45%, transparent);
-}
-
-.seqtk-row.seqtk-row-in-expanded:hover,
-.seqtk-frame-item.seqtk-row-in-expanded:hover {
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--interactive-accent) 45%, transparent);
-}
+/* 展开子树内子行（.seqtk-row-in-expanded）：层级归属统一由下方树形引导线系统表达，
+   原左缘 box-shadow 竖条已移除（与引导线重复，且被行距断成一节一节不美观） */
 
 /* 类型徽章：按大类分色（基础样式沿用原有 .seqtk-kind-badge 定义，圆角已降为 4px） */
 .seqtk-kind-badge.kind-framework {
@@ -91,6 +96,85 @@
   background: var(--color-base-50);
   color: var(--text-muted);
   border-color: var(--background-modifier-border);
+}
+
+/* 分色徽章整体降饱和并略调浅，弱化其视觉焦点（保留白字与分色；kind-script 为中性灰不参与） */
+.seqtk-kind-badge.kind-framework,
+.seqtk-kind-badge.kind-transaction,
+.seqtk-kind-badge.kind-evidence,
+.seqtk-kind-badge.kind-mark,
+.seqtk-kind-badge.kind-runtime {
+  filter: saturate(0.7) brightness(1.1);
+}
+
+/* 树形引导线配色：竖线/横线共用高透明灰，弱化视觉焦点（供 ::before / ::after 继承） */
+.seqtk-row.seqtk-row-in-expanded,
+.seqtk-frame-item.seqtk-row-in-expanded {
+  --seqtk-guide-line: color-mix(in srgb, var(--text-faint) 30%, transparent);
+}
+
+/* 引导线向上探出量适配（探出 = 行间间隙 + 1px 侵入，与上一行引导线重叠连接）：
+   左栏 .seqtk-split-left 普通流、行无 margin（间隙 0）→ 1px；
+   右栏 .seqtk-split-right 为 flex 列容器、行 margin 不折叠（行间 2+2 = 4px）→ 5px；
+   子框架卡片 .seqtk-fw-card 内为 BFC、margin 折叠（间隙 2px）→ 3px；
+   嵌套卡片 overflow:hidden 自动裁掉探出（卡片边框即视觉边界）。 */
+.seqtk-split-left {
+  --guide-bridge: 1px;
+}
+.seqtk-split-right {
+  --guide-bridge: 5px;
+}
+.seqtk-fw-card {
+  --guide-bridge: 3px;
+}
+
+/* 树形引导线 · 层级竖线（祖先列）：非顶级行在除父列外的每一祖先内容列画 1px 竖线。
+   行内联提供 --tree-guide-w（内容起点）与 --tree-guide-step（单级缩进步距）；
+   竖线列自行左 1px 起（与顶级展开行黑条相接，视觉连成一线），每 step 一列；
+   父列（最右列）由下方 ::after 的 L 形承担，便于最后子节点做 └ 收尾。
+   探出量 = --guide-bridge（间隙 + 1px 侵入，向上桥接同列贯穿线即可相连；
+   ::before 不参与 --guide-rise，避免在父行区域与同列线重叠叠色）；
+   顶级行无 in-expanded 类自动无引导线。 */
+.seqtk-row.seqtk-row-in-expanded::before,
+.seqtk-frame-item.seqtk-row-in-expanded::before {
+  content: "";
+  position: absolute;
+  top: calc(0px - var(--guide-bridge, 2px));
+  bottom: 0;
+  left: 1px;
+  width: calc(var(--tree-guide-w, 0px) - var(--tree-guide-step, 14px) - var(--tree-guide-step, 14px) - 4px);
+  background: repeating-linear-gradient(
+    to right,
+    var(--seqtk-guide-line) 0 1px,
+    transparent 1px var(--tree-guide-step, 14px)
+  );
+  pointer-events: none;
+}
+
+/* 树形引导线 · L 形转角（父列竖线 + 横线至徽章）：父列与顶层展开行黑条同轴
+   （x = 1+(d-1)·step，与黑条相接），竖线向下贯穿、向上按 bridge + rise 探出。
+   --guide-bridge 桥接行间间隙 + 1px 侵入；--guide-rise 供第一个子行（TS 注入）额外
+   上探到父行横线高度（父行中心），实现「首下属转角侵入并连接到上一行引导线」——
+   父行横线覆盖子行父列位置、顶级父行黑条全行高贯穿，探达父行中心即必然相交连接。
+   横线自父列垂直居中伸至本行类型徽章左缘前，与竖线构成 ├ 形。最后子节点
+   （.seqtk-guide-last）的父列竖线截短至行中心，成 └ 形收尾，不再向下延伸。 */
+.seqtk-row.seqtk-row-in-expanded::after,
+.seqtk-frame-item.seqtk-row-in-expanded::after {
+  content: "";
+  position: absolute;
+  top: calc(0px - var(--guide-bridge, 2px) - var(--guide-rise, 0px));
+  bottom: 0;
+  left: calc(var(--tree-guide-w, 0px) - var(--tree-guide-step, 14px) - 7px);
+  width: calc(var(--tree-guide-step, 14px) + 8px);
+  background:
+    linear-gradient(var(--seqtk-guide-line), var(--seqtk-guide-line)) 0 0 / 1px 100% no-repeat,
+    linear-gradient(var(--seqtk-guide-line), var(--seqtk-guide-line)) 0 calc(50% + (var(--guide-bridge, 2px) + var(--guide-rise, 0px)) * 0.5) / 100% 1px no-repeat;
+  pointer-events: none;
+}
+
+.seqtk-row.seqtk-row-in-expanded.seqtk-guide-last::after,
+.seqtk-frame-item.seqtk-row-in-expanded.seqtk-guide-last::after {
+  background-size: 1px calc(50% + (var(--guide-bridge, 2px) + var(--guide-rise, 0px)) * 0.5 + 1px), 100% 1px;
 }
 
 /* 正文预览（节点名后；内容宽，上限 220px，半透明弱化视觉焦点；flex-shrink 权重大于名称，行宽不足时先被压缩/隐藏） */

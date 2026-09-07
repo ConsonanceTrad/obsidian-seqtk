@@ -170,10 +170,16 @@ export class FocusView extends DualPaneView {
     }
   }
 
-  private renderTxnNode(nodeId: string, data: SeqtkNode, depth: number, inExpandedTree = false): void {
+  private renderTxnNode(nodeId: string, data: SeqtkNode, depth: number, inExpandedTree = false, isLast = false, isFirst = false): void {
     const row = this.leftEl.createDiv('seqtk-frame-item');
     if (this.selectedTxnId === nodeId) row.addClass('seqtk-frame-item-active');
     row.style.paddingLeft = `${8 + depth * 14}px`;
+    row.style.setProperty('--tree-guide-w', `${8 + depth * 14}px`);
+    row.style.setProperty('--tree-guide-step', '14px');
+    // 最后子节点：引导线父列在转角收尾（└）
+    if (isLast) row.addClass('seqtk-guide-last');
+    // 第一个子节点：父列竖线额外上探到父行引导线连接
+    if (isFirst) row.style.setProperty('--guide-rise', '12px');
     const isExpanded = this.expanded.has(nodeId);
     if (isExpanded) row.addClass('seqtk-row-expanded');
     if (inExpandedTree) row.addClass('seqtk-row-in-expanded');
@@ -232,9 +238,9 @@ export class FocusView extends DualPaneView {
     });
 
     if (hasChildren && isExpanded) {
-      for (const c of children) {
-        this.renderTxnNode(c.nodeId, c.data, depth + 1, true);
-      }
+      children.forEach((c, i) => {
+        this.renderTxnNode(c.nodeId, c.data, depth + 1, true, i === children.length - 1, i === 0);
+      });
     }
   }
 

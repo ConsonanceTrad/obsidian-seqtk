@@ -261,12 +261,16 @@ export class DesignView extends DualPaneView {
     if (this.selectedFrameworkId === node.nodeId) {
       row.addClass('seqtk-frame-item-active');
     }
+    // 最后子框架：左树引导线父列在转角收尾（└），不再向下延伸
+    if (ctx.isLast) row.addClass('seqtk-guide-last');
+    // 第一个子框架：父列竖线额外上探到父行引导线连接
+    if (ctx.isFirst) row.style.setProperty('--guide-rise', '12px');
     row.style.paddingLeft = `${8 + ctx.depth * 14}px`;
-    // 仅有子节点的框架才显示展开态/展开树标识（空子框架左侧不显现展开边框标识）
-    if (ctx.hasChildren) {
-      if (ctx.isExpanded) row.addClass('seqtk-row-expanded');
-      if (ctx.inExpandedTree) row.addClass('seqtk-row-in-expanded');
-    }
+    row.style.setProperty('--tree-guide-w', `${8 + ctx.depth * 14}px`);
+    row.style.setProperty('--tree-guide-step', '14px');
+    // 展开态黑条仅对有子节点的展开框架有意义；引导线（in-expanded）对所有非顶级行一致显示
+    if (ctx.hasChildren && ctx.isExpanded) row.addClass('seqtk-row-expanded');
+    if (ctx.inExpandedTree) row.addClass('seqtk-row-in-expanded');
 
     // 折叠标识小方块（有子项时显示；展开态由 CSS 隐藏）
     if (ctx.hasChildren) row.createSpan('seqtk-collapse-mark');
@@ -481,16 +485,22 @@ export class DesignView extends DualPaneView {
   // 节点行渲染
   // ============================================================
 
-  public renderNode(node: TreeNode, depth: number, container: HTMLElement, inExpandedTree = false, parentNodeId?: string): HTMLElement {
+  public renderNode(node: TreeNode, depth: number, container: HTMLElement, inExpandedTree = false, parentNodeId?: string, isLast = false, isFirst = false): HTMLElement {
     // 框架节点以卡片容器承载行与展开内容（嵌套框架层层套卡片）；其余节点直接进容器
     const isFramework = isFrameworkKind(node.data.kind);
     const card = isFramework ? container.createDiv('seqtk-fw-card') : container;
     const row = card.createDiv('seqtk-row');
     row.dataset.nodeId = node.nodeId;
     row.style.paddingLeft = `${8 + depth * 18}px`;
+    row.style.setProperty('--tree-guide-w', `${8 + depth * 18}px`);
+    row.style.setProperty('--tree-guide-step', '18px');
     const isExpanded = this.expandedRight.has(node.nodeId);
     if (isExpanded) row.addClass('seqtk-row-expanded');
     if (inExpandedTree) row.addClass('seqtk-row-in-expanded');
+    // 最后子节点：引导线父列竖线在转角处截短收尾（└），不再向下延伸
+    if (isLast) row.addClass('seqtk-guide-last');
+    // 第一个子节点：父列竖线额外上探到父行横线（父行中心），与上一行引导线相交连接
+    if (isFirst) row.style.setProperty('--guide-rise', '12px');
 
     const hasChildren = node.children.length > 0;
     // 折叠标识小方块（有子项时显示；展开态由 CSS 隐藏）
@@ -665,9 +675,9 @@ export class DesignView extends DualPaneView {
 
     if (hasChildren && isExpanded) {
       // 展开内容渲染进卡片容器（框架节点）或原容器（普通节点）
-      for (const child of node.children) {
-        this.renderNode(child, depth + 1, card, true, node.nodeId);
-      }
+      node.children.forEach((child, i) => {
+        this.renderNode(child, depth + 1, card, true, node.nodeId, i === node.children.length - 1, i === 0);
+      });
     }
     return row;
   }
