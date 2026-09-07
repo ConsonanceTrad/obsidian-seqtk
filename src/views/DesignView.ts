@@ -865,96 +865,63 @@ export class DesignView extends ItemView {
   }
 
   /**
-   * 行内编辑节点名：将行内 seqtk-desc 原位替换为输入框。
-   * Enter 保存、Esc 取消、失焦（blur）保存。
+   * 行内编辑节点名：在行上叠加绝对定位输入框（覆盖层，不参与行布局）。
+   * 行内元素与行高保持不变，避免下方行位移；输入框从类型徽章右缘覆盖至行尾，
+   * 保留类型徽章可见。Enter 保存、Esc 取消、失焦（blur）保存。
    */
   private beginInlineEdit(node: TreeNode, row: HTMLElement): void {
-    if (row.querySelector('.seqtk-inline-edit')) return;
-    const descEl = row.querySelector<HTMLElement>('.seqtk-desc');
-    if (!descEl) return;
-
-    // 进入编辑态：隐藏徽章/状态圆点等，让输入框占满整行（结束重建行时 class 自动消除）
-    row.addClass('seqtk-inline-editing');
-
-    // 名称改为不可见但保留占位（行高不变，避免下方行上移）；隐藏正文预览/弹性间隔，输入框插入名称原位并占满至行末徽章前
-    descEl.style.visibility = 'hidden';
-    const preview = row.querySelector<HTMLElement>('.seqtk-body-preview');
-    if (preview) preview.style.display = 'none';
-    const spacer = row.querySelector<HTMLElement>('.seqtk-spacer');
-    if (spacer) spacer.style.display = 'none';
-    const input = document.createElement('input');
-    input.className = 'seqtk-inline-edit';
-    input.value = node.data.desc;
-    row.insertBefore(input, descEl);
-    input.focus();
-    input.select();
-
-    let finished = false;
-    const finish = (save: boolean): void => {
-      if (finished) return;
-      finished = true;
-      const newDesc = input.value.trim();
-      if (save && newDesc && newDesc !== node.data.desc) {
-        this.saveNodeDesc(node, newDesc);
-      }
-      this.renderRight();
-    };
-
-    // 编辑期间阻止行级单击/双击（不触发展开/再次编辑）
-    input.addEventListener('click', (e) => e.stopPropagation());
-    input.addEventListener('dblclick', (e) => e.stopPropagation());
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        finish(true);
-      } else if (e.key === 'Escape') {
-        e.stopPropagation();
-        finish(false);
-      }
-    });
-    input.addEventListener('blur', () => finish(true));
+    this.beginInlineRename(node, row, () => this.renderRight());
   }
 
   /**
-   * 行内编辑框架名：将行内 seqtk-desc 原位替换为输入框。
-   * Enter 保存、Esc 取消、失焦（blur）保存；完成后重绘左栏。
+   * 行内编辑框架名：同上覆盖层方式；完成后重绘左栏。
    */
   private beginInlineEditFrame(node: TreeNode, row: HTMLElement): void {
-    if (row.querySelector('.seqtk-inline-edit')) return;
-    const descEl = row.querySelector<HTMLElement>('.seqtk-desc');
-    if (!descEl) return;
+    this.beginInlineRename(node, row, () => this.renderLeft());
+  }
 
-    // 进入编辑态：隐藏徽章/状态圆点等，让输入框占满整行（结束重建行时 class 自动消除）
-    row.addClass('seqtk-inline-editing');
+  /**
+   * 覆盖层式行内重命名公共实现：
+   * - 不改动行内任何元素（行高/布局零变化，不遮挡下方内容布局）
+   * - 输入框 position:absolute 追加到行尾，left 定为类型徽章右缘、right 固定到行尾
+   * - 类型徽章保留可见；右侧预期徽章/状态圆点/按钮在编辑期被覆盖层遮住
+   */
+  private beginInlineRename(node: TreeNode, row: HTMLElement, afterDone: () => void): void {
+    if (row.querySelector('.seqtk-inline-edit-overlay')) return;
 
-    // 隐藏名称与正文预览/弹性间隔，输入框插入名称原位并占满至行末按钮前（行高由 padding 维持）
-    descEl.style.display = 'none';
-    const preview = row.querySelector<HTMLElement>('.seqtk-body-preview');
-    if (preview) preview.style.display = 'none';
-    const spacer = row.querySelector<HTMLElement>('.seqtk-spacer');
-    if (spacer) spacer.style.display = 'none';
-    const input = document.createElement('input');
-    input.className = 'seqtk-inline-edit';
-    input.value = node.data.desc;
-    row.insertBefore(input, descEl);
-    input.focus();
-    input.select();
+    const overlay = document.createElement('input');
+    overlay.className = 'seqtk-inline-edit-overlay';
+    overlay.value = node.data.desc;
+    row.appendChild(overlay);
+
+    // 定位左边界：类型徽章右缘（保留徽章可见；徽章靠左且行不换行，此值在编辑期间稳定）
+    const badge = row.querySelector<HTMLElement>('.seqtk-kind-badge');
+    if (badge) {
+      const rowRect = row.getBoundingClientRect();
+      const badgeRect = badge.getBoundingClientRect();
+      overlay.style.left = `${badgeRect.right - rowRect.left + 4}px`;
+    } else {
+      overlay.style.left = `${parseFloat(row.style.paddingLeft) || 8}px`;
+    }
+
+    overlay.focus();
+    overlay.select();
 
     let finished = false;
     const finish = (save: boolean): void => {
       if (finished) return;
       finished = true;
-      const newDesc = input.value.trim();
+      const newDesc = overlay.value.trim();
       if (save && newDesc && newDesc !== node.data.desc) {
         this.saveNodeDesc(node, newDesc);
       }
-      this.renderLeft();
+      afterDone();
     };
 
-    input.addEventListener('click', (e) => e.stopPropagation());
-    input.addEventListener('dblclick', (e) => e.stopPropagation());
-    input.addEventListener('keydown', (e) => {
+    // 编辑期间阻止行级单击/双击（不触发展开/再次编辑）
+    overlay.addEventListener('click', (e) => e.stopPropagation());
+    overlay.addEventListener('dblclick', (e) => e.stopPropagation());
+    overlay.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
@@ -964,7 +931,7 @@ export class DesignView extends ItemView {
         finish(false);
       }
     });
-    input.addEventListener('blur', () => finish(true));
+    overlay.addEventListener('blur', () => finish(true));
   }
 
   /** 保存节点名（desc）变更 */

@@ -180,18 +180,19 @@
   white-space: nowrap;
 }
 
-/* 行内编辑输入框（右键重命名；作为行 flex 子项从名称原位延伸至行末徽章前；行高与文字行高对齐，避免文字上移） */
-.seqtk-inline-edit {
-  flex: 1 1 auto;
-  min-width: 0;
+/* 行内重命名输入框（覆盖层）：absolute 浮在行上，不参与行布局 ——
+   行内元素与行高保持不变，下方行零位移；left 由 JS 按类型徽章右缘设置，
+   right 固定到行内边距；覆盖层盖住名称/预览及右侧预期徽章、状态圆点与按钮，
+   类型徽章保留在覆盖层左侧可见 */
+.seqtk-inline-edit-overlay {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  z-index: 15;
   margin: 0;
-  padding: 0 4px;
+  padding: 0 6px;
   font-size: inherit;
   font-family: inherit;
-  line-height: inherit;
-  height: 100%;
-  /* 视觉位置整体上移 2px（transform 平移不改变布局，不影响其他渲染） */
-  transform: translateY(-2px);
   color: var(--text-normal);
   background: var(--background-primary);
   border: 1px solid var(--interactive-accent);
@@ -200,23 +201,6 @@
   outline: none;
 }
 
-/* 行内编辑态：隐藏输入框之后的预期徽章、状态圆点与行末操作按钮（及名称/预览/弹性间隔），
-   保留行首类型徽章与行左端缩进/折叠小方块，让输入框从类型徽章后占满至行尾 ——
-   与行内创建输入行（类型预览 + 输入框）的整行形态一致；结束编辑重建行时 class 随之消除 */
-.seqtk-inline-editing .seqtk-expected-badge,
-.seqtk-inline-editing .seqtk-state-dot,
-.seqtk-inline-editing .seqtk-open-btn,
-.seqtk-inline-editing .seqtk-body-preview,
-.seqtk-inline-editing .seqtk-spacer,
-.seqtk-inline-editing .seqtk-desc {
-  display: none;
-}
-
-.seqtk-inline-editing .seqtk-inline-edit {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 1.5em;
-}
 
 /* 行内新建子节点：附加行（类型下拉 + 名称输入；左缩进由 JS 按层级设置；padding/margin 与普通行一致，避免行高度跳动） */
 .seqtk-inline-add {
