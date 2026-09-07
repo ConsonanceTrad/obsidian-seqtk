@@ -873,6 +873,9 @@ export class DesignView extends ItemView {
     const descEl = row.querySelector<HTMLElement>('.seqtk-desc');
     if (!descEl) return;
 
+    // 进入编辑态：隐藏徽章/状态圆点等，让输入框占满整行（结束重建行时 class 自动消除）
+    row.addClass('seqtk-inline-editing');
+
     // 名称改为不可见但保留占位（行高不变，避免下方行上移）；隐藏正文预览/弹性间隔，输入框插入名称原位并占满至行末徽章前
     descEl.style.visibility = 'hidden';
     const preview = row.querySelector<HTMLElement>('.seqtk-body-preview');
@@ -921,6 +924,9 @@ export class DesignView extends ItemView {
     if (row.querySelector('.seqtk-inline-edit')) return;
     const descEl = row.querySelector<HTMLElement>('.seqtk-desc');
     if (!descEl) return;
+
+    // 进入编辑态：隐藏徽章/状态圆点等，让输入框占满整行（结束重建行时 class 自动消除）
+    row.addClass('seqtk-inline-editing');
 
     // 隐藏名称与正文预览/弹性间隔，输入框插入名称原位并占满至行末按钮前（行高由 padding 维持）
     descEl.style.display = 'none';
