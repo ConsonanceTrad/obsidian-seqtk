@@ -20,8 +20,9 @@ import { parseFlowScript } from './core/flow/parser';
 import { generatePushTasks } from './core/flow/push';
 import { DesignView, VIEW_TYPE_DESIGN } from './views/DesignView';
 import { TemplateView, VIEW_TYPE_TEMPLATE } from './views/TemplateView';
-import { TableView, VIEW_TYPE_TABLE } from './views/TableView';
-import { AppendView, VIEW_TYPE_APPEND } from './views/AppendView';
+// 已隐藏（代码保留）：表格模式 / 证据追加视图，源文件保留，可从下方注释处恢复注册
+// import { TableView, VIEW_TYPE_TABLE } from './views/TableView';
+// import { AppendView, VIEW_TYPE_APPEND } from './views/AppendView';
 import { FocusView, VIEW_TYPE_FOCUS } from './views/FocusView';
 import { OverviewView, VIEW_TYPE_OVERVIEW } from './views/OverviewView';
 import { RouteView, VIEW_TYPE_ROUTE } from './views/RouteView';
@@ -29,7 +30,7 @@ import { FlowView, VIEW_TYPE_FLOW } from './views/FlowView';
 import { FlowPushView, VIEW_TYPE_FLOW_PUSH } from './views/FlowPushView';
 import { FlowDraftView, VIEW_TYPE_FLOW_DRAFT } from './views/FlowDraftView';
 import { RecycleView, VIEW_TYPE_RECYCLE } from './views/RecycleView';
-import { PlaceholderView, VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './views/PlaceholderView';
+import { PlaceholderView, VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_EXEC_BIND, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './views/PlaceholderView';
 import { SeqtkSettingTab } from './settings/SeqtkSettingTab';
 import { HubView, VIEW_TYPE_HUB, VIEW_TYPE_HUB_SIDE } from './views/HubView';
 import { PANEL_REGISTRY } from './views/panelRegistry';
@@ -97,14 +98,15 @@ export default class SeqtkPlugin extends Plugin {
       VIEW_TYPE_TEMPLATE,
       (leaf) => new TemplateView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
     );
-    this.registerView(
-      VIEW_TYPE_TABLE,
-      (leaf) => new TableView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
-    );
-    this.registerView(
-      VIEW_TYPE_APPEND,
-      (leaf) => new AppendView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
-    );
+    // 已隐藏（代码保留）：表格模式 / 证据追加视图
+    // this.registerView(
+    //   VIEW_TYPE_TABLE,
+    //   (leaf) => new TableView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
+    // );
+    // this.registerView(
+    //   VIEW_TYPE_APPEND,
+    //   (leaf) => new AppendView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
+    // );
     this.registerView(
       VIEW_TYPE_FOCUS,
       (leaf) => new FocusView(leaf, this.nodeCache, this.fileManager, this.operationQueue),
@@ -133,6 +135,15 @@ export default class SeqtkPlugin extends Plugin {
     this.registerView(VIEW_TYPE_EXEC_DESIGN, (leaf) => new PlaceholderView(leaf, {
       title: '执行设计',
       desc: '使用内置可切换的可视化执行程序或执行脚本程序（可视化以脚本为基础的渲染，脚本为事实源），提供触发式或手动式的自动程序。提供双栏编辑器，连接 Obsidian 右侧附属信息叶子窗口。',
+    }));
+    this.registerView(VIEW_TYPE_EXEC_BIND, (leaf) => new PlaceholderView(leaf, {
+      title: '执行绑定',
+      desc: '将执行行为绑定到指定时间点，或绑定到某事件（节点）完成后自动触发。绑定规则（触发条件 → 执行行为）以可视化或脚本化方式编辑与阅览，供执行设计接入自动程序。',
+      points: [
+        '定时触发：一次性时间点或周期触发（复用流程脚本规则语法）',
+        '事件后触发：监听节点完成等状态变化后触发绑定行为',
+        '管理阅览：绑定规则的启停控制、触发记录与执行日志',
+      ],
     }));
     this.registerView(VIEW_TYPE_QUERY_DESIGN, (leaf) => new PlaceholderView(leaf, {
       title: '查询设计',
@@ -193,16 +204,17 @@ export default class SeqtkPlugin extends Plugin {
       name: '打开模板模式',
       callback: () => this.activateView(VIEW_TYPE_TEMPLATE),
     });
-    this.addCommand({
-      id: 'open-table',
-      name: '打开表格模式',
-      callback: () => this.activateView(VIEW_TYPE_TABLE),
-    });
-    this.addCommand({
-      id: 'open-append',
-      name: '打开证据追加',
-      callback: () => this.activateView(VIEW_TYPE_APPEND),
-    });
+    // 已隐藏（代码保留）：打开表格模式 / 打开证据追加
+    // this.addCommand({
+    //   id: 'open-table',
+    //   name: '打开表格模式',
+    //   callback: () => this.activateView(VIEW_TYPE_TABLE),
+    // });
+    // this.addCommand({
+    //   id: 'open-append',
+    //   name: '打开证据追加',
+    //   callback: () => this.activateView(VIEW_TYPE_APPEND),
+    // });
     this.addCommand({
       id: 'open-focus',
       name: '打开证据聚焦',
@@ -238,6 +250,11 @@ export default class SeqtkPlugin extends Plugin {
       id: 'open-exec-design',
       name: '打开执行设计（规划中）',
       callback: () => this.activateView(VIEW_TYPE_EXEC_DESIGN),
+    });
+    this.addCommand({
+      id: 'open-exec-bind',
+      name: '打开执行绑定（规划中）',
+      callback: () => this.activateView(VIEW_TYPE_EXEC_BIND),
     });
     this.addCommand({
       id: 'open-query-design',

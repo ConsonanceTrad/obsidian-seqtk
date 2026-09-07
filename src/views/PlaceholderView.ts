@@ -8,6 +8,7 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 
 export const VIEW_TYPE_EXEC_DESIGN = 'seqtk-exec-design';
+export const VIEW_TYPE_EXEC_BIND = 'seqtk-exec-bind';
 export const VIEW_TYPE_QUERY_DESIGN = 'seqtk-query-design';
 export const VIEW_TYPE_COLLAB = 'seqtk-collab';
 export const VIEW_TYPE_LOG = 'seqtk-log';
@@ -31,6 +32,7 @@ export class PlaceholderView extends ItemView {
     // 由 opts 匹配对应的 viewType
     switch (this.opts.title) {
       case '执行设计': return VIEW_TYPE_EXEC_DESIGN;
+      case '执行绑定': return VIEW_TYPE_EXEC_BIND;
       case '查询设计': return VIEW_TYPE_QUERY_DESIGN;
       case '智能协作': return VIEW_TYPE_COLLAB;
       case '日志阅览': return VIEW_TYPE_LOG;
@@ -45,6 +47,7 @@ export class PlaceholderView extends ItemView {
   getIcon(): string {
     switch (this.opts.title) {
       case '执行设计': return 'play';
+      case '执行绑定': return 'cable';
       case '查询设计': return 'search';
       case '智能协作': return 'bot';
       case '日志阅览': return 'scroll-text';

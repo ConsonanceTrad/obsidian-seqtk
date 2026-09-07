@@ -26,6 +26,7 @@ import {
   isFrameworkKind,
   isTransactionKind,
   getCategoryOf,
+  getAllowedChildKinds,
 } from '../types/index';
 import { describeCycleRule } from '../utils/cycleRuleParser';
 import { formatShortDate } from '../utils/formatDate';
@@ -38,6 +39,16 @@ import {
   TransactionEditModal,
   kindUsesState,
 } from './components/TransactionModals';
+import {
+  cloneSubtree,
+  parameterizeText,
+  TEMPLATE_FRAMEWORK_NAME_TOKEN,
+} from '../core/template';
+import {
+  SelectFrameworkModal,
+  TemplateUnitSelectModal,
+  listTemplateUnits,
+} from './components/TemplateModals';
 
 export const VIEW_TYPE_DESIGN = 'seqtk-design';
 
@@ -523,6 +534,9 @@ export class DesignView extends ItemView {
     menu.addItem((item) =>
       item.setTitle('修改属性').setIcon('settings-2')
         .onClick(() => this.openEdit(node.nodeId)));
+    menu.addSeparator();
+    // 模板操作组：存为模板 / 使用模板（框架行同样可整体存为模板）
+    this.appendTemplateMenu(menu, node);
     menu.addSeparator();
     menu.addItem((item) =>
       item.setTitle('归档').setIcon('archive')
@@ -1415,31 +1429,11 @@ export class DesignView extends ItemView {
    * - 项目层级：concept→direction→target→process 严格逐级向下；工序支持同级任意嵌套
    * - 事件：直属框架或目标，不可同级嵌套
    * - 清单：事项
+   *
+   * 规则集中在 types/index.ts 的 CHILD_KINDS_BY_PARENT（模板使用校验复用同一规则）。
    */
   private getChildKinds(parentKind: NodeKind): NodeKind[] {
-    switch (parentKind) {
-      case 'framework-transaction':
-        return ['framework-transaction', 'concept', 'checklist', 'event', 'factor', 'requirement', 'clue', 'snapshot'];
-      case 'framework-info':
-        return ['framework-info', 'factor', 'requirement', 'clue', 'snapshot'];
-      case 'concept':
-        return ['direction'];
-      case 'direction':
-        return ['target'];
-      case 'target':
-        return ['process', 'event'];
-      case 'process':
-        return ['process'];
-      case 'project':
-        // 旧版占位类型，保留兼容
-        return ['project', 'event'];
-      case 'checklist':
-        return ['item'];
-      case 'item':
-      case 'event':
-      default:
-        return [];
-    }
+    return getAllowedChildKinds(parentKind);
   }
 
   /** 创建节点：写盘 → 维护双向关系 → 更新缓存 →（按选项）跳转文件编辑正文；返回新节点 id（失败返回 undefined） */
@@ -1687,6 +1681,9 @@ export class DesignView extends ItemView {
       }
     }
     menu.addSeparator();
+    // 模板操作组：存为模板 / 使用模板（右键当前节点子树）
+    this.appendTemplateMenu(menu, node);
+    menu.addSeparator();
     menu.addItem((item) =>
       item.setTitle('打开文件').setIcon('external-link')
         .onClick(() => void this.openNodeFile(node.nodeId)));
@@ -1728,5 +1725,107 @@ export class DesignView extends ItemView {
     );
 
     new Notice(`已删除 ${targets.length} 个节点`);
+  }
+
+  // ============================================================
+  // 模板（右键菜单「存为模板 / 使用模板」，整棵子树）
+  // ============================================================
+
+  /**
+   * 右键菜单模板操作组（普通节点行 / 框架行共用）：
+   * - 存为模板：将当前节点整棵子树复制进所选模板框架（源根名自动参数化为 {{框架名}}）
+   * - 使用模板：选择模板单元，克隆到当前节点/框架下（{{框架名}} 替换为当前节点名）
+   * 「打开模板库」不在右键提供：模板库管理请用中控台/命令面板的「模板模式」。
+   */
+  private appendTemplateMenu(menu: Menu, node: TreeNode): void {
+    menu.addItem((item) =>
+      item.setTitle('存为模板').setIcon('save')
+        .onClick(() => void this.saveAsTemplate(node.nodeId)));
+    menu.addItem((item) =>
+      item.setTitle('使用模板').setIcon('paste')
+        .onClick(() => this.useTemplate(node.nodeId)));
+  }
+
+  /** 存为模板：子树整体存入所选模板框架，成为该框架下新的模板单元 */
+  private async saveAsTemplate(sourceId: string): Promise<void> {
+    if (!this.nodeCache.isInitialized) {
+      new Notice('查询缓存尚未就绪，请稍候');
+      return;
+    }
+    const source = this.nodeCache.getNode(sourceId);
+    if (!source) return;
+
+    const templates = this.nodeCache.getByKind('framework-template');
+    if (templates.length === 0) {
+      new Notice('暂无模板框架：请先在模板模式中创建模板框架');
+      return;
+    }
+
+    new SelectFrameworkModal(this.app, {
+      title: '存为模板 · 选择模板框架',
+      frameworks: templates.map((t) => ({ nodeId: t.nodeId, label: t.data.desc })),
+      onSelect: async (targetTemplateId) => {
+        // 克隆整棵子树；源根名出现处参数化为 {{框架名}}（含 body），复用后替换为目标名
+        const newRootId = await cloneSubtree({
+          sourceId,
+          parentId: targetTemplateId,
+          nodeCache: this.nodeCache,
+          fileManager: this.fileManager,
+          operationQueue: this.operationQueue,
+          resolveText: (text) => parameterizeText(text, source.desc),
+        });
+        new Notice(newRootId ? '已存入模板框架' : '存为模板失败');
+      },
+    }).open();
+  }
+
+  /** 使用模板：选择可用模板单元克隆到当前节点/框架下（插入为其直属子项，末尾追加） */
+  private useTemplate(targetParentId: string): void {
+    if (!this.nodeCache.isInitialized) {
+      new Notice('查询缓存尚未就绪，请稍候');
+      return;
+    }
+    const parent = this.nodeCache.getNode(targetParentId);
+    if (!parent) return;
+
+    const allowedKinds = this.getChildKinds(parent.kind);
+    const units = listTemplateUnits(this.nodeCache).filter((e) => allowedKinds.includes(e.unit.data.kind));
+
+    if (units.length === 0) {
+      new Notice(this.nodeCache.getByKind('framework-template').length === 0
+        ? '暂无模板单元：可先右键「存为模板」创建'
+        : '现有模板均无法插入该位置（类型不匹配）');
+      return;
+    }
+
+    new TemplateUnitSelectModal(this.app, this.nodeCache, {
+      units,
+      onSelect: (entry) => void this.applyTemplateUnit(entry, { nodeId: targetParentId, desc: parent.desc }),
+    }).open();
+  }
+
+  /** 应用模板单元：整棵子树克隆到目标父下，{{框架名}} 替换为目标父名，随后展开目标 */
+  private async applyTemplateUnit(
+    entry: { unit: { nodeId: string } },
+    targetParent: { nodeId: string; desc: string },
+  ): Promise<void> {
+    const newRootId = await cloneSubtree({
+      sourceId: entry.unit.nodeId,
+      parentId: targetParent.nodeId,
+      nodeCache: this.nodeCache,
+      fileManager: this.fileManager,
+      operationQueue: this.operationQueue,
+      resolveText: (text) => text.split(TEMPLATE_FRAMEWORK_NAME_TOKEN).join(targetParent.desc),
+    });
+    if (!newRootId) {
+      new Notice('应用模板失败');
+      return;
+    }
+    // 插入后展开目标父，供查看新建的子树
+    this.expandedLeft.add(targetParent.nodeId);
+    this.expandedRight.add(targetParent.nodeId);
+    this.renderLeft();
+    this.renderRight();
+    new Notice('模板已应用');
   }
 }

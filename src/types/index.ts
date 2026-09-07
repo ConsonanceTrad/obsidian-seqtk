@@ -470,6 +470,35 @@ export function isScriptNode(node: SeqtkNode): node is ScriptNode {
 }
 
 // ============================================================
+// 节点从属规则（父类型 → 允许直接从属的子类型）
+// ============================================================
+
+/**
+ * 各父类型允许直接从属的子类型。
+ *
+ * - 事务框架：子框架 / 构想、清单、事件 / 证据
+ * - 信息框架：子框架 / 证据
+ * - 项目层级：concept→direction→target→process 严格逐级向下；工序支持同级任意嵌套
+ * - 清单：仅事项；事件直属框架或目标，不可同级嵌套
+ * - 模板框架：不在此表（单元顶层 kind 由「存为模板」的来源决定，应用时按目标框架校验）
+ */
+export const CHILD_KINDS_BY_PARENT: Partial<Record<NodeKind, NodeKind[]>> = {
+  'framework-transaction': ['framework-transaction', 'concept', 'checklist', 'event', 'factor', 'requirement', 'clue', 'snapshot'],
+  'framework-info': ['framework-info', 'factor', 'requirement', 'clue', 'snapshot'],
+  concept: ['direction'],
+  direction: ['target'],
+  target: ['process', 'event'],
+  process: ['process'],
+  project: ['project', 'event'],
+  checklist: ['item'],
+};
+
+/** 根据父节点类型返回允许直接从属的子类型（未列出的父返回空数组） */
+export function getAllowedChildKinds(parentKind: NodeKind): NodeKind[] {
+  return CHILD_KINDS_BY_PARENT[parentKind] ?? [];
+}
+
+// ============================================================
 // 中文标签
 // ============================================================
 

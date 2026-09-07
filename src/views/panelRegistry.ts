@@ -11,8 +11,9 @@
 
 import { VIEW_TYPE_DESIGN } from './DesignView';
 import { VIEW_TYPE_TEMPLATE } from './TemplateView';
-import { VIEW_TYPE_TABLE } from './TableView';
-import { VIEW_TYPE_APPEND } from './AppendView';
+// 已隐藏（代码保留）：表格模式 / 证据追加视图，见下方 PANEL_REGISTRY 对应条目注释
+// import { VIEW_TYPE_TABLE } from './TableView';
+// import { VIEW_TYPE_APPEND } from './AppendView';
 import { VIEW_TYPE_FOCUS } from './FocusView';
 import { VIEW_TYPE_OVERVIEW } from './OverviewView';
 import { VIEW_TYPE_ROUTE } from './RouteView';
@@ -20,10 +21,10 @@ import { VIEW_TYPE_FLOW } from './FlowView';
 import { VIEW_TYPE_FLOW_PUSH } from './FlowPushView';
 import { VIEW_TYPE_FLOW_DRAFT } from './FlowDraftView';
 import { VIEW_TYPE_RECYCLE } from './RecycleView';
-import { VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './PlaceholderView';
+import { VIEW_TYPE_EXEC_DESIGN, VIEW_TYPE_EXEC_BIND, VIEW_TYPE_QUERY_DESIGN, VIEW_TYPE_COLLAB, VIEW_TYPE_LOG } from './PlaceholderView';
 
 /** 中控台分栏章节（顺序即展示顺序，对应操作口目录章节） */
-export const HUB_CATEGORIES = ['事务设计', '证据管理', '规则设计', '节点通用'] as const;
+export const HUB_CATEGORIES = ['事务设计', '规则设计', '节点通用'] as const;
 
 export type HubCategory = typeof HUB_CATEGORIES[number];
 
@@ -55,20 +56,21 @@ export const PANEL_REGISTRY: PanelEntry[] = [
     description: '设计模式：框架-子框架总览，统一编辑框架内的事务与证据；含全部事务总览。',
     category: '事务设计',
   },
-  {
-    viewType: VIEW_TYPE_TEMPLATE,
-    title: '模板模式',
-    icon: 'copy',
-    description: '从框架提取模板单元（{{占位}} 骨架），管理模板框架并应用到目标框架。',
-    category: '事务设计',
-  },
-  {
-    viewType: VIEW_TYPE_TABLE,
-    title: '表格模式',
-    icon: 'table',
-    description: '节点属性表格阅览、行内编辑与批量操作（含归档节点视图）。',
-    category: '事务设计',
-  },
+  // 已隐藏（代码保留）视图（表格模式 / 证据追加）：不再在中控台展示，源文件与注册代码保留待恢复
+  // {
+  //   viewType: VIEW_TYPE_TABLE,
+  //   title: '表格模式',
+  //   icon: 'table',
+  //   description: '节点属性表格阅览、行内编辑与批量操作（含归档节点视图）。',
+  //   category: '事务设计',
+  // },
+  // {
+  //   viewType: VIEW_TYPE_APPEND,
+  //   title: '证据追加',
+  //   icon: 'git-branch',
+  //   description: '选择事务，编辑其证据（对象/条件/信息/状态）与证据间关联。',
+  //   category: '事务设计',
+  // },
   {
     viewType: VIEW_TYPE_ROUTE,
     title: '线路模式',
@@ -76,40 +78,30 @@ export const PANEL_REGISTRY: PanelEntry[] = [
     description: '项目线路图：框架间隐性关联（From/To + 描述）与复合进度信息输出。',
     category: '事务设计',
   },
-  // ============================================================
-  // 证据管理
-  // ============================================================
   {
-    viewType: VIEW_TYPE_APPEND,
-    title: '证据追加',
-    icon: 'git-branch',
-    description: '选择事务，编辑其证据（对象/条件/信息/状态）与证据间关联。',
-    category: '证据管理',
+    viewType: VIEW_TYPE_TEMPLATE,
+    title: '模板模式',
+    icon: 'copy',
+    description: '模板库管理：整理模板单元（含子树结构）、编辑占位并应用到目标框架；创建模板请在事务设计右键「存为模板」。',
+    category: '事务设计',
   },
   {
     viewType: VIEW_TYPE_FOCUS,
     title: '证据聚焦',
     icon: 'network',
     description: '选择事务，白板阅览其中证据的相互关联关系（连线编辑）。',
-    category: '证据管理',
+    category: '事务设计',
   },
   {
     viewType: VIEW_TYPE_OVERVIEW,
     title: '证据总览',
     icon: 'network',
     description: '不聚焦事务，白板阅览全局证据关系，可连接跨事务证据、建立无指向证据。',
-    category: '证据管理',
+    category: '事务设计',
   },
   // ============================================================
   // 规则设计
   // ============================================================
-  {
-    viewType: VIEW_TYPE_FLOW,
-    title: '流程设计',
-    icon: 'workflow',
-    description: '内置可切换的可视化流程程序与流程脚本程序，为时段/日期/时间点编写推送规则（脚本为事实源）。',
-    category: '规则设计',
-  },
   {
     viewType: VIEW_TYPE_FLOW_PUSH,
     title: '流程推送',
@@ -122,6 +114,21 @@ export const PANEL_REGISTRY: PanelEntry[] = [
     title: '流程草稿',
     icon: 'calendar-range',
     description: '草稿板：多条并行事件轴，时间块起止用于快速敲定时间；块可只读关联节点或直接输入文本。无专属语法、不涉及提醒。',
+    category: '规则设计',
+  },
+  {
+    viewType: VIEW_TYPE_EXEC_BIND,
+    title: '执行绑定',
+    icon: 'cable',
+    description: '将执行行为绑定到指定时间点或事件（节点）完成后自动触发；绑定规则的编辑与阅览。',
+    category: '规则设计',
+    placeholder: true,
+  },
+  {
+    viewType: VIEW_TYPE_FLOW,
+    title: '流程设计',
+    icon: 'workflow',
+    description: '内置可切换的可视化流程程序与流程脚本程序，为时段/日期/时间点编写推送规则（脚本为事实源）。',
     category: '规则设计',
   },
   {
@@ -152,18 +159,18 @@ export const PANEL_REGISTRY: PanelEntry[] = [
     placeholder: true,
   },
   {
-    viewType: VIEW_TYPE_RECYCLE,
-    title: '回收模式',
-    icon: 'trash-2',
-    description: '阅览归档节点，提供还原与彻底删除。',
-    category: '节点通用',
-  },
-  {
     viewType: VIEW_TYPE_LOG,
     title: '日志阅览',
     icon: 'scroll-text',
     description: '条目化的阅览和搜索日志；定义日志是否缓存及如何被脚本或自动化获取调用。',
     category: '节点通用',
     placeholder: true,
+  },
+  {
+    viewType: VIEW_TYPE_RECYCLE,
+    title: '回收模式',
+    icon: 'trash-2',
+    description: '阅览归档节点，提供还原与彻底删除。',
+    category: '节点通用',
   },
 ];
