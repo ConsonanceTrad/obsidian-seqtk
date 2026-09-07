@@ -3264,3 +3264,35 @@
 .seqtk-draft-lane-times .seqtk-draft-chip {
   font-size: var(--font-ui-smaller);
 }
+
+/* 占位视图骨架：功能区面板（未实现功能的可视化占位） */
+.seqtk-placeholder-frame {
+  max-width: 620px;
+  margin: 8px 0 0 4px;
+}
+
+.seqtk-placeholder-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.seqtk-placeholder-panel {
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 8px 12px;
+  background: var(--background-secondary);
+}
+
+.seqtk-placeholder-panel-title {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.seqtk-placeholder-panel-desc {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}

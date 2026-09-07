@@ -24,6 +24,10 @@ import { TemplateView, VIEW_TYPE_TEMPLATE } from './views/TemplateView';
 // import { TableView, VIEW_TYPE_TABLE } from './views/TableView';
 // import { AppendView, VIEW_TYPE_APPEND } from './views/AppendView';
 import { FocusView, VIEW_TYPE_FOCUS } from './views/FocusView';
+import { ExecDesignView } from './views/ExecDesignView';
+import { ExecBindView } from './views/ExecBindView';
+import { QueryDesignView } from './views/QueryDesignView';
+import { LogView } from './views/LogView';
 import { OverviewView, VIEW_TYPE_OVERVIEW } from './views/OverviewView';
 import { RouteView, VIEW_TYPE_ROUTE } from './views/RouteView';
 import { FlowView, VIEW_TYPE_FLOW } from './views/FlowView';
@@ -132,23 +136,9 @@ export default class SeqtkPlugin extends Plugin {
       (leaf) => new FlowDraftView(leaf, this.nodeCache, this.fileManager),
     );
     // 未实现功能口：占位视图
-    this.registerView(VIEW_TYPE_EXEC_DESIGN, (leaf) => new PlaceholderView(leaf, {
-      title: '执行设计',
-      desc: '使用内置可切换的可视化执行程序或执行脚本程序（可视化以脚本为基础的渲染，脚本为事实源），提供触发式或手动式的自动程序。提供双栏编辑器，连接 Obsidian 右侧附属信息叶子窗口。',
-    }));
-    this.registerView(VIEW_TYPE_EXEC_BIND, (leaf) => new PlaceholderView(leaf, {
-      title: '执行绑定',
-      desc: '将执行行为绑定到指定时间点，或绑定到某事件（节点）完成后自动触发。绑定规则（触发条件 → 执行行为）以可视化或脚本化方式编辑与阅览，供执行设计接入自动程序。',
-      points: [
-        '定时触发：一次性时间点或周期触发（复用流程脚本规则语法）',
-        '事件后触发：监听节点完成等状态变化后触发绑定行为',
-        '管理阅览：绑定规则的启停控制、触发记录与执行日志',
-      ],
-    }));
-    this.registerView(VIEW_TYPE_QUERY_DESIGN, (leaf) => new PlaceholderView(leaf, {
-      title: '查询设计',
-      desc: '使用内置脚本配合 db 实现相关信息查询，支持复杂语句，支持查询结果解析输出模块以供使用。',
-    }));
+    this.registerView(VIEW_TYPE_EXEC_DESIGN, (leaf) => new ExecDesignView(leaf));
+    this.registerView(VIEW_TYPE_EXEC_BIND, (leaf) => new ExecBindView(leaf));
+    this.registerView(VIEW_TYPE_QUERY_DESIGN, (leaf) => new QueryDesignView(leaf));
     this.registerView(VIEW_TYPE_COLLAB, (leaf) => new PlaceholderView(leaf, {
       title: '智能协作',
       desc: '智能体身份与其工作流记录。',
@@ -158,10 +148,7 @@ export default class SeqtkPlugin extends Plugin {
         '术语管理：手动添加术语定义并在使用时注入；检查智能体对术语的学习；检查术语关联的日志记录进行溯源删改',
       ],
     }));
-    this.registerView(VIEW_TYPE_LOG, (leaf) => new PlaceholderView(leaf, {
-      title: '日志阅览',
-      desc: '条目化的阅览和搜索日志；定义部分日志是否需要缓存，以及如何被脚本或自动化获取调用（例如任务的完成信息等）。',
-    }));
+    this.registerView(VIEW_TYPE_LOG, (leaf) => new LogView(leaf));
     this.registerView(
       VIEW_TYPE_RECYCLE,
       (leaf) => new RecycleView(leaf, this.nodeCache, this.fileManager, this.operationQueue),

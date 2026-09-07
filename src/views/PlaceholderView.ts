@@ -29,13 +29,10 @@ export class PlaceholderView extends ItemView {
   }
 
   getViewType(): string {
-    // 由 opts 匹配对应的 viewType
+    // 由 opts 匹配对应的 viewType（执行设计/执行绑定/查询设计/日志已迁出为独立双栏视图，
+    // 常量仍在此导出供它们与 panelRegistry 复用）
     switch (this.opts.title) {
-      case '执行设计': return VIEW_TYPE_EXEC_DESIGN;
-      case '执行绑定': return VIEW_TYPE_EXEC_BIND;
-      case '查询设计': return VIEW_TYPE_QUERY_DESIGN;
       case '智能协作': return VIEW_TYPE_COLLAB;
-      case '日志阅览': return VIEW_TYPE_LOG;
       default: return 'seqtk-placeholder';
     }
   }
@@ -46,11 +43,7 @@ export class PlaceholderView extends ItemView {
 
   getIcon(): string {
     switch (this.opts.title) {
-      case '执行设计': return 'play';
-      case '执行绑定': return 'cable';
-      case '查询设计': return 'search';
       case '智能协作': return 'bot';
-      case '日志阅览': return 'scroll-text';
       default: return 'help-circle';
     }
   }
@@ -62,12 +55,22 @@ export class PlaceholderView extends ItemView {
 
     container.createEl('h3', { cls: 'seqtk-placeholder-title', text: this.opts.title });
     container.createEl('div', { cls: 'seqtk-placeholder-badge', text: '规划中 · 尚未实现' });
-    container.createEl('div', { cls: 'seqtk-placeholder-desc', text: this.opts.desc });
+
+    // 功能说明区 + 功能区面板骨架（可视化占位，无功能）
+    const frame = container.createDiv('seqtk-placeholder-frame');
+    frame.createEl('div', { cls: 'seqtk-placeholder-desc', text: this.opts.desc });
+
+    const panels = frame.createDiv('seqtk-placeholder-panels');
     if (this.opts.points && this.opts.points.length > 0) {
-      const list = container.createEl('ul', { cls: 'seqtk-placeholder-points' });
       for (const p of this.opts.points) {
-        list.createEl('li', { text: p });
+        const panel = panels.createDiv('seqtk-placeholder-panel');
+        panel.createDiv('seqtk-placeholder-panel-title').setText('功能区');
+        panel.createDiv('seqtk-placeholder-panel-desc').setText(p);
       }
+    } else {
+      const panel = panels.createDiv('seqtk-placeholder-panel');
+      panel.createDiv('seqtk-placeholder-panel-title').setText('功能区');
+      panel.createDiv('seqtk-placeholder-panel-desc').setText('功能待接入：界面将在此呈现');
     }
   }
 

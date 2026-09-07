@@ -20,7 +20,8 @@
  * renderExtractSource / extractTemplate 方法体保留作为参考实现。
  */
 
-import { ItemView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { DualPaneView } from './dual/DualPaneView';
 import type { NodeKind, SeqtkNode, SeqtkState } from '../types/index';
 import {
   NODE_KIND_LABELS,
@@ -36,9 +37,9 @@ import { TransactionCreateModal } from './components/TransactionModals';
 
 export const VIEW_TYPE_TEMPLATE = 'seqtk-template';
 
-export class TemplateView extends ItemView {
-  private leftEl!: HTMLElement;
-  private rightEl!: HTMLElement;
+export class TemplateView extends DualPaneView {
+  /** 视图容器附加类（原 onOpen addClass('seqtk-design-view')，与事务设计共用样式） */
+  protected cssClass = 'seqtk-design-view';
   private unsub: (() => void) | null = null;
   /** 当前选中的框架 nodeId（模板框架） */
   private selectedId: string | null = null;
@@ -66,33 +67,23 @@ export class TemplateView extends ItemView {
     return 'copy';
   }
 
-  async onOpen(): Promise<void> {
-    const container = this.containerEl.children[1] as HTMLElement;
-    container.empty();
-    container.addClass('seqtk-design-view');
-
-    const split = container.createDiv('seqtk-split');
-    this.leftEl = split.createDiv('seqtk-split-left');
-    this.rightEl = split.createDiv('seqtk-split-right');
-
+  protected onPanesReady(): void {
     this.unsub = this.nodeCache.nodeStore.subscribe(() => {
       this.renderLeft();
       this.renderRight();
     });
-    this.renderLeft();
-    this.renderRight();
-  }
-
-  async onClose(): Promise<void> {
-    this.unsub?.();
-    this.unsub = null;
+    // 关闭时统一清理（由基座 onClose 执行）
+    this.registerOnClose(() => {
+      this.unsub?.();
+      this.unsub = null;
+    });
   }
 
   // ============================================================
   // 左栏：框架区
   // ============================================================
 
-  private renderLeft(): void {
+  protected renderLeft(): void {
     this.leftEl.empty();
     this.leftEl.createEl('div', { cls: 'seqtk-split-title', text: '模板框架' });
 
@@ -132,7 +123,7 @@ export class TemplateView extends ItemView {
   // 右栏
   // ============================================================
 
-  private renderRight(): void {
+  protected renderRight(): void {
     this.rightEl.empty();
 
     if (!this.nodeCache.isInitialized) {

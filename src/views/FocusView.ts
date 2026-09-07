@@ -8,7 +8,8 @@
  * - 布局：cose 凝固定格 + 新证据增量插入关系区域边缘，位置存插件数据目录
  */
 
-import { App, ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
+import { App, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
+import { DualPaneView } from './dual/DualPaneView';
 import type { NodeKind, SeqtkNode } from '../types/index';
 import { NODE_KIND_LABELS, getCategoryOf, isFrameworkKind } from '../types/index';
 import type { NodeCache } from '../core/NodeCache';
@@ -65,9 +66,9 @@ class ConfirmModal extends Modal {
   }
 }
 
-export class FocusView extends ItemView {
-  private leftEl!: HTMLElement;
-  private rightEl!: HTMLElement;
+export class FocusView extends DualPaneView {
+  /** 视图容器附加类（原 onOpen addClass('seqtk-design-view')） */
+  protected cssClass = 'seqtk-design-view';
   private boardContainer!: HTMLElement;
   private board: CanvasBoard | null = null;
   private unsub: (() => void) | null = null;
@@ -104,35 +105,30 @@ export class FocusView extends ItemView {
     return 'network';
   }
 
-  async onOpen(): Promise<void> {
-    const container = this.containerEl.children[1] as HTMLElement;
-    container.empty();
-    container.addClass('seqtk-design-view');
-
-    const split = container.createDiv('seqtk-split');
-    this.leftEl = split.createDiv('seqtk-split-left');
-    this.rightEl = split.createDiv('seqtk-split-right');
-
+  protected onPanesReady(): void {
     this.unsub = this.nodeCache.nodeStore.subscribe(() => {
       this.renderLeft();
       this.refreshBoard();
     });
-    this.renderLeft();
-    this.refreshBoard();
+    // 关闭时统一清理（由基座 onClose 执行）
+    this.registerOnClose(() => {
+      this.unsub?.();
+      this.unsub = null;
+      this.board?.destroy();
+      this.board = null;
+    });
   }
 
-  async onClose(): Promise<void> {
-    this.unsub?.();
-    this.unsub = null;
-    this.board?.destroy();
-    this.board = null;
+  /** 右栏渲染：白板由 refreshBoard 管理（右栏自由样板：CanvasBoard 等任意内容） */
+  protected renderRight(): void {
+    void this.refreshBoard();
   }
 
   // ============================================================
   // 左栏：事务选择
   // ============================================================
 
-  private renderLeft(): void {
+  protected renderLeft(): void {
     this.leftEl.empty();
     this.leftEl.createEl('div', { cls: 'seqtk-split-title', text: '事务' });
 
