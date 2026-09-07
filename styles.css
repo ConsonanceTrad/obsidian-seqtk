@@ -200,10 +200,9 @@
   outline: none;
 }
 
-/* 行内编辑态：隐藏类型/预期徽章、状态圆点与行末操作按钮（及名称/预览/弹性间隔），
-   让输入框从缩进处起占满整行 —— 与行内创建输入行（类型预览 + 输入框）的整行形态一致；
-   保留行左端缩进与折叠小方块以维持层级视觉；结束编辑重建行时 class 随之消除 */
-.seqtk-inline-editing .seqtk-kind-badge,
+/* 行内编辑态：隐藏输入框之后的预期徽章、状态圆点与行末操作按钮（及名称/预览/弹性间隔），
+   保留行首类型徽章与行左端缩进/折叠小方块，让输入框从类型徽章后占满至行尾 ——
+   与行内创建输入行（类型预览 + 输入框）的整行形态一致；结束编辑重建行时 class 随之消除 */
 .seqtk-inline-editing .seqtk-expected-badge,
 .seqtk-inline-editing .seqtk-state-dot,
 .seqtk-inline-editing .seqtk-open-btn,
