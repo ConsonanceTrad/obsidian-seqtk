@@ -15,166 +15,110 @@
   background-color: var(--background-modifier-hover);
 }
 
-/* 展开态：背景加深 + 左侧指示条（同时覆盖 .seqtk-row 与 .seqtk-frame-item 两类行）。
-   仅顶级（depth 0）展开行保留指示条——子节点行的「有子」信息已由转角方块与可见子树表达，
-   故以 :not(.seqtk-row-in-expanded) 排除（所有非顶级行均带 in-expanded 类）。 */
-.seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded),
-.seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded) {
-  /*background-color: color-mix(in srgb, var(--background-modifier-active) 70%, #000);*/
-  box-shadow: inset 2px 0 0 rgb(0 0 0 / 0.67);
-}
-
-.seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded):hover,
-.seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded):hover {
-  /*background-color: color-mix(in srgb, var(--background-modifier-active) 70%, #000);*/
-  box-shadow: inset 2px 0 0 rgb(0 0 0 / 0.67);
+/* 展开态：仅顶级（depth 0）展开行保留加粗指示——画一段竖向粗黑段，
+   位置与引导线竖线同一基准（x = 4，见 P7_Render/.../TreeGuides.ts 的 GUIDE_INSET，
+   两处改动须同步），作为子树第 1 列竖线的起点，粗段接细线自然过渡；
+   子节点行的「有子」信息已由转角方块与可见子树表达，
+   故以 :not(.seqtk-row-in-expanded) 排除（非顶级行均带该类）。 */
+.seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before,
+.seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgb(0 0 0 / 0.67);
+  pointer-events: none;
 }
 
 /* 折叠标识小方块（有子节点且未展开时显示；展开态隐藏）：
    顶级（最外侧）节点保持在行左上角；展开祖先链内的行则坐在引导线 L 形转角的竖线上
    （横竖线交汇点），作为「此处向下还有内容被折叠」的断点标记。
    绝对定位不挤占布局；z-index 盖过转角横线端，竖线入、横线出，方块如线路节点。 */
-.seqtk-collapse-mark {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 4px;
-  height: 4px;
-  background: var(--text-muted);
+
+
+/* 转角方块：由引导线浮层（GuideOverlay）在 SVG 里绘制，位置取自同一套实测几何。
+   行不再自己渲染方块元素 —— 同一个几何量两处存放就会两处漂移。 */
+.seqtk-guides .seqtk-collapse-box {
+  fill: var(--text-muted);
   opacity: 0.3;
-  pointer-events: none;
-  z-index: 2;
 }
 
-/* 非顶级行：方块中心对准父列竖线（x = w-step-7），坐在 L 形转角上 */
-.seqtk-row.seqtk-row-in-expanded .seqtk-collapse-mark,
-.seqtk-frame-item.seqtk-row-in-expanded .seqtk-collapse-mark {
-  top: calc(50% - 2px);
-  left: calc(var(--tree-guide-w, 0px) - var(--tree-guide-step, 14px) - 8.5px);
-}
-
-.seqtk-row.seqtk-row-expanded .seqtk-collapse-mark,
-.seqtk-frame-item.seqtk-row-expanded .seqtk-collapse-mark {
-  display: none;
-}
 
 /* 展开子树内子行（.seqtk-row-in-expanded）：层级归属统一由下方树形引导线系统表达，
    原左缘 box-shadow 竖条已移除（与引导线重复，且被行距断成一节一节不美观） */
 
-/* 类型徽章：按大类分色（基础样式沿用原有 .seqtk-kind-badge 定义，圆角已降为 4px） */
+/* 类型徽章：按大类分色。
+   类名后缀 = NODE_CATEGORY_KIND 值的小写（framework / affair / evidence / runtime / script / unknown），
+   色值须与 P4_Nodes/NodeKind/KindColors.ts 的 CATEGORY_COLORS 完全一致 —— 两处改动必须同步。
+   注意：此处不加 filter 之类会改变实际观感的修饰，否则徽章与白板节点颜色对不上。 */
 .seqtk-kind-badge.kind-framework {
-  background: var(--color-blue);
-  color: var(--text-on-accent);
-  border-color: var(--color-blue);
+  background: #7c8cff;
+  color: #fff;
+  border-color: #7c8cff;
 }
 
-.seqtk-kind-badge.kind-transaction {
-  background: var(--color-green);
-  color: var(--text-on-accent);
-  border-color: var(--color-green);
+.seqtk-kind-badge.kind-affair {
+  background: #4caf6d;
+  color: #fff;
+  border-color: #4caf6d;
 }
 
 .seqtk-kind-badge.kind-evidence {
-  background: var(--color-orange);
-  color: var(--text-on-accent);
-  border-color: var(--color-orange);
-}
-
-.seqtk-kind-badge.kind-mark {
-  background: var(--color-purple);
-  color: var(--text-on-accent);
-  border-color: var(--color-purple);
+  background: #e0913c;
+  color: #fff;
+  border-color: #e0913c;
 }
 
 .seqtk-kind-badge.kind-runtime {
-  background: var(--color-red);
-  color: var(--text-on-accent);
-  border-color: var(--color-red);
+  background: #e06c6c;
+  color: #fff;
+  border-color: #e06c6c;
 }
 
 .seqtk-kind-badge.kind-script {
-  background: var(--color-base-50);
-  color: var(--text-muted);
-  border-color: var(--background-modifier-border);
+  background: #8a8a8a;
+  color: #fff;
+  border-color: #8a8a8a;
 }
 
-/* 分色徽章整体降饱和并略调浅，弱化其视觉焦点（保留白字与分色；kind-script 为中性灰不参与） */
-.seqtk-kind-badge.kind-framework,
-.seqtk-kind-badge.kind-transaction,
-.seqtk-kind-badge.kind-evidence,
-.seqtk-kind-badge.kind-mark,
-.seqtk-kind-badge.kind-runtime {
-  filter: saturate(0.7) brightness(1.1);
+.seqtk-kind-badge.kind-unknown {
+  background: #9a9a9a;
+  color: #fff;
+  border-color: #9a9a9a;
 }
 
-/* 树形引导线配色：竖线/横线共用高透明灰，弱化视觉焦点（供 ::before / ::after 继承） */
-.seqtk-row.seqtk-row-in-expanded,
-.seqtk-frame-item.seqtk-row-in-expanded {
+/* 树形引导线配色：浮层（.seqtk-guides）取此变量画线。定义在栏容器上而非行上 ——
+   浮层是栏容器的直接子元素，与行并非同一继承分支（旧实现把变量挂在行上，浮层取不到）。 */
+.seqtk-split-left,
+.seqtk-split-right {
   --seqtk-guide-line: color-mix(in srgb, var(--text-faint) 30%, transparent);
 }
 
-/* 引导线向上探出量适配（探出 = 行间间隙 + 1px 侵入，与上一行引导线重叠连接）：
-   左栏 .seqtk-split-left 普通流、行无 margin（间隙 0）→ 1px；
-   右栏 .seqtk-split-right 为 flex 列容器、行 margin 不折叠（行间 2+2 = 4px）→ 5px；
-   子框架卡片 .seqtk-fw-card 内为 BFC、margin 折叠（间隙 2px）→ 3px；
-   嵌套卡片 overflow:hidden 自动裁掉探出（卡片边框即视觉边界）。 */
-.seqtk-split-left {
-  --guide-bridge: 1px;
-}
-.seqtk-split-right {
-  --guide-bridge: 5px;
-}
-.seqtk-fw-card {
-  --guide-bridge: 3px;
-}
+/* ============================================================
+   引导线系统 —— 浮层绘制（可调项集中区）
+   —— 引导线不再由每一行各自拼装，而是由 C2_Tree 的浮层（一层覆盖树容器的 SVG）
+      按行的实测几何统一绘制。故此处只有浮层自身的样式，没有桥接量（--guide-bridge）与
+      上探量（--guide-rise）：那两个变量原用于补偿分段拼线的行间缝隙，浮层一次画完，
+      不存在拼接点，也就没有缝隙可补。
+   可调：颜色 var(--seqtk-guide-line)（定义在栏容器上，见文件顶部）、粗细（stroke-width）。
+   ============================================================ */
 
-/* 树形引导线 · 层级竖线（祖先列）：非顶级行在除父列外的每一祖先内容列画 1px 竖线。
-   行内联提供 --tree-guide-w（内容起点）与 --tree-guide-step（单级缩进步距）；
-   竖线列自行左 1px 起（与顶级展开行黑条相接，视觉连成一线），每 step 一列；
-   父列（最右列）由下方 ::after 的 L 形承担，便于最后子节点做 └ 收尾。
-   探出量 = --guide-bridge（间隙 + 1px 侵入，向上桥接同列贯穿线即可相连；
-   ::before 不参与 --guide-rise，避免在父行区域与同列线重叠叠色）；
-   顶级行无 in-expanded 类自动无引导线。 */
-.seqtk-row.seqtk-row-in-expanded::before,
-.seqtk-frame-item.seqtk-row-in-expanded::before {
-  content: "";
+/* 引导线浮层：覆盖整个树容器，不接收指针事件。线绘制在行之上，但列位置落在缩进空白处，
+   不会压住行内容；如此行 hover 的背景也不会把线切断。 */
+.seqtk-guides {
   position: absolute;
-  top: calc(0px - var(--guide-bridge, 2px));
-  bottom: 0;
-  left: 1px;
-  width: calc(var(--tree-guide-w, 0px) - var(--tree-guide-step, 14px) - var(--tree-guide-step, 14px) - 4px);
-  background: repeating-linear-gradient(
-    to right,
-    var(--seqtk-guide-line) 0 1px,
-    transparent 1px var(--tree-guide-step, 14px)
-  );
+  left: 0;
+  top: 0;
+  overflow: visible;
   pointer-events: none;
 }
 
-/* 树形引导线 · L 形转角（父列竖线 + 横线至徽章）：父列与顶层展开行黑条同轴
-   （x = 1+(d-1)·step，与黑条相接），竖线向下贯穿、向上按 bridge + rise 探出。
-   --guide-bridge 桥接行间间隙 + 1px 侵入；--guide-rise 供第一个子行（TS 注入）额外
-   上探到父行横线高度（父行中心），实现「首下属转角侵入并连接到上一行引导线」——
-   父行横线覆盖子行父列位置、顶级父行黑条全行高贯穿，探达父行中心即必然相交连接。
-   横线自父列垂直居中伸至本行类型徽章左缘前，与竖线构成 ├ 形。最后子节点
-   （.seqtk-guide-last）的父列竖线截短至行中心，成 └ 形收尾，不再向下延伸。 */
-.seqtk-row.seqtk-row-in-expanded::after,
-.seqtk-frame-item.seqtk-row-in-expanded::after {
-  content: "";
-  position: absolute;
-  top: calc(0px - var(--guide-bridge, 2px) - var(--guide-rise, 0px));
-  bottom: 0;
-  left: calc(var(--tree-guide-w, 0px) - var(--tree-guide-step, 14px) - 7px);
-  width: calc(var(--tree-guide-step, 14px) + 8px);
-  background:
-    linear-gradient(var(--seqtk-guide-line), var(--seqtk-guide-line)) 0 0 / 1px 100% no-repeat,
-    linear-gradient(var(--seqtk-guide-line), var(--seqtk-guide-line)) 0 calc(50% + (var(--guide-bridge, 2px) + var(--guide-rise, 0px)) * 0.5) / 100% 1px no-repeat;
-  pointer-events: none;
-}
-
-.seqtk-row.seqtk-row-in-expanded.seqtk-guide-last::after,
-.seqtk-frame-item.seqtk-row-in-expanded.seqtk-guide-last::after {
-  background-size: 1px calc(50% + (var(--guide-bridge, 2px) + var(--guide-rise, 0px)) * 0.5 + 1px), 100% 1px;
+.seqtk-guides path {
+  fill: none;
+  stroke: var(--seqtk-guide-line, color-mix(in srgb, var(--text-faint) 30%, transparent));
+  stroke-width: 1;
 }
 
 /* 正文预览（节点名后；内容宽，上限 220px，半透明弱化视觉焦点；flex-shrink 权重大于名称，行宽不足时先被压缩/隐藏） */
@@ -264,18 +208,51 @@
   white-space: nowrap;
 }
 
+/* 外部信息源徽章：与类型徽章（.seqtk-kind-badge，约 20px）等高的玻璃小药丸，内容只有一个链接图标。
+   必须显式定高：button 自带的高度会把徽章撑得比类型徽章高一截（open-btn 同样显式定 20px）。
+   它是 button，Obsidian 的默认按钮样式要压掉，否则会带背景与阴影、抢占行的视觉重心 */
+.seqtk-source-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  margin: 0 2px;
+  border-radius: 4px;
+  background: var(--background-secondary) !important;
+  box-shadow: none !important;
+  color: var(--text-muted) !important;
+  cursor: pointer;
+}
+
+.seqtk-source-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.seqtk-source-badge:hover {
+  border-color: var(--text-accent) !important;
+  color: var(--text-accent) !important;
+}
+
 /* 行内重命名输入框（覆盖层）：absolute 浮在行上，不参与行布局 ——
    行内元素与行高保持不变，下方行零位移；left 由 JS 按类型徽章右缘设置，
    right 固定到行内边距；覆盖层盖住名称/预览及右侧预期徽章、状态圆点与按钮，
    类型徽章保留在覆盖层左侧可见 */
+/* 重命名覆盖层：铺在行上的一层，高度即行高（行内元素与行高不变，下方零位移）。
+   left 由 JS 设成类型徽章右缘、right 固定到行内边距，于是覆盖「名称 → 状态圆点前」；
+   输入框在层内 flex:1 撑满，确认/取消按钮浮在这一层的下方右侧（见下一条） */
 .seqtk-inline-edit-overlay {
   position: absolute;
   top: 1px;
   bottom: 1px;
   right: 6px;
   z-index: 15;
-  margin: 0;
-  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 6px;
   font-size: inherit;
   font-family: inherit;
   color: var(--text-normal);
@@ -283,17 +260,114 @@
   border: 1px solid var(--interactive-accent);
   border-radius: 3px;
   box-sizing: border-box;
+}
+
+.seqtk-inline-edit-input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* 按钮浮层：绝对定位在输入框下方、靠右 —— 不参与行布局，行高不变 */
+.seqtk-inline-edit-actions {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 2px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 2px 4px;
+  background: var(--background-primary);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  z-index: 16;
+}
+
+/* 连续输入开关（附加行内） */
+.seqtk-inline-repeat {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.seqtk-inline-repeat input {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* 行内编辑的确认 / 取消按钮（重命名浮层与附加行共用） */
+.seqtk-inline-edit-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.seqtk-inline-edit-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
 }
 
 
-/* 行内新建子节点：附加行（类型下拉 + 名称输入；左缩进由 JS 按层级设置；padding/margin 与普通行一致，避免行高度跳动） */
+/* 行内新建子节点：附加行只有一行（类型 + 名称），与普通行同高、不推开下方内容；
+   左缩进由 JS 按层级设置；padding/margin 与普通行一致 */
 .seqtk-inline-add {
+  position: relative;
+  padding: 3px 6px;
+  margin: 2px 0;
+}
+
+/* 主行：类型 + 名称输入 */
+.seqtk-inline-add-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 6px;
-  margin: 2px 0;
+}
+
+/* 开关与按钮的浮层：绝对定位在主行下方，左「连续输入」右「确认 / 取消」。
+   不参与布局（附加行高度保持与普通行一致），left 由组件按缩进给出 */
+.seqtk-inline-add-actions {
+  position: absolute;
+  top: 100%;
+  right: 6px;
+  margin-top: 2px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 6px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  z-index: 16;
+}
+
+.seqtk-inline-add-btns {
+  display: flex;
+  gap: 4px;
 }
 
 /* 左栏附加行：与 .seqtk-frame-item 盒模型一致（padding 4px 6px / margin 0） */
@@ -328,25 +402,86 @@
   padding: 2px 8px;
   margin: 0 4px;
   border-radius: 4px;
-  background: var(--color-green);
-  color: var(--text-on-accent);
+  background: #4caf6d;
+  color: #fff;
 }
 
-/* 新建子框架预览标签：框架语义色为蓝色，覆盖通用绿色 */
+/* 附加行的类型预览：与行徽章/白板同色（共用 KindColors 的类别色），故 6 类都要覆盖 */
 .seqtk-inline-kind-preview.kind-framework {
-  padding: 2px 8px;
-  margin: 0 4px;
-  background: var(--color-blue);
-  border-color: var(--color-blue);
-  font-size: 12px;
+  background: #7c8cff;
+  border-color: #7c8cff;
 }
 
-/* 行内新建预览标签：证据类型（对象/条件/信息/状态）橙色，与行徽章一致 */
+.seqtk-inline-kind-preview.kind-affair {
+  background: #4caf6d;
+  border-color: #4caf6d;
+}
+
 .seqtk-inline-kind-preview.kind-evidence {
-  padding: 2px 8px;
-  margin: 0 4px;
-  background: var(--color-orange);
-  border-color: var(--color-orange);
+  background: #e0913c;
+  border-color: #e0913c;
+}
+
+.seqtk-inline-kind-preview.kind-runtime {
+  background: #e06c6c;
+  border-color: #e06c6c;
+}
+
+.seqtk-inline-kind-preview.kind-script {
+  background: #8a8a8a;
+  border-color: #8a8a8a;
+}
+
+.seqtk-inline-kind-preview.kind-unknown {
+  background: #9a9a9a;
+  border-color: #9a9a9a;
+}
+
+/* 事务链路的角色色阶：两条链路各一色相、按从属深度加深
+   （主线 构想→方向→目标→工序；支线 清单→事项）。
+   色值须与 P4_Nodes/NodeKind/KindColors.ts 的 AFFAIR_ROLE_COLORS 完全同步。
+   位置有意放在大类色之后：徽章与附加行预览共用这几个类，且需压过同特异性的 `.kind-affair`；
+   浅色档改用深字以保证对比度 */
+.seqtk-kind-badge.role-concept,
+.seqtk-inline-kind-preview.role-concept {
+  background: #86cfa4;
+  border-color: #86cfa4;
+  color: #123a24;
+}
+
+.seqtk-kind-badge.role-direct,
+.seqtk-inline-kind-preview.role-direct {
+  background: #65bf8a;
+  border-color: #65bf8a;
+  color: #0d2f1c;
+}
+
+.seqtk-kind-badge.role-target,
+.seqtk-inline-kind-preview.role-target {
+  background: #4caf6d;
+  border-color: #4caf6d;
+  color: #fff;
+}
+
+.seqtk-kind-badge.role-process,
+.seqtk-inline-kind-preview.role-process {
+  background: #2f8f56;
+  border-color: #2f8f56;
+  color: #fff;
+}
+
+.seqtk-kind-badge.role-check,
+.seqtk-inline-kind-preview.role-check {
+  background: #6fb6d0;
+  border-color: #6fb6d0;
+  color: #0d2b36;
+}
+
+.seqtk-kind-badge.role-item,
+.seqtk-inline-kind-preview.role-item {
+  background: #4794b3;
+  border-color: #4794b3;
+  color: #fff;
 }
 
 .seqtk-inline-name {
@@ -419,7 +554,6 @@
 .seqtk-fw-card .seqtk-fw-card {
   margin: 0 6px 6px 14px;
   border-style: dashed;
-  background: var(--background-primary);
 }
 
 /* 状态圆点（四色，替代文字徽章；悬停 title 显示状态名） */
@@ -1956,10 +2090,28 @@
   background: transparent;
 }
 
+/*
+ * 树容器：唯一的内容滚动区（标题在栏上、固定不动），同时是引导线浮层的包含块。
+ * 滚动条隐藏（滚动能力保留）—— 与右栏此前的处理保持一致，左栏也一并隐藏。
+ */
 .seqtk-tree {
+  position: relative;
   flex: 1;
+  /*
+   * height:0 是关键。flex:1 只决定「分到多少剩余高度」，而 flex 子项的基础高度
+   * 默认是 auto（= 内容高度）—— 树于是永远觉得自己刚好装得下，overflow-y:auto
+   * 便永不触发滚动。基础高度置 0，实际高度就完全由栏分给它的那部分决定。
+   */
+  height: 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: none;
+  padding-bottom: 300px;
+}
+
+.seqtk-tree::-webkit-scrollbar {
+  display: none;
 }
 
 .seqtk-section-title {
@@ -2148,43 +2300,75 @@
 
 .seqtk-split {
   display: flex;
+  /*
+   * 这里**必须**显式给高度，不能只靠 flex:1。
+   *
+   * 实测的 DOM 层级是：
+   *   contentEl(.seqtk-antd-root) → .ant-app → .seqtk-split
+   * .ant-app 是 antd 渲染出来的普通 block 容器，不是 flex 容器 ——
+   * 在 block 父元素下 flex:1 毫无作用，高度退回 auto，于是被两栏内容撑大。
+   * 显式 height:100% 直接取父层的高度，不假设父层是什么显示类型。
+   */
+  height: 100%;
   flex: 1;
   min-height: 0;
-  gap: 10px;
+  /* 间距由比例把手自身提供，避免 gap 与把手叠加成双倍留白 */
+  gap: 0;
 }
 
-.seqtk-split-left {
-  flex: 0 0 280px;
-  overflow-y: auto;
+/*
+ * 两栏：纵向 flex，自身 overflow:hidden —— 标题固定不动，滚动只发生在内容区（.seqtk-tree）。
+ * 左栏宽度由双栏比例把手写入 inline style（width / flex-basis），故用 flex:0 0 auto 让其一并生效。
+ */
+.seqtk-split-left,
+.seqtk-split-right {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /*
+   * 两栏直接占满容器高度，内部元素适应这个高度去滚动。
+   *
+   * 这比依赖「父元素被撑开 + 子项 flex 分配」直白：栏高一开始就是定值，
+   * 栏内唯一可伸缩的树拿到剩余高度，超出的内容由树自己滚。
+   * min-height:0 仍要留着 —— flex 子项默认 min-height:auto，会拒绝收缩到内容之下。
+   */
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   padding: 8px;
+}
+
+.seqtk-split-left {
+  flex: 0 0 auto;
   background: var(--background-secondary);
 }
 
 .seqtk-split-right {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  /* 隐藏滚动条（滚动能力保留） */
-  scrollbar-width: none;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
 }
 
-.seqtk-split-right::-webkit-scrollbar {
-  display: none;
+/* 双栏比例把手：两栏之间的细条，左右拖动改变左栏宽度 */
+.seqtk-split-handle {
+  flex: 0 0 10px;
+  align-self: stretch;
+  cursor: col-resize;
+  border-radius: 3px;
+  background: transparent;
+  transition: background 120ms ease;
 }
 
-/* 右栏为纵向 flex 容器：子项（框架卡片/节点行）禁止垂直收缩，避免内容被挤压 */
-.seqtk-split-right > * {
-  flex-shrink: 0;
+.seqtk-split-handle:hover,
+.seqtk-split-handle:active {
+  background: var(--background-modifier-border);
 }
 
 .seqtk-split-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
   color: var(--text-muted);
@@ -2193,6 +2377,15 @@
   padding: 4px;
   border-bottom: 1px solid var(--background-modifier-border);
   margin-bottom: 6px;
+}
+
+/* 标题文字占满剩余宽度，把行末的图标按钮推到最后 */
+.seqtk-split-title-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .seqtk-frame-item {
@@ -3379,4 +3572,272 @@
 .seqtk-placeholder-panel-desc {
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
+}
+
+/* （原 Svelte 节点行组件 NodeTree.svelte 的 .nt-* 样式已随该组件 React 化一并移除：
+   节点行的样式统一由 .seqtk-row / .seqtk-frame-item 承担，见本文档顶部与 P7_Render 契约） */
+
+/* ============================================================
+ * antd 容器基线（React 视图挂载点）
+ *
+ * 作用域：仅 .seqtk-antd-root（由 P0_UI/ViewBase.ts 挂到 ItemView.contentEl 上），
+ *         不触碰 Obsidian 宿主界面，也不引入 antd/dist/reset.css。
+ *
+ * 原则：只修会导致「用不了 / 看不清」的通用项，不碰观感（配色、圆角、阴影
+ *       一律留给主题处理）。color 必须显式跟随主题，否则 antd 默认深色文字
+ *       在 Obsidian 暗色主题下不可读。
+ *
+ * 待实测：Obsidian 的 app.css 用元素选择器（button / input / select）定义全局
+ *         样式，antd 组件样式为类选择器（.ant-btn 等），优先级更高，通常不会被
+ *         覆盖。若实测出现具体冲突，再在此处按选择器定点修正，不做预防性覆盖。
+ * ============================================================ */
+
+.seqtk-antd-root {
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+  /*
+   * 高度链的第一环。
+   *
+   * 视图根（.seqtk-design-view）写的是 height:100%，需要参照父元素的高度；但 React
+   * 挂载时中间还夹着一层 —— mountReact 包了 antd 的 <App>，而 App 会渲染一个
+   * div.ant-app，这层没有任何高度样式。高度链断在这里，视图根的 100% 就落了空、
+   * 改由内容决定高度，整个界面跟着出现滚动条。
+   *
+   * 注意这里**不加** overflow:hidden：那只是把溢出裁掉，看着不再滚动，
+   * 实际是内容被切掉且滚不到（栏内因此滚不动）。要挡的是「视图被内容撑高」，
+   * 那由高度链本身解决，不由裁切解决。
+   */
+  height: 100%;
+  min-height: 0;
+}
+
+/* antd 的 App 渲染出的那一层：补上高度，别让 100% 的链条断在这里。
+   用 > * 而不是 .ant-app 字面量，是因为这层由 antd 内部实现决定，
+   写成类名反而容易随版本失效。 */
+/* antd 的 App 渲染出的那一层：补上高度，别让 100% 的链条断在这里。
+   用 > * 而不是 .ant-app 字面量，是因为这层由 antd 内部实现决定，
+   写成类名反而容易随版本失效。同样不加 overflow:hidden（见上）。 */
+.seqtk-antd-root > * {
+  height: 100%;
+  min-height: 0;
+}
+
+.seqtk-antd-root *,
+.seqtk-antd-root *::before,
+.seqtk-antd-root *::after {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   Seqtk 设置面板
+   ============================================================ */
+
+/* 规则矛盾 / 冗余提示（由 Propagation.DETECT_RuleConflicts 提供内容） */
+.seqtk-settings-conflict {
+  margin: 4px 0 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--text-warning, #d0a000);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.6;
+}
+
+/* 规则表（设置子页的命令式部分）：整体竖向排布。
+   setting-item 默认是横向 flex，说明 / 提示 / 各条规则直接追加进去会被并排成一行 */
+.seqtk-settings-rules {
+  display: block;
+}
+
+/* 规则名输入框：与开关、删除按钮并排在同一行 */
+.seqtk-rule-name {
+  width: 12em;
+}
+
+/* 空名或与其它规则重名：标红提示（此时该次输入不落盘） */
+.seqtk-rule-name.seqtk-input-invalid {
+  border-color: var(--text-error);
+  box-shadow: 0 0 0 1px var(--text-error);
+}
+
+/* 「仅当子节点处于」：设置项改为竖向堆叠，让复选行有整行宽度 */
+.seqtk-setting-stack {
+  display: block;
+}
+
+.seqtk-setting-stack .setting-item-info {
+  margin-bottom: 6px;
+}
+
+.seqtk-setting-stack .setting-item-control {
+  justify-content: flex-start;
+}
+
+.seqtk-state-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.seqtk-state-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.seqtk-state-check input {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* ============================================================
+   被委托的框架树（中控台侧栏）
+   ============================================================ */
+
+.seqtk-delegated-tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px;
+}
+
+.seqtk-delegated-tree .seqtk-tree {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 委托 / 取消委托按钮：贴在栏标题右侧 */
+.seqtk-delegate-btn,
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* ============================================================
+   文本树导入（提取选中文本为节点组）
+   ============================================================ */
+
+.seqtk-texttree-input {
+  width: 100%;
+  min-height: 180px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.6;
+  white-space: pre;
+  resize: vertical;
+}
+
+.seqtk-texttree-issues {
+  margin-top: 8px;
+}
+
+.seqtk-texttree-issue {
+  padding: 4px 8px;
+  margin-bottom: 2px;
+  border-left: 3px solid var(--text-error, #d06a6a);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 预览：只读列表，缩进由 JS 按层级设置 */
+.seqtk-texttree-preview {
+  margin-top: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+}
+
+.seqtk-texttree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.seqtk-texttree-mark {
+  flex-shrink: 0;
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+}
+
+.seqtk-texttree-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seqtk-texttree-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* ── 无边框图标按钮（委托开关等）── */
+/* 用 button.seqtk-icon-btn 提高一级特异性：Obsidian 的 button 默认带边框与阴影，
+   单靠类选择器未必压得住，而这两样会在未悬浮时抢占标题行的视觉重心。 */
+button.seqtk-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: none;
+    background-color: transparent;
+    box-shadow: none;
+    outline: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-s);
+    appearance: none;
+}
+
+button.seqtk-icon-btn:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+}
+
+button.seqtk-icon-btn.is-active {
+    color: var(--text-accent);
+}
+
+/* ── 委托态：左栏与把手已不渲染，右栏独占 ── */
+.seqtk-split-delegated .seqtk-split-right {
+    flex: 1 1 auto;
+    max-width: none;
+}
+
+/*
+ * 视图整体不滚动：两栏与 .seqtk-split 自身已是 overflow:hidden，但滚动条仍会出现在
+ * Obsidian 的内容区（.view-content）上。用 :has 精准命中「装着本视图的那个内容区」，
+ * 不去动其它视图的样式。滚动只保留在各栏的树容器里，且树容器自身已隐藏滚动条。
+ */
+.view-content:has(> .seqtk-design-view) {
+  overflow: hidden;
+}
+
+.seqtk-design-view {
+  overflow: hidden;
+}
+
+/*
+ * 委托期间中控台让位：面板目录是「选一个打开」的入口，而此刻用户在框架树里干活，
+ * 目录只挤占空间。用容器上的类切，不重建目录 —— 取消委托后原样还原。
+ */
+.seqtk-hub-view.seqtk-hub-delegated .seqtk-hub-list {
+  display: none;
 }

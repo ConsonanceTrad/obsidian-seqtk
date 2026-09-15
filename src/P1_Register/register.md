@@ -1,0 +1,1 @@
+register 属 main 的子装配器，仅允许 type 引用 main、不可被 p1–p7 反向引用
