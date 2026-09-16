@@ -531,14 +531,14 @@ button.seqtk-source-badge:hover {
   outline: none;
 }
 
-/* 子框架卡片（右侧栏；内部容纳节点行，行交互完整可用） */
-.seqtk-fw-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 4px;
-}
-
+/*
+ * 框架卡片：把「框架行 + 它的整棵子树」圈成一块（右侧栏）。
+ *
+ * 职责边界（重要）：卡片**不承担层级缩进**。层级缩进一律由行的 paddingLeft
+ * （GET_LineIndent = base + depth·step）表达；卡片只提供边框与底色。
+ * 此前嵌套卡片在这里加了 margin-left: 14px，而右栏 step 是 18px ——
+ * 于是每层框架都比同层普通节点多缩进 14px，父框架的标题与它的孙辈节点看起来像同一层。
+ */
 .seqtk-fw-card {
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
@@ -550,9 +550,9 @@ button.seqtk-source-badge:hover {
   border-color: var(--interactive-accent);
 }
 
-/* 嵌套子框架卡片：层级缩进 + 虚线边框 + 浅色背景，与外层实线卡片区分 */
+/* 嵌套子框架卡片：只换视觉（虚线边框 + 浅色底），左缘与父层保持一致 */
 .seqtk-fw-card .seqtk-fw-card {
-  margin: 0 6px 6px 14px;
+  margin: 2px 6px 6px 0;
   border-style: dashed;
 }
 

@@ -16,6 +16,7 @@ import { NODE_KIND } from '../../../P4_Nodes/NodeKind/NodeKind';
 import { NODE_KIND_LABELS } from '../../../P4_Nodes/NodeKind/NodeLabel';
 import type { SeqtkNode } from '../../../P4_Nodes/Node';
 import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
+import { GET_LineIndent, LINE_METRICS_LEFT } from '../../Composition/C1_NodeLine/NodeLine';
 
 /** 框架下拉候选 */
 export interface FrameworkOption {
@@ -225,7 +226,8 @@ export class TemplateUnitSelectModal extends Modal {
 
       const subEl = container.createDiv();
       subEl.style.display = 'none';
-      subEl.style.paddingLeft = `${depth * 14}px`;
+      // 缩进复用设计视图的同一公式（base + depth·step），与预览/真实行同口径
+      subEl.style.paddingLeft = `${GET_LineIndent(depth, LINE_METRICS_LEFT)}px`;
 
       if (this.hasChildren(child.nodeId)) {
         childRow.addEventListener('click', () => {

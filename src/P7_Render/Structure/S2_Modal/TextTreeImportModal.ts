@@ -20,6 +20,7 @@ import {
 } from '../../../P2_Tools/Parse/TextTree';
 import { GET_KindClass } from '../../../P4_Nodes/NodeKind/KindColors';
 import { NODE_STATE_LABELS } from '../../../P4_Nodes/NodeField/StateKeys';
+import { GET_LineIndent, LINE_METRICS_LEFT } from '../../Composition/C1_NodeLine/NodeLine';
 
 export interface TextTreeImportOptions {
     title: string;
@@ -158,7 +159,9 @@ export class TextTreeImportModal extends Modal {
         }
         for (const row of rows) {
             const line = this.previewEl.createDiv({ cls: 'seqtk-texttree-row' });
-            line.style.paddingLeft = `${row.depth * 14}px`;
+            // 缩进复用设计视图左栏的同一公式（base + depth·step）：预览与真实行同口径，
+            // 也就不会出现「步距改一处、预览还是老样子」的偏差
+            line.style.paddingLeft = `${GET_LineIndent(row.depth, LINE_METRICS_LEFT)}px`;
             line.createEl('span', { cls: `seqtk-kind-badge ${GET_KindClass(row.kind)}`, text: row.kindLabel });
             line.createEl('span', { cls: 'seqtk-texttree-desc', text: row.desc });
             // 状态放行末，用与正常节点行同一个圆点样式（含悬停状态名），让预览一眼就像那棵树；
