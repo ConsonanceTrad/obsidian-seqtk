@@ -280,6 +280,15 @@ export class DesignView extends ReactViewBase {
         });
     }
 
+    /**
+     * 让装着本视图的 .view-content 不出现滚动条。
+     * 滚动只保留在各栏的树容器里（树容器自身已隐藏滚动条），
+     * 原先靠 .view-content:has(> .seqtk-design-view) 命中，现改为声明式挂类。
+     */
+    protected contentClasses(): string[] {
+        return ["seqtk-view-no-scroll"];
+    }
+
     protected onMounted(): void {
         document.addEventListener('contextmenu', this.onDocumentContextMenu, true);
         this.unsub = this.pipe.SUB_ActiveView(() => this.refresh());

@@ -34,6 +34,14 @@ export abstract class ReactViewBase extends ItemView {
     /** 可选钩子：root 卸载前调用 —— 在此取消订阅、清理全局监听 */
     protected onBeforeUnmount(): void {}
 
+    /**
+     * 可选钩子：额外挂到 contentEl（即 .view-content）上的类名。
+     * 需要命中「装着本视图的那个内容区」的样式走这里 —— 不用 :has（广泛选择器失效会拖性能）。
+     */
+    protected contentClasses(): string[] {
+        return [];
+    }
+
     async onOpen(): Promise<void> {
         // 先卸掉旧 root（同一 leaf 复用时会重复调用 onOpen），再清空容器
         this.root?.unmount();
@@ -41,6 +49,8 @@ export abstract class ReactViewBase extends ItemView {
         this.contentEl.empty();
         // antd 样式基线的作用域锚点（见 styles.css 的 .seqtk-antd-root）
         this.contentEl.addClass("seqtk-antd-root");
+        // 视图自声明的容器类：contentEl 就是 .view-content，每次 onOpen 重新挂上
+        for (const cls of this.contentClasses()) this.contentEl.addClass(cls);
         this.root = mountReact(this.contentEl, this.renderPanel());
         this.onMounted();
     }
