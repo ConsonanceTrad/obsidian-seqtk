@@ -41,6 +41,17 @@ import {
 import { SimpleStore } from '../../P5_Data/Svelte/SimpleStore';
 import { Save_Setting } from '../../P3_Settings/Settings';
 import { showSourcesMenu } from './design/externalInfo';
+import {
+    bindDocumentContextMenu,
+    clearDropHint,
+    onBlankDragLeave,
+    onBlankDragOver,
+    onBlankDrop,
+    onDragEnd,
+    onDragOver,
+    onDragStart,
+    onDrop,
+} from './design/dragHandlers';
 import { openTextTreeImport } from './design/textEdit';
 import {
     selectFramework,
@@ -258,6 +269,14 @@ export class DesignView extends ReactViewBase {
     public draggingId: string | null = null;
     public dropBlank = false;
 
+    /**
+     * 拖拽进行中右键：取消本次拖拽并清理指示（原 installDragCancelHandler 的等价实现）
+     *
+     * 实现与绑定工厂在 design/dragHandlers —— 字段初始化器先于 constructor 体执行，
+     * 故工厂内只捕获 view 引用，字段要等事件触发时再读。
+     */
+    public onDocumentContextMenu = bindDocumentContextMenu(this);
+
     private unsub: (() => void) | null = null;
     private unsubShared: (() => void) | null = null;
     /** refresh() 执行中：防止共享状态回调与 refresh 互相触发 */
@@ -436,11 +455,11 @@ export class DesignView extends ReactViewBase {
             contextMenu: (nodeId, side, e) => showRowContextMenu(this, nodeId, side, e),
             stateClick: (nodeId) => toggleState(this, nodeId),
             stateContextMenu: (nodeId, _side, e) => showRowStateMenu(this, nodeId, e),
-            dragStart: (ctx, _side, e) => this.onDragStart(ctx, e),
-            dragEnd: () => this.onDragEnd(),
-            dragOver: (ctx, side, e) => this.onDragOver(ctx, side, e),
-            dragLeave: () => this.clearDropHint(),
-            drop: (ctx, side, e) => this.onDrop(ctx, side, e),
+            dragStart: (ctx, _side, e) => onDragStart(this, ctx, e),
+            dragEnd: () => onDragEnd(this),
+            dragOver: (ctx, side, e) => onDragOver(this, ctx, side, e),
+            dragLeave: () => clearDropHint(this),
+            drop: (ctx, side, e) => onDrop(this, ctx, side, e),
             inlineCommit: (nodeId, _side, value) => commitRename(this, nodeId, value),
             inlineCancel: () => cancelRename(this),
             createCommit: (parentId, kind, name) => void commitCreate(this, parentId, kind, name),
@@ -454,9 +473,9 @@ export class DesignView extends ReactViewBase {
                     side === 'left' ? getLeftBlankMenuDefinitions(this) : getRightBlankMenuDefinitions(this),
                     e,
                 ),
-            blankDragOver: (e) => this.onBlankDragOver(e),
-            blankDragLeave: (e) => this.onBlankDragLeave(e),
-            blankDrop: (e) => this.onBlankDrop(e),
+            blankDragOver: (e) => onBlankDragOver(this, e),
+            blankDragLeave: (e) => onBlankDragLeave(this, e),
+            blankDrop: (e) => onBlankDrop(this, e),
             toggleDelegate: () => toggleDelegate(this),
             selectParentFramework: () => selectParentFramework(this),
             sourcesClick: (nodeId, _side, e) => showSourcesMenu(this, nodeId, e),
@@ -464,141 +483,4 @@ export class DesignView extends ReactViewBase {
         };
     }
 
-    // ============================================================
-    // 拖拽：判定用 C2_Tree/drag（纯逻辑），执行交 design/drag（写数据）
-    // ============================================================
-
-    /** 判定所需的最小查询能力（注入给 C2_Tree/drag） */
-    private get dragQuery(): DragQuery {
-        return {
-            kindOf: (nodeId) => this.pipe.GET_Node(nodeId)?.kind,
-            selectedFrameworkId: () => this.selectedFrameworkId,
-        };
-    }
-
-    private onDragStart(ctx: NodeLineCtx, e: DragEvent): void {
-        this.dragSource = { sourceId: ctx.nodeId, parentId: ctx.parentId, kind: this.pipe.GET_Node(ctx.nodeId)?.kind };
-        const dt = e.dataTransfer;
-        if (dt) {
-            dt.setData('text/plain', JSON.stringify(this.dragSource));
-            dt.effectAllowed = 'move';
-        }
-        this.draggingId = ctx.nodeId;
-        this.refresh();
-    }
-
-    private onDragEnd(): void {
-        this.dragSource = null;
-        this.draggingId = null;
-        this.clearDropHint();
-    }
-
-    private onDragOver(ctx: NodeLineCtx, side: TreeSide, e: DragEvent): void {
-        const source = this.dragSource;
-        if (!source) return;
-        e.preventDefault();
-        const target = resolveDropTarget(e);
-        if (!target) return;
-        let hint: NodeLineDropHint | null = null;
-        if (side === 'left') {
-            // 左栏仅同父同级排序：上方→目标前、下方→目标后；中心（子级）与跨父/跨级驳回
-            const ok = target.parentId === source.parentId && target.nodeId !== source.sourceId && target.zone !== 'middle';
-            hint = ok ? (target.zone === 'above' ? 'before' : 'after') : 'invalid';
-        } else if (canDropByTarget(this.dragQuery, source, target)) {
-            hint = target.zone === 'above' ? 'before' : target.zone === 'below' ? 'after' : 'child';
-        } else {
-            hint = 'invalid';
-        }
-        if (e.dataTransfer) e.dataTransfer.dropEffect = hint === 'invalid' ? 'none' : 'move';
-        this.setDropHint(target.nodeId, hint);
-        void ctx;
-    }
-
-    private onDrop(ctx: NodeLineCtx, side: TreeSide, e: DragEvent): void {
-        const source = this.dragSource;
-        void ctx;
-        this.clearDropHint();
-        if (!source) return;
-        e.preventDefault();
-        const target = resolveDropTarget(e);
-        if (!target) return;
-
-        if (side === 'left') {
-            if (target.zone !== 'middle' && target.parentId === source.parentId && target.nodeId !== source.sourceId) {
-                const before = target.zone === 'above';
-                if (source.parentId) moveChildInFollows(this, source.parentId, source.sourceId, target.nodeId, before);
-                else moveTopInOrder(this, source.sourceId, target.nodeId, before);
-            }
-        } else if (canDropByTarget(this.dragQuery, source, target)) {
-            if (target.zone === 'middle') {
-                moveChildAcrossParents(this, source.parentId, source.sourceId, target.nodeId, '', false);
-            } else {
-                const before = target.zone === 'above';
-                if (target.parentId === source.parentId) {
-                    moveChildInFollows(this, source.parentId, source.sourceId, target.nodeId, before);
-                } else {
-                    moveChildAcrossParents(this, source.parentId, source.sourceId, target.parentId, target.nodeId, before);
-                }
-            }
-        }
-        this.dragSource = null;
-        this.draggingId = null;
-        this.refresh();
-    }
-
-    /** 拖到右栏空白：改为选中框架的直属子节点 */
-    private onBlankDragOver(e: DragEvent): void {
-        const source = this.dragSource;
-        if (!source || !canDropToFrameworkBlank(this.dragQuery, source)) return;
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-        this.clearDropHint();
-        if (!this.dropBlank) {
-            this.dropBlank = true;
-            this.refresh();
-        }
-    }
-
-    private onBlankDragLeave(e: DragEvent): void {
-        // 只有真正离开窗口（relatedTarget 为空）才清理，避免在栏内子元素间移动时闪烁
-        if (e.relatedTarget) return;
-        if (!this.dropBlank) return;
-        this.dropBlank = false;
-        this.refresh();
-    }
-
-    private onBlankDrop(e: DragEvent): void {
-        const source = this.dragSource;
-        if (!source || !canDropToFrameworkBlank(this.dragQuery, source)) return;
-        e.preventDefault();
-        this.dropBlank = false;
-        moveChildAcrossParents(this, source.parentId, source.sourceId, this.selectedFrameworkId!, '', false);
-        this.dragSource = null;
-        this.draggingId = null;
-        this.refresh();
-    }
-
-    private setDropHint(nodeId: string, hint: NodeLineDropHint | null): void {
-        if (!hint) return this.clearDropHint();
-        if (this.dropHint?.nodeId === nodeId && this.dropHint.hint === hint) return;
-        this.dropHint = { nodeId, hint };
-        this.refresh();
-    }
-
-    private clearDropHint(): void {
-        if (!this.dropHint) return;
-        this.dropHint = null;
-        this.refresh();
-    }
-
-    /** 拖拽进行中右键：取消本次拖拽并清理指示（原 installDragCancelHandler 的等价实现） */
-    private onDocumentContextMenu = (e: MouseEvent): void => {
-        if (!this.dragSource) return;
-        e.preventDefault();
-        e.stopPropagation();
-        this.dragSource = null;
-        this.draggingId = null;
-        this.dropBlank = false;
-        this.clearDropHint();
-    };
 }
