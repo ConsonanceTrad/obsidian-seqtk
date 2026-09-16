@@ -169,7 +169,12 @@ export function buildNodeLine(
               : [],
         sources: data.sources,
         state: data.state ?? "plan",
-        showsState: kindUsesState(kind),
+        /*
+         * 状态圆点只给事务类节点（构想 / 方向 / 目标 / 工序 / 清单 / 事项 …）。
+         * 框架不显示：框架状态由自动化（设置里的状态传播规则）管理，手动切换对设计无意义 ——
+         * 与其留一个「可以点、但通常不该点」的圆点，不如让卡片只表达结构与分组。
+         */
+        showsState: kindUsesState(kind) && !isFramework,
         stateTooltip: NODE_STATE_LABELS[data.state ?? "plan"],
         hasChildren: f.hasChildren,
         expanded: f.expanded,
