@@ -540,20 +540,26 @@ button.seqtk-source-badge:hover {
  * 于是每层框架都比同层普通节点多缩进 14px，父框架的标题与它的孙辈节点看起来像同一层。
  */
 .seqtk-fw-card {
-  border: 1px solid var(--background-modifier-border);
+  /*
+   * 边框用 outline 表达（不占布局）：用 border 会占掉上下各 1px，嵌套几层就比普通行高出
+   * 几像素 —— 行高于是随「是不是框架、嵌套多深」而变。outline 不参与布局，观感等价；
+   * 负的 outline-offset 把它画在圆角内侧，与原来的内边框一致。
+   */
+  outline: 1px solid var(--background-modifier-border);
+  outline-offset: -1px;
   border-radius: 6px;
   background: var(--background-secondary);
   overflow: hidden;
 }
 
 .seqtk-fw-card:hover {
-  border-color: var(--interactive-accent);
+  outline-color: var(--interactive-accent);
 }
 
-/* 嵌套子框架卡片：只换视觉（虚线边框 + 浅色底），左缘与父层保持一致 */
+/* 嵌套子框架卡片：只换视觉（虚线），左缘与父层一致、垂直节奏与普通行一致 */
 .seqtk-fw-card .seqtk-fw-card {
-  margin: 2px 6px 6px 0;
-  border-style: dashed;
+  margin: 2px 6px 2px 0;
+  outline-style: dashed;
 }
 
 /* 状态圆点（四色，替代文字徽章；悬停 title 显示状态名） */
@@ -595,12 +601,20 @@ button.seqtk-open-btn {
   justify-content: center;
   width: 20px;
   height: 20px;
+  /*
+   * box-sizing 必须显式写。不写时 width/height 只约束内容区，再加上 padding 与 border，
+   * 实际占位是 30×29 —— 比同一行的类型徽章（≈21px）高出一截，于是「带这个按钮的行」
+   * 比其它行高 8px，行高就参差不齐了。同目录的 button.seqtk-source-badge 已写明这一条，
+   * 此处此前漏了。
+   */
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--background-modifier-border) 10%, transparent);
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  /* 偏心 padding 是给 lucide 图标做视觉居中的，不是尺寸来源（尺寸已由 border-box 固定） */
   padding: 3px;
   padding-left: 5px;
   padding-bottom: 4px;
@@ -609,6 +623,21 @@ button.seqtk-open-btn {
 .seqtk-open-btn:hover {
   background: var(--background-modifier-hover);
   color: var(--text-accent);
+}
+
+/*
+ * 行高护栏（左 / 右栏各一条）
+ *
+ * 行高由「类型徽章（≈21px）+ 上下 padding」决定，行内任何元素都不得超过它：
+ * 按钮与徽章都已显式 box-sizing: border-box，这里再兜一道 —— 今后若有人往行里塞更大的
+ * 元素，行高也不会跟着变（要变就改这两个基准，而不是让某一类行单独变高）。
+ */
+.seqtk-row {
+  min-height: 27px;   /* 3px×2 padding + 21px 内容 */
+}
+
+.seqtk-frame-item {
+  min-height: 29px;   /* 4px×2 padding + 21px 内容 */
 }
 
 /* ============================================================
