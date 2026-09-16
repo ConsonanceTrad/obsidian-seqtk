@@ -271,7 +271,7 @@ function InlineRenameOverlay({
                 className="seqtk-inline-edit-input"
                 // 提示只在输入为空时可见 —— 重命名预填了原名称，所以平时看不到它；
                 // 清空后（或整行选中删掉）会提示此刻可用的快捷键，与按钮 tooltip 一致
-                placeholder="Enter 确认；Esc 取消"
+                placeholder="Enter 确认，Esc 取消"
                 defaultValue={initial}
                 onKeyDown={(e) => {
                     if (e.key === "Enter") {
