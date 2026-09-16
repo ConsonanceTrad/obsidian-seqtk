@@ -240,7 +240,13 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
     ];
 }
 
-/** 框架行右键：展开/收起 + 行内新建 + 重命名 + 时间规则 + 模板 + 归档 */
+/**
+ * 框架行右键：展开/收起 + 行内新建 + 重命名 + 时间规则 + 模板 + 归档
+ *
+ * 「追加子项」只在左栏出现（在那一栏它叫「追加子框架」）：右栏的框架卡片已经给了
+ * 「新建构思 / 新建清单 / 新建事件」三个明确入口，再挂一条「按允许类型新建」的泛化项，
+ * 只会让人在几个入口之间犹豫该点哪个。
+ */
 function getFrameMenuDefinitions(
     view: DesignView,
     node: TreeNode,
@@ -251,7 +257,7 @@ function getFrameMenuDefinitions(
         startCreateChild(view, ctxFromEvent(e, node), side, [kind]);
     return [
         ...expandDefs(view, node, side),
-        ...newChildDefs(view, node, e, side),
+        ...(side === 'left' ? newChildDefs(view, node, e, side) : []),
         ...(side === 'right' ? rightCreateDefs(view, node, e) : []),
         ...(side === 'right' ? evidenceSubmenuDefs(addEvidence) : []),
         {
