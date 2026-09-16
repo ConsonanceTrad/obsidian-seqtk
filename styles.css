@@ -549,7 +549,17 @@ button.seqtk-source-badge:hover {
   outline-offset: -1px;
   border-radius: 6px;
   background: var(--background-secondary);
+  /*
+   * 裁剪：圆角需要 overflow 才能裁掉卡片内的方角底色，但**不能连浮层一起裁** ——
+   * 行内新建 / 行内重命名的按钮区（含「连续输入」开关）相对主行 top:100% 定位、落在主行下方，
+   * 不参与布局，所以卡片高度里没有它们的位置：当这一行是卡片最后一个元素时，
+   * 它们正好落在卡片底边之外，会被 overflow: hidden 整块裁掉（表现为按钮不渲染）。
+   * overflow: clip + overflow-clip-margin 把裁剪边界向外扩 32px：圆角照裁，浮层能露出来。
+   * 第一行是回退 —— 不支持 clip-margin 的环境仍按原来的方式裁剪（与修复前一致，不会更糟）。
+   */
   overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 32px;
 }
 
 .seqtk-fw-card:hover {
