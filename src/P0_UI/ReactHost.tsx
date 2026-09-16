@@ -14,13 +14,17 @@
 import { createRoot, type Root } from "react-dom/client";
 import { App as AntApp, ConfigProvider } from "antd";
 import type { ReactNode } from "react";
+import { ViewErrorBoundary } from "./ViewErrorBoundary";
 
 /** 把 React 树挂载到容器，返回 root 句柄（由调用方在 onClose 中 unmount） */
 export function mountReact(container: HTMLElement, node: ReactNode): Root {
     const root = createRoot(container);
     root.render(
         <ConfigProvider>
-            <AntApp>{node}</AntApp>
+            <AntApp>
+                {/* 视图级错误边界：任一子树抛错只换掉那一块，不让整个视图消失（见该组件文件头） */}
+                <ViewErrorBoundary>{node}</ViewErrorBoundary>
+            </AntApp>
         </ConfigProvider>,
     );
     return root;

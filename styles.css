@@ -2467,3 +2467,40 @@ button.seqtk-icon-btn.is-active {
 .seqtk-hub-view.seqtk-hub-delegated .seqtk-hub-list {
   display: none;
 }
+
+/* ============================================================
+   视图级错误卡（ViewErrorBoundary）
+   —— 面板子树抛错时只替换那一块，避免整块视图「闪退」后无从下手
+   ============================================================ */
+.seqtk-view-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.seqtk-view-error-title {
+  font-weight: 600;
+  color: var(--text-error, #d33);
+}
+
+.seqtk-view-error-desc {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-view-error-stack {
+  max-width: 100%;
+  max-height: 40vh;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+}
