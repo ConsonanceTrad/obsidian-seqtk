@@ -15,23 +15,23 @@
  */
 
 import { useMemo, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { useStore } from "../../P0_UI/useStore";
-import type { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
+import { useStore } from "../../../../P0_UI/useStore";
+import type { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
 import {
     LINE_METRICS_LEFT,
     LINE_METRICS_RIGHT,
     type NodeLineCtx,
     type NodeLineHost,
-} from "../../P7_Render/Composition/C1_NodeLine/NodeLine";
-import { NodeTreePanel } from "../../P7_Render/Composition/C2_Tree/NodeTreePanel";
-import { IconButton } from "../../P7_Render/Composition/C1_NodeLine/IconButton";
+} from "../../../../P7_Render/Composition/C1_NodeLine/NodeLine";
+import { NodeTreePanel } from "../../../../P7_Render/Composition/C2_Tree/NodeTreePanel";
+import { IconButton } from "../../../../P7_Render/Composition/C1_NodeLine/IconButton";
 import type {
     NodeInlineBody,
     NodeInlineCreating,
     NodeTreeActions,
     TreeNodeItem,
-} from "../../P7_Render/Composition/C2_Tree/NodeTree";
-import type { NodeKindValue } from "../../P4_Nodes/NodeKind/NodeKind";
+} from "../../../../P7_Render/Composition/C2_Tree/NodeTree";
+import type { NodeKindValue } from "../../../../P4_Nodes/NodeKind/NodeKind";
 
 /** 栏标识（左栏框架树 / 右栏节点树） */
 export type TreeSide = "left" | "right";

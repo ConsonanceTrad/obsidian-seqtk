@@ -16,7 +16,7 @@
  */
 
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
-import type { DesignView } from '../Design';
+import type { DesignView } from '../Core/Design';
 
 /** 左栏宽度的默认值与取值范围（与 DesignPanel 的拖动上限保持一致） */
 export const LEFT_PANE_DEFAULT = 280;

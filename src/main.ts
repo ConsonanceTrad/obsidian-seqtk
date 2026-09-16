@@ -9,9 +9,9 @@ import type {OperationQueue} from "./P5_Data/Queue/OperationQueue";
 import type {DataPipe} from "./P5_Data/CoPipe/DataPipe";
 import {Module_Register} from "./P1_Register/Zxport";
 import type {PanelEntry} from "./P6_Views/panelRegistry";
-import {FRAMEWORK_TREE} from "./P6_Views/V1_Affair/design/FrameworkTreeShared";
+import {FRAMEWORK_TREE} from "./P6_Views/V1_Affair/Design/Slice/FrameworkTreeShared";
 import {VIEW_TYPE_DELEGATED_TREE} from "./P6_Views/V1_Affair/DelegatedTree";
-import {DesignView, VIEW_TYPE_DESIGN} from "./P6_Views/V1_Affair/Design";
+import {DesignView, VIEW_TYPE_DESIGN} from "./P6_Views/V1_Affair/Design/Core/Design";
 import {VIEW_TYPE_HUB_SIDE} from "./P6_Views/V0_Common/Hub";
 
 /** 缓存落盘防抖（毫秒）：文件队列跑完后延迟落盘，密集变更只写一次 */

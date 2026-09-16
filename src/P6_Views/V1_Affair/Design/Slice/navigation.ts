@@ -20,17 +20,17 @@
  * - 新增一种「切到某处 / 展开某处」的入口 → 在此追加 export function，并让菜单接线
  */
 
-import { NodePickModal } from '../../../P7_Render/Structure/S2_Modal/NodePickModal';
-import { canBeChildOf } from '../../../P7_Render/Composition/C2_Tree/drag';
-import { NODE_KIND_LABELS, isFrameworkKind } from '../../../P4_Nodes/NodeFacade';
-import { VIEW_TYPE_DELEGATED_TREE } from '../DelegatedTree';
-import { VIEW_TYPE_HUB_SIDE } from '../../V0_Common/Hub';
+import { NodePickModal } from '../../../../P7_Render/Structure/S2_Modal/NodePickModal';
+import { canBeChildOf } from '../../../../P7_Render/Composition/C2_Tree/drag';
+import { NODE_KIND_LABELS, isFrameworkKind } from '../../../../P4_Nodes/NodeFacade';
+import { VIEW_TYPE_DELEGATED_TREE } from '../../DelegatedTree';
+import { VIEW_TYPE_HUB_SIDE } from '../../../V0_Common/Hub';
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
 import { moveChildAcrossParents } from './drag';
 import { setNodeState } from './actions';
-import type { TreeNode } from './tree';
-import type { TreeSide } from '../DesignPanel';
-import type { DesignView } from '../Design';
+import type { TreeNode } from '../Tool/tree';
+import type { TreeSide } from '../Core/DesignPanel';
+import type { DesignView } from '../Core/Design';
 
 /**
  * 委托左栏框架树到中控台侧栏（进行 / 取消）

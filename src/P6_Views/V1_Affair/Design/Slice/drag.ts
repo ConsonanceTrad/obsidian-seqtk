@@ -13,8 +13,8 @@
  * 指示由 `NodeLineData.dragging` / `dropHint` 驱动，清状态即清指示。
  */
 
-import type { DesignView } from '../Design';
-import { buildFrameworkTree } from './tree';
+import type { DesignView } from '../Core/Design';
+import { buildFrameworkTree } from '../Tool/tree';
 
 /** 在同父 follows 中把 sourceId 移到 targetId 前/后，持久化并重渲染 */
 export function moveChildInFollows(view: DesignView, parentId: string, sourceId: string, targetId: string, before: boolean): void {

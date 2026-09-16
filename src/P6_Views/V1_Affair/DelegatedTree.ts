@@ -20,7 +20,7 @@ import { AutoView } from "../../P1_Register/View";
 import { AutoRegister } from "../../P1_Register/Comd";
 import { ReactViewBase } from "../../P0_UI/ViewBase";
 import { DelegateTreeController } from "./DelegateTreeController";
-import { FRAMEWORK_TREE } from "./design/FrameworkTreeShared";
+import { FRAMEWORK_TREE } from "./Design/Slice/FrameworkTreeShared";
 import type SeqtkPlugin from "../../main";
 import type { PanelEntry } from "../panelRegistry";
 import type { DataPipe } from "../../P5_Data/CoPipe/DataPipe";
@@ -40,7 +40,7 @@ export class DelegatedTreeView extends ReactViewBase {
     static metas: PanelEntry[] = [
         {
             viewType: VIEW_TYPE_DELEGATED_TREE,
-            title: '框架树（委托）',
+            title: '框架树委托',
             icon: 'panel-left',
             description: '设计视图左栏的框架树被委托到此，与左栏共享展开与选中状态。',
         },

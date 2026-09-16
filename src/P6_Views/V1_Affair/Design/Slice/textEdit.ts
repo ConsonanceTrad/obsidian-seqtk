@@ -17,10 +17,10 @@
  */
 
 import { Notice } from 'obsidian';
-import type SeqtkPlugin from '../../../main';
-import { NodePickModal } from '../../../P7_Render/Structure/S2_Modal/NodePickModal';
-import { TextTreeImportModal } from '../../../P7_Render/Structure/S2_Modal/TextTreeImportModal';
-import type { TextTreeNode } from '../../../P2_Tools/Parse/TextTree';
+import type SeqtkPlugin from '../../../../main';
+import { NodePickModal } from '../../../../P7_Render/Structure/S2_Modal/NodePickModal';
+import { TextTreeImportModal } from '../../../../P7_Render/Structure/S2_Modal/TextTreeImportModal';
+import type { TextTreeNode } from '../../../../P2_Tools/Parse/TextTree';
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
 import {
     APPLY_TextTreeEdit,
@@ -29,7 +29,7 @@ import {
     EXPORT_SubtreeAsText,
     PLAN_TextTreeEdit,
 } from './textTree';
-import type { DesignView } from '../Design';
+import type { DesignView } from '../Core/Design';
 
 /**
  * 打开文本树导入流程：解析预览 → 选放置位置 → 投递

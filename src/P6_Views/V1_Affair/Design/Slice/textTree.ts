@@ -9,14 +9,14 @@
  * 数据面一律经 pipe（见 P6_Views/Views.md 边界判据）。
  */
 
-import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
-import type { GetChildrenFn } from '../../../P5_Data/MdFile/FileManagerModules/FileDelete';
-import type { SeqtkNode } from '../../../P4_Nodes/NodeFacade';
-import { kindUsesState } from '../../../P7_Render/Structure/S2_Modal/TransactionModals';
+import type { DataPipe } from '../../../../P5_Data/CoPipe/DataPipe';
+import type { GetChildrenFn } from '../../../../P5_Data/MdFile/FileManagerModules/FileDelete';
+import type { SeqtkNode } from '../../../../P4_Nodes/NodeFacade';
+import { kindUsesState } from '../../../../P7_Render/Structure/S2_Modal/TransactionModals';
 import {
     SERIALIZE_TextTree,
     type TextTreeNode,
-} from '../../../P2_Tools/Parse/TextTree';
+} from '../../../../P2_Tools/Parse/TextTree';
 
 /** 投递结果 */
 export interface DeliverResult {

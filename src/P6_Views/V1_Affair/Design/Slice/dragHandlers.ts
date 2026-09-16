@@ -15,16 +15,16 @@
  * - 新增一种拖拽（如拖到时间轴）→ 在此加一组 dragover/drop，并复用同一套判定函数
  */
 
-import type { NodeLineCtx, NodeLineDropHint } from '../../../P7_Render/Composition/C1_NodeLine/NodeLine';
+import type { NodeLineCtx, NodeLineDropHint } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
 import {
     canDrop as canDropByTarget,
     canDropToFrameworkBlank,
     resolveDropTarget,
     type DragQuery,
-} from '../../../P7_Render/Composition/C2_Tree/drag';
+} from '../../../../P7_Render/Composition/C2_Tree/drag';
 import { moveChildAcrossParents, moveChildInFollows, moveTopInOrder } from './drag';
-import type { TreeSide } from '../DesignPanel';
-import type { DesignView } from '../Design';
+import type { TreeSide } from '../Core/DesignPanel';
+import type { DesignView } from '../Core/Design';
 
 /** 判定所需的最小查询能力（注入给 C2_Tree/drag） */
 export function dragQuery(view: DesignView): DragQuery {

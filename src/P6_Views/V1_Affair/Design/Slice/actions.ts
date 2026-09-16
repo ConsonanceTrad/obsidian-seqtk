@@ -15,25 +15,25 @@
  *   菜单声明（Design.ts 的 getXxxMenuDefinitions）中接线
  */
 
-import { NODE_KIND } from '../../../P4_Nodes/NodeFacade';
-import { GET_FileByPath } from '../../../P5_Data/MdFile/PathTools/PathParse';
+import { NODE_KIND } from '../../../../P4_Nodes/NodeFacade';
+import { GET_FileByPath } from '../../../../P5_Data/MdFile/PathTools/PathParse';
 import { Notice, TFile, MarkdownView, getFrontMatterInfo } from 'obsidian';
-import type { DesignView } from '../Design';
+import type { DesignView } from '../Core/Design';
 import {
   TransactionCreateModal,
   TransactionEditModal,
   kindUsesState,
-} from '../../../P7_Render/Structure/S2_Modal/TransactionModals';
-import type { TreeNode } from './tree';
-import type { EventNature, NodeKind, SeqtkState, SeqtkNode } from '../../../P4_Nodes/NodeFacade';
-import { COMPUTE_Propagation } from '../../../P4_Nodes/NodeField/Propagation';
-import { NEEDS_Confirm, STRICT_CONFIRM_WORD } from '../../../P4_Nodes/NodeField/DeletionPolicy';
-import { DestructiveConfirmModal } from '../../../P7_Render/Structure/S2_Modal/DestructiveModals';
+} from '../../../../P7_Render/Structure/S2_Modal/TransactionModals';
+import type { TreeNode } from '../Tool/tree';
+import type { EventNature, NodeKind, SeqtkState, SeqtkNode } from '../../../../P4_Nodes/NodeFacade';
+import { COMPUTE_Propagation } from '../../../../P4_Nodes/NodeField/Propagation';
+import { NEEDS_Confirm, STRICT_CONFIRM_WORD } from '../../../../P4_Nodes/NodeField/DeletionPolicy';
+import { DestructiveConfirmModal } from '../../../../P7_Render/Structure/S2_Modal/DestructiveModals';
 import {
   getAllowedChildKinds,
   isTransactionKind,
   isFrameworkKind,
-} from '../../../P4_Nodes/NodeFacade';
+} from '../../../../P4_Nodes/NodeFacade';
 
 /** 创建节点输入(模态框 / 行内新建共用) */
 export interface CreateInput {

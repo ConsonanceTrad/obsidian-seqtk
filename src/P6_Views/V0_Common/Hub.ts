@@ -26,7 +26,7 @@ import type SeqtkPlugin from "../../main";
 import type {PluginSettings} from "../../P3_Settings/Settings";
 import {HUB_CATEGORIES, type PanelEntry} from "../panelRegistry";
 import {DelegateTreeController} from '../V1_Affair/DelegateTreeController';
-import {FRAMEWORK_TREE} from '../V1_Affair/design/FrameworkTreeShared';
+import {FRAMEWORK_TREE} from '../V1_Affair/Design/Slice/FrameworkTreeShared';
 import {mountReact} from '../../P0_UI/ReactHost';
 import type {Root} from 'react-dom/client';
 import type {DataPipe} from '../../P5_Data/CoPipe/DataPipe';

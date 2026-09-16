@@ -23,13 +23,13 @@ import {
     buildNode,
     sortByFollows,
     type TreeNode,
-} from './tree';
-import { buildFrameLine, buildNodeLine, buildTreeItems, type LineOverlay } from './viewModel';
+} from '../Tool/tree';
+import { buildFrameLine, buildNodeLine, buildTreeItems, type LineOverlay } from '../Tool/viewModel';
 import { resolveNavBack } from './navigation';
-import { NODE_KIND_LABELS } from '../../../P4_Nodes/NodeFacade';
-import type { DesignViewState, TreeSide } from '../DesignPanel';
-import type { TreeNodeItem } from '../../../P7_Render/Composition/C2_Tree/NodeTree';
-import type { DesignView } from '../Design';
+import { NODE_KIND_LABELS } from '../../../../P4_Nodes/NodeFacade';
+import type { DesignViewState, TreeSide } from '../Core/DesignPanel';
+import type { TreeNodeItem } from '../../../../P7_Render/Composition/C2_Tree/NodeTree';
+import type { DesignView } from '../Core/Design';
 
 /** 组装完整视图状态 */
 export function buildState(view: DesignView): DesignViewState {

@@ -22,7 +22,7 @@ import {
     BUILD_Menu,
     type MenuDefinition,
     type MenuDefinitions,
-} from '../../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
+} from '../../../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
 import {
     COLLAPSE_ITEM,
     EVIDENCE_ICONS,
@@ -30,9 +30,9 @@ import {
     ICON,
     SECTION,
     STATE_ICON,
-} from '../../../P7_Render/Composition/C3_RightClickMenu/MenuAppearance';
-import { EVIDENCE_KINDS } from '../../../P7_Render/Composition/C2_Tree/drag';
-import { kindUsesState } from '../../../P7_Render/Structure/S2_Modal/TransactionModals';
+} from '../../../../P7_Render/Composition/C3_RightClickMenu/MenuAppearance';
+import { EVIDENCE_KINDS } from '../../../../P7_Render/Composition/C2_Tree/drag';
+import { kindUsesState } from '../../../../P7_Render/Structure/S2_Modal/TransactionModals';
 import {
     NODE_KIND,
     NODE_KIND_LABELS,
@@ -40,18 +40,18 @@ import {
     STATE_VALUES,
     getAllowedChildKinds,
     isFrameworkKind,
-} from '../../../P4_Nodes/NodeFacade';
-import type { NodeKindValue } from '../../../P4_Nodes/NodeKind/NodeKind';
-import type { NodeLineCtx } from '../../../P7_Render/Composition/C1_NodeLine/NodeLine';
+} from '../../../../P4_Nodes/NodeFacade';
+import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
+import type { NodeLineCtx } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
 import { archiveNode, openEdit, openNodeFile, setNodeState } from './actions';
 import { saveAsTemplate, useTemplate } from './templateActions';
 import { changeParent, toggleExpandAll } from './navigation';
 import { openBodyEdit, startCreateBlank, startCreateChild, startRename } from './inlineEdit';
 import { addExternalSource, createTimestampDoc, manageExternalSources } from './externalInfo';
 import { copySubtreeAsText, editFrameworkContentAsText, editSubtreeAsText } from './textEdit';
-import { buildFrameworkNode, buildNode, type TreeNode } from './tree';
-import type { TreeSide } from '../DesignPanel';
-import type { DesignView } from '../Design';
+import { buildFrameworkNode, buildNode, type TreeNode } from '../Tool/tree';
+import type { TreeSide } from '../Core/DesignPanel';
+import type { DesignView } from '../Core/Design';
 
 // ============================================================
 // 装配入口

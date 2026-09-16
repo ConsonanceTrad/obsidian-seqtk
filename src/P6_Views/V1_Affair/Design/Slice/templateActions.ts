@@ -13,21 +13,21 @@
  *   Design.ts 的 getXxxMenuDefinitions 中接线
  */
 
-import { NODE_KIND } from '../../../P4_Nodes/NodeFacade';
+import { NODE_KIND } from '../../../../P4_Nodes/NodeFacade';
 import { Notice, Menu } from 'obsidian';
-import type { DesignView } from '../Design';
+import type { DesignView } from '../Core/Design';
 import {
   cloneSubtree,
   parameterizeText,
   TEMPLATE_FRAMEWORK_NAME_TOKEN,
-} from '../../../P2_Tools/Parse/TempParse';
+} from '../../../../P2_Tools/Parse/TempParse';
 import {
   SelectFrameworkModal,
   TemplateUnitSelectModal,
   listTemplateUnits,
-} from '../../../P7_Render/Structure/S2_Modal/TemplateModals';
-import { getAllowedChildKinds } from '../../../P4_Nodes/NodeFacade';
-import type { TreeNode } from './tree';
+} from '../../../../P7_Render/Structure/S2_Modal/TemplateModals';
+import { getAllowedChildKinds } from '../../../../P4_Nodes/NodeFacade';
+import type { TreeNode } from '../Tool/tree';
 
 /**
  * 右键菜单模板操作组（普通节点行 / 框架行共用）：

@@ -57,7 +57,7 @@
 ## 视图的切片约定（新增视图一律照此组织）
 
 视图类只保留「装配 / 注册 / 微调 / 数据注入 / 交互转发」，其余**按功能切片**放进该视图目录下的子目录
-（事务设计 → `V1_Affair/design/`），**一个切片一个文件**。禁止把新功能继续堆进视图类 ——
+（事务设计 → `V1_Affair/Design/`），**一个切片一个文件**。禁止把新功能继续堆进视图类 ——
 堆到几百行之后，菜单、拖拽、数据写、会话恢复会全部绞在一个类里，只能靠通读全文才能改动一处。
 
 | 位置 | 放什么 | 禁止 |
@@ -76,7 +76,7 @@
 判据：视图类超过约 400 行，或一段逻辑能用「动词 + 名词」说清（构建状态、执行一个动作、声明一份菜单），
 就该切片。**新功能一律加进切片或新切片，不回填视图壳。**
 
-现有落地样例：`V1_Affair/Design.ts`（装配壳，约 400 行）+ `V1_Affair/design/`（tree / viewModel /
+现有落地样例：`V1_Affair/Design/Core/Design.ts`（装配壳，约 400 行）+ `V1_Affair/Design/`（tree / viewModel /
 viewState / session / actions / navigation / inlineEdit / textEdit / externalInfo /
 menuDefinitions / templateActions / drag / dragHandlers）。
 

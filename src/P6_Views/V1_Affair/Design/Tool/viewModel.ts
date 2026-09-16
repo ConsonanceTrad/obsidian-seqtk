@@ -20,18 +20,18 @@ import {
     getCategoryOf,
     isFrameworkKind,
     isTransactionKind,
-} from "../../../P4_Nodes/NodeFacade";
-import type { EventNature, SeqtkNode } from "../../../P4_Nodes/NodeFacade";
-import { describeCycleRule } from "../../../P2_Tools/Time/RuleParse";
-import { formatShortDate } from "../../../P2_Tools/Time/DateFormat";
-import { tooltipBodyText } from "../../../P7_Render/Composition/C4_Tooltip/tooltip";
+} from "../../../../P4_Nodes/NodeFacade";
+import type { EventNature, SeqtkNode } from "../../../../P4_Nodes/NodeFacade";
+import { describeCycleRule } from "../../../../P2_Tools/Time/RuleParse";
+import { formatShortDate } from "../../../../P2_Tools/Time/DateFormat";
+import { tooltipBodyText } from "../../../../P7_Render/Composition/C4_Tooltip/tooltip";
 import type {
     NodeLineBadge,
     NodeLineData,
-} from "../../../P7_Render/Composition/C1_NodeLine/NodeLine";
-import type { TreeNodeItem } from "../../../P7_Render/Composition/C2_Tree/NodeTree";
-import { kindUsesState } from "../../../P7_Render/Structure/S2_Modal/TransactionModals";
-import type { DataPipe } from "../../../P5_Data/CoPipe/DataPipe";
+} from "../../../../P7_Render/Composition/C1_NodeLine/NodeLine";
+import type { TreeNodeItem } from "../../../../P7_Render/Composition/C2_Tree/NodeTree";
+import { kindUsesState } from "../../../../P7_Render/Structure/S2_Modal/TransactionModals";
+import type { DataPipe } from "../../../../P5_Data/CoPipe/DataPipe";
 import type { TreeNode } from "./tree";
 
 /** 构建一行时的树形标志（由遍历过程给出） */

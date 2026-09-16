@@ -14,7 +14,7 @@
  * SimpleStore 广播快照；DesignView 自己的重绘仍走它自己的 stateStore。
  */
 
-import { SimpleStore } from '../../../P5_Data/Svelte/SimpleStore';
+import { SimpleStore } from '../../../../P5_Data/Svelte/SimpleStore';
 
 export interface FrameworkTreeSnapshot {
     /** 是否处于委托状态（框架树在委托面板显示） */

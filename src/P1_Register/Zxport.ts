@@ -15,7 +15,7 @@ import "../P6_Views/V0_Common/Hub";
 import "../P6_Views/V0_Common/Log";
 import "../P6_Views/V0_Common/Recycle";
 import "../P6_Views/V1_Affair/DelegatedTree";
-import "../P6_Views/V1_Affair/Design";
+import "../P6_Views/V1_Affair/Design/Core/Design";
 import "../P6_Views/V1_Affair/Overview";
 import "../P6_Views/V1_Affair/Route";
 import "../P6_Views/V1_Affair/Template";

@@ -20,10 +20,10 @@ import {
     GET_SourceLabel,
     GET_SourceTarget,
     type ExternalSource,
-} from '../../../P4_Nodes/NodeField/AttriGroup/External';
-import { ExternalSourcesModal } from '../../../P7_Render/Structure/S2_Modal/ExternalSourcesModal';
-import { TextPromptModal } from '../../../P7_Render/Structure/S2_Modal/TextPromptModal';
-import type { DesignView } from '../Design';
+} from '../../../../P4_Nodes/NodeField/AttriGroup/External';
+import { ExternalSourcesModal } from '../../../../P7_Render/Structure/S2_Modal/ExternalSourcesModal';
+import { TextPromptModal } from '../../../../P7_Render/Structure/S2_Modal/TextPromptModal';
+import type { DesignView } from '../Core/Design';
 
 /**
  * 添加一条外部信息源（链接或库内文件路径）

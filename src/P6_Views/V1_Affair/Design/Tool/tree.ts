@@ -13,10 +13,10 @@
  * - 调整排序规则 → 改 sortByFollows / buildFrameworkTree 的顶级排序段
  */
 
-import { NODE_KIND } from '../../../P4_Nodes/NodeFacade';
-import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
-import type { NodeKind, SeqtkNode } from '../../../P4_Nodes/NodeFacade';
-import { isFrameworkKind } from '../../../P4_Nodes/NodeFacade';
+import { NODE_KIND } from '../../../../P4_Nodes/NodeFacade';
+import type { DataPipe } from '../../../../P5_Data/CoPipe/DataPipe';
+import type { NodeKind, SeqtkNode } from '../../../../P4_Nodes/NodeFacade';
+import { isFrameworkKind } from '../../../../P4_Nodes/NodeFacade';
 
 /** 树形节点 */
 export interface TreeNode {

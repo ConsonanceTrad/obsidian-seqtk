@@ -28,13 +28,13 @@
  *   design/drag.ts            拖拽「执行」（写数据）
  */
 
-import {AutoView} from "../../P1_Register/View";
-import {AutoRegister} from "../../P1_Register/Comd";
-import type SeqtkPlugin from "../../main";
-import type {PanelEntry} from "../panelRegistry";
+import {AutoView} from "../../../../P1_Register/View";
+import {AutoRegister} from "../../../../P1_Register/Comd";
+import type SeqtkPlugin from "../../../../main";
+import type {PanelEntry} from "../../../panelRegistry";
 import { createElement, type ReactNode } from 'react';
 import { WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
-import { ReactViewBase } from '../../P0_UI/ViewBase';
+import { ReactViewBase } from '../../../../P0_UI/ViewBase';
 import {
     DesignPanel,
     type DesignActions,
@@ -42,12 +42,12 @@ import {
     type DesignViewState,
     type TreeSide,
 } from './DesignPanel';
-import { SimpleStore } from '../../P5_Data/Svelte/SimpleStore';
-import { Save_Setting } from '../../P3_Settings/Settings';
-import { BUILD_Menu } from '../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
-import type { DragSource } from '../../P7_Render/Composition/C2_Tree/drag';
-import type { NodeLineDropHint } from '../../P7_Render/Composition/C1_NodeLine/NodeLine';
-import { FRAMEWORK_TREE } from './design/FrameworkTreeShared';
+import { SimpleStore } from '../../../../P5_Data/Svelte/SimpleStore';
+import { Save_Setting } from '../../../../P3_Settings/Settings';
+import { BUILD_Menu } from '../../../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
+import type { DragSource } from '../../../../P7_Render/Composition/C2_Tree/drag';
+import type { NodeLineDropHint } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
+import { FRAMEWORK_TREE } from '../Slice/FrameworkTreeShared';
 import {
     LEFT_PANE_DEFAULT,
     bindTreeScroll,
@@ -55,9 +55,9 @@ import {
     restoreTreeScroll,
     schedulePersist,
     setLeftWidth,
-} from './design/session';
-import { buildState } from './design/viewState';
-import { showSourcesMenu } from './design/externalInfo';
+} from '../Slice/session';
+import { buildState } from '../Slice/viewState';
+import { showSourcesMenu } from '../Slice/externalInfo';
 import {
     bindDocumentContextMenu,
     clearDropHint,
@@ -68,15 +68,15 @@ import {
     onDragOver,
     onDragStart,
     onDrop,
-} from './design/dragHandlers';
-import { openTextTreeImport } from './design/textEdit';
+} from '../Slice/dragHandlers';
+import { openTextTreeImport } from '../Slice/textEdit';
 import {
     selectFramework,
     selectParentFramework,
     toggleDelegate,
     toggleExpand,
     toggleState,
-} from './design/navigation';
+} from '../Slice/navigation';
 import {
     cancelBody,
     cancelCreate,
@@ -86,15 +86,15 @@ import {
     commitRename,
     setCreateKind,
     setCreateRepeat,
-} from './design/inlineEdit';
+} from '../Slice/inlineEdit';
 import {
     getLeftBlankMenuDefinitions,
     getRightBlankMenuDefinitions,
     showRowContextMenu,
     showRowStateMenu,
-} from './design/menuDefinitions';
-import type { PluginSettings } from '../../P3_Settings/Settings';
-import type { DataPipe } from '../../P5_Data/CoPipe/DataPipe';
+} from '../Slice/menuDefinitions';
+import type { PluginSettings } from '../../../../P3_Settings/Settings';
+import type { DataPipe } from '../../../../P5_Data/CoPipe/DataPipe';
 
 export const VIEW_TYPE_DESIGN = 'seqtk-design';
 

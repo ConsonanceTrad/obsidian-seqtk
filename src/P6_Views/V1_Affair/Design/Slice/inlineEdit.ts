@@ -15,14 +15,14 @@
  * - 新增一种行内编辑态 → 在此加「进入 / 提交 / 取消」三件套，并在 design/viewState 里反映到行覆盖信息
  */
 
-import { TextPromptModal } from '../../../P7_Render/Structure/S2_Modal/TextPromptModal';
-import { getAllowedChildKinds } from '../../../P4_Nodes/NodeFacade';
-import { buildNode } from './tree';
+import { TextPromptModal } from '../../../../P7_Render/Structure/S2_Modal/TextPromptModal';
+import { getAllowedChildKinds } from '../../../../P4_Nodes/NodeFacade';
+import { buildNode } from '../Tool/tree';
 import { createNode, saveNodeBody, saveNodeDesc } from './actions';
-import type { NodeKindValue } from '../../../P4_Nodes/NodeKind/NodeKind';
-import type { NodeLineCtx } from '../../../P7_Render/Composition/C1_NodeLine/NodeLine';
-import type { TreeSide } from '../DesignPanel';
-import type { DesignView } from '../Design';
+import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
+import type { NodeLineCtx } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
+import type { TreeSide } from '../Core/DesignPanel';
+import type { DesignView } from '../Core/Design';
 
 /** 进入行内重命名态（由菜单「重命名」触发） */
 export function startRename(view: DesignView, nodeId: string, side: TreeSide): void {

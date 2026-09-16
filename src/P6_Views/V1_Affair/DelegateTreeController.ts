@@ -23,10 +23,10 @@ import {
     type DelegatedTreeActions,
     type DelegatedTreeState,
 } from './DelegatedTreePanel';
-import { FRAMEWORK_TREE } from './design/FrameworkTreeShared';
-import { buildFrameworkTree } from './design/tree';
-import { buildFrameLine, buildTreeItems, type LineOverlay } from './design/viewModel';
-import { archiveNode, createNode, saveNodeDesc, type NodeEditHost } from './design/actions';
+import { FRAMEWORK_TREE } from './Design/Slice/FrameworkTreeShared';
+import { buildFrameworkTree } from './Design/Tool/tree';
+import { buildFrameLine, buildTreeItems, type LineOverlay } from './Design/Tool/viewModel';
+import { archiveNode, createNode, saveNodeDesc, type NodeEditHost } from './Design/Slice/actions';
 import { NODE_KIND } from '../../P4_Nodes/NodeFacade';
 import type { DataPipe } from '../../P5_Data/CoPipe/DataPipe';
 import type { PluginSettings } from '../../P3_Settings/Settings';
