@@ -124,6 +124,9 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
                 top: r.top - oy,
                 height: r.height,
                 isLast: el.getAttribute(LAST_ATTR) === "1",
+                // 该行是否位于框架卡片内：卡片边缘没有留白，竖线贴上去会显得偏左。
+                // 几何层据此对「父行在卡片内」的那条竖线做一点补偿（见 TreeGuides 的 CARD_LINE_INSET）。
+                inCard: el.closest(".seqtk-fw-card") !== null,
             };
         });
 
