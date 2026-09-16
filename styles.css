@@ -3717,7 +3717,7 @@
 }
 
 /* 委托 / 取消委托按钮：贴在栏标题右侧 */
-.seqtk-delegate-btn,
+.seqtk-delegate-btn {
   margin-left: auto;
   font-size: var(--font-ui-smaller);
   text-transform: none;

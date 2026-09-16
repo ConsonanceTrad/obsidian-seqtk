@@ -1,4 +1,4 @@
-# SeqTK
+# SeqTK English README
 
 >[!CAUTION] 
 >The interface language of this plugin is Chinese. There are plans for multi-language adaptation, but it has not been implemented yet.
@@ -189,7 +189,7 @@ When you need to reuse the structure, use "Save as template". For batch processi
 
 This README only covers usage and design orientation. To understand the layered structure, the boundaries of each layer's responsibilities, and development conventions, refer to `src/README.md` and the documentation for each layer; the slicing organization rules for the design view can be found in `src/P6_Views/Views.md`.
 
-# SeqTK
+# SeqTK 中文 README
 
 **为长期复杂任务而做的 Obsidian 项目管理插件。** 
 把「一件事」写成独立节点文档，通过从属、状态和依据组织与串联不同节点，形成组合项目，再让流程与脚本按你定下的规则不需要即时决策的向你推送下一件要做的事。
