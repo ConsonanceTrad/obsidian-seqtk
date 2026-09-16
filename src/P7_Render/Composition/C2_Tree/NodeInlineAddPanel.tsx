@@ -106,7 +106,9 @@ export function NodeInlineAddPanel({
                 <input
                     ref={inputRef}
                     className="seqtk-inline-name"
-                    placeholder={`输入${NODE_KIND_LABELS[current]}名称…`}
+                    // 提示只说此刻能做什么：输入什么由左侧的类型徽章 / 下拉表明，
+                    // 而「Enter 确认、Esc 取消」是这条输入行真正需要告知的事（且不随类型切换改写）
+                    placeholder="Enter 确认；Esc 取消"
                     onKeyDown={(e) => {
                         if (e.key === "Enter") {
                             e.preventDefault();
