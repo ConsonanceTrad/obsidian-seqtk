@@ -587,9 +587,10 @@ button.seqtk-source-badge:hover {
 /* 四态配色：待定浅灰 / 进行浅绿 / 完成取主题的高对比色 / 放弃浅红。
    「完成」用 --text-normal 而不是纯黑：深色主题下纯黑等于看不见，而这个高对比色正是
    它要表达的「黑」—— 浅色主题下近黑、深色主题下自动反相为近白。
-   三种彩色都用中等亮度，明暗主题下都看得清。 */
+   三种彩色都用中等亮度，明暗主题下都看得清。
+   「待定 / 待执行」的灰取最浅的一档：还没开始的事不该在行上抢注意力（原 #b9b9b9 偏重）。 */
 .seqtk-state-dot.state-plan {
-  background: #b9b9b9;
+  background: #cfcfcf;
 }
 
 .seqtk-state-dot.state-open {
