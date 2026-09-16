@@ -87,7 +87,6 @@ export function NodeLinePanel({
     if (data.selected) cls.push("seqtk-frame-item-active");
     if (data.hasChildren && data.expanded) cls.push("seqtk-row-expanded");
     if (data.inExpandedTree) cls.push("seqtk-row-in-expanded");
-    if (data.dropHint) cls.push(`seqtk-drop-${data.dropHint}`);
     if (data.dragging) cls.push("seqtk-dragging");
 
     // 注意：不再在这里写 --seqtk-parent-x —— 父列位置是实测几何，由引导线浮层

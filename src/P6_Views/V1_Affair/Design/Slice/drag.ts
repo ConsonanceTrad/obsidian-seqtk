@@ -9,8 +9,9 @@
  * 事件绑定不再在这里（原来的 dragstart/dragover/drop 挂在行 DOM 上）：现在由 P7_Render 的
  * 行组件发出回调，`DesignView` 接住、判定后，把「移动意图」交给这里的函数执行。
  *
- * 指示清理（原 clearDropIndicators / installDragCancelHandler）也不再需要：行上的拖拽
- * 指示由 `NodeLineData.dragging` / `dropHint` 驱动，清状态即清指示。
+ * 指示清理（原 clearDropIndicators / installDragCancelHandler）也不再需要：行的「正在拖拽」
+ * 由 `NodeLineData.dragging` 表达；落点提示由 design/dragHandlers 直接切行上的 class
+ * （见该切片文件头），两者都不需要单独的清理钩子。
  */
 
 import type { DesignView } from '../Core/Design';

@@ -46,7 +46,6 @@ import { SimpleStore } from '../../../../P5_Data/Svelte/SimpleStore';
 import { Save_Setting } from '../../../../P3_Settings/Settings';
 import { BUILD_Menu } from '../../../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
 import type { DragSource } from '../../../../P7_Render/Composition/C2_Tree/drag';
-import type { NodeLineDropHint } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
 import { FRAMEWORK_TREE } from '../Slice/FrameworkTreeShared';
 import {
     LEFT_PANE_DEFAULT,
@@ -60,11 +59,11 @@ import { buildState } from '../Slice/viewState';
 import { showSourcesMenu } from '../Slice/externalInfo';
 import {
     bindDocumentContextMenu,
-    clearDropHint,
     onBlankDragLeave,
     onBlankDragOver,
     onBlankDrop,
     onDragEnd,
+    onDragLeave,
     onDragOver,
     onDragStart,
     onDrop,
@@ -105,7 +104,6 @@ const EMPTY_VIEW_STATE: DesignViewState = {
     rightMode: 'empty',
     creating: null,
     bodyEditing: null,
-    dropBlank: false,
     delegated: false,
     leftPaneWidth: LEFT_PANE_DEFAULT,
 };
@@ -207,9 +205,9 @@ export class DesignView extends ReactViewBase {
     public rename: { nodeId: string; side: TreeSide } | null = null;
     public creating: DesignInlineCreating | null = null;
     public bodyEditing: { nodeId: string; value: string } | null = null;
-    public dropHint: { nodeId: string; hint: NodeLineDropHint } | null = null;
     public draggingId: string | null = null;
-    public dropBlank = false;
+    // 注：落点提示（行上的 seqtk-drop-*、右栏空白的 seqtk-drop-blank）不在这里 ——
+    // 拖拽期间它由 design/dragHandlers 直接切 class，不进视图状态。
 
     /**
      * 拖拽进行中右键：取消本次拖拽并清理指示
@@ -395,7 +393,7 @@ export class DesignView extends ReactViewBase {
             dragStart: (ctx, _side, e) => onDragStart(this, ctx, e),
             dragEnd: () => onDragEnd(this),
             dragOver: (ctx, side, e) => onDragOver(this, ctx, side, e),
-            dragLeave: () => clearDropHint(this),
+            dragLeave: (_side, e) => onDragLeave(this, e),
             drop: (ctx, side, e) => onDrop(this, ctx, side, e),
             inlineCommit: (nodeId, _side, value) => commitRename(this, nodeId, value),
             inlineCancel: () => cancelRename(this),

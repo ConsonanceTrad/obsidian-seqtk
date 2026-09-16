@@ -6,10 +6,15 @@
  *
  * 约定:
  * - 本文件函数以 view(DesignView 实例)为第一参数,只读写 view 上公开的状态
- *   （pipe / selectedFrameworkId / dragSource / draggingId / dropHint / dropBlank / refresh）
+ *   （pipe / selectedFrameworkId / dragSource / draggingId / refresh）
+ * - **落点提示不进视图状态**：行上的 `seqtk-drop-*` 与右栏空白的 `seqtk-drop-blank` 由本文件
+ *   直接切 class。拖拽期间每帧走全量 refresh 重建整棵树，既拖不跟手（树越大越明显），
+ *   也会让提示在相邻行之间一加一删地闪。C2_Tree 的落点契约本就允许调用方读 `target.row`
+ *   自行高亮（见 C2_Tree/drag 里 DropTarget 的注释），这里走的正是那条路。
+ * - **光标恒为 move**：不可放置只用行内配色（`seqtk-drop-invalid`）表达。
+ *   在 none / move 之间来回切，光标就会在「禁止」与「移动」之间闪。
  * - 判定用 P7_Render/Composition/C2_Tree/drag（纯逻辑），执行用 design/drag（写数据）——
  *   本文件只负责「接住 DOM 事件 → 判定 → 转交」，不自己写数据、不碰节点树
- * - 落点提示走 view.dropHint（viewState 把它转成行覆盖信息），组件据此画指示线
  *
  * 功能增补指引:
  * - 新增一种拖拽（如拖到时间轴）→ 在此加一组 dragover/drop，并复用同一套判定函数
@@ -17,6 +22,7 @@
 
 import type { NodeLineCtx, NodeLineDropHint } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
 import {
+    DROP_HINT_CLASS,
     canDrop as canDropByTarget,
     canDropToFrameworkBlank,
     resolveDropTarget,
@@ -26,12 +32,98 @@ import { moveChildAcrossParents, moveChildInFollows, moveTopInOrder } from './dr
 import type { TreeSide } from '../Core/DesignPanel';
 import type { DesignView } from '../Core/Design';
 
+/** 落点提示 class 全清单（清理时一次摘掉，避免残留） */
+const HINT_CLASSES = Object.values(DROP_HINT_CLASS);
+
+/** 提示语义 → class（before/after/child 与 zone 名不同名，这里做一次显式对应） */
+const HINT_CLASS: Record<NodeLineDropHint, string> = {
+    before: DROP_HINT_CLASS.above,
+    after: DROP_HINT_CLASS.below,
+    child: DROP_HINT_CLASS.middle,
+    invalid: DROP_HINT_CLASS.invalid,
+};
+
+/** 右栏空白高亮 class（与 DesignPanel 的右栏容器对应） */
+const BLANK_CLASS = 'seqtk-drop-blank';
+
+/**
+ * 拖拽期间的命令式状态（切片私有，不落到 view 上）
+ *
+ * - `row`：当前带提示 class 的行；`blank`：当前高亮的右栏容器
+ * - `raf`：dragover 的同帧合并句柄 —— 鼠标每动一次都量几何、切 class 没有必要
+ */
+interface HintState {
+    row: HTMLElement | null;
+    blank: HTMLElement | null;
+    raf: number;
+}
+const HINTS = new WeakMap<DesignView, HintState>();
+
+function hintState(view: DesignView): HintState {
+    let st = HINTS.get(view);
+    if (!st) {
+        st = { row: null, blank: null, raf: 0 };
+        HINTS.set(view, st);
+    }
+    return st;
+}
+
 /** 判定所需的最小查询能力（注入给 C2_Tree/drag） */
 export function dragQuery(view: DesignView): DragQuery {
     return {
         kindOf: (nodeId) => view.pipe.GET_Node(nodeId)?.kind,
         selectedFrameworkId: () => view.selectedFrameworkId,
     };
+}
+
+/** 摘掉行/空白提示（拖拽结束、离开整行、落点失效时调用） */
+export function clearDropHint(view: DesignView): void {
+    const st = hintState(view);
+    if (st.raf) {
+        cancelAnimationFrame(st.raf);
+        st.raf = 0;
+    }
+    if (st.row) {
+        st.row.classList.remove(...HINT_CLASSES);
+        st.row = null;
+    }
+    if (st.blank) {
+        st.blank.classList.remove(BLANK_CLASS);
+        st.blank = null;
+    }
+}
+
+/** 把提示挂到目标行上；同一行同一个提示不重复动 DOM */
+function applyRowHint(view: DesignView, row: HTMLElement, hint: NodeLineDropHint | null): void {
+    const st = hintState(view);
+    if (!hint) {
+        if (st.row === row) {
+            row.classList.remove(...HINT_CLASSES);
+            st.row = null;
+        }
+        return;
+    }
+    const cls = HINT_CLASS[hint];
+    if (st.row === row && row.classList.contains(cls)) return;
+    if (st.row && st.row !== row) st.row.classList.remove(...HINT_CLASSES);
+    row.classList.add(cls);
+    st.row = row;
+}
+
+/** 右栏空白高亮：直接切容器 class */
+function applyBlankHint(view: DesignView, on: boolean): void {
+    const st = hintState(view);
+    if (on) {
+        if (st.blank) return;
+        const pane = view.containerEl.querySelector<HTMLElement>('.seqtk-split-right');
+        if (!pane) return;
+        pane.classList.add(BLANK_CLASS);
+        st.blank = pane;
+        return;
+    }
+    if (!st.blank) return;
+    st.blank.classList.remove(BLANK_CLASS);
+    st.blank = null;
 }
 
 export function onDragStart(view: DesignView, ctx: NodeLineCtx, e: DragEvent): void {
@@ -49,27 +141,58 @@ export function onDragEnd(view: DesignView): void {
     view.dragSource = null;
     view.draggingId = null;
     clearDropHint(view);
+    // 拖拽期间的行/空白提示都是命令式加的 class，收尾刷一次让 React 的 className 与之一致
+    view.refresh();
 }
 
 export function onDragOver(view: DesignView, ctx: NodeLineCtx, side: TreeSide, e: DragEvent): void {
     const source = view.dragSource;
     if (!source) return;
     e.preventDefault();
-    const target = resolveDropTarget(e);
-    if (!target) return;
-    let hint: NodeLineDropHint | null = null;
-    if (side === 'left') {
-        // 左栏仅同父同级排序：上方→目标前、下方→目标后；中心（子级）与跨父/跨级驳回
-        const ok = target.parentId === source.parentId && target.nodeId !== source.sourceId && target.zone !== 'middle';
-        hint = ok ? (target.zone === 'above' ? 'before' : 'after') : 'invalid';
-    } else if (canDropByTarget(dragQuery(view), source, target)) {
-        hint = target.zone === 'above' ? 'before' : target.zone === 'below' ? 'after' : 'child';
-    } else {
-        hint = 'invalid';
-    }
-    if (e.dataTransfer) e.dataTransfer.dropEffect = hint === 'invalid' ? 'none' : 'move';
-    setDropHint(view, target.nodeId, hint);
+    // 光标保持「可移动」：不可放置交给行内配色表达（见文件头说明）
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+
+    // 同一帧内的多次 dragover 只处理最后一次：几何测量与 class 切换都不必按事件频率跑
+    const st = hintState(view);
+    if (st.raf) return;
+    st.raf = requestAnimationFrame(() => {
+        st.raf = 0;
+        const src = view.dragSource;
+        if (!src) return;
+        const target = resolveDropTarget(e);
+        if (!target) {
+            clearDropHint(view);
+            return;
+        }
+        let hint: NodeLineDropHint;
+        if (side === 'left') {
+            // 左栏仅同父同级排序：上方→目标前、下方→目标后；中心（子级）与跨父/跨级驳回
+            const ok = target.parentId === src.parentId && target.nodeId !== src.sourceId && target.zone !== 'middle';
+            hint = ok ? (target.zone === 'above' ? 'before' : 'after') : 'invalid';
+        } else if (canDropByTarget(dragQuery(view), src, target)) {
+            hint = target.zone === 'above' ? 'before' : target.zone === 'below' ? 'after' : 'child';
+        } else {
+            hint = 'invalid';
+        }
+        applyRowHint(view, target.row, hint);
+    });
     void ctx;
+}
+
+/**
+ * 离开某一行
+ *
+ * 行内子元素之间移动会连着触发 leave / over：只有指针真的离开带提示的那一行
+ * （relatedTarget 不在行内）才摘提示，否则提示会一摘一挂地闪。
+ */
+export function onDragLeave(view: DesignView, e: DragEvent): void {
+    const st = hintState(view);
+    const to = e.relatedTarget as Node | null;
+    if (st.row && to && st.row.contains(to)) return;
+    if (st.row) {
+        st.row.classList.remove(...HINT_CLASSES);
+        st.row = null;
+    }
 }
 
 export function onDrop(view: DesignView, ctx: NodeLineCtx, side: TreeSide, e: DragEvent): void {
@@ -111,41 +234,23 @@ export function onBlankDragOver(view: DesignView, e: DragEvent): void {
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     clearDropHint(view);
-    if (!view.dropBlank) {
-        view.dropBlank = true;
-        view.refresh();
-    }
+    applyBlankHint(view, true);
 }
 
 export function onBlankDragLeave(view: DesignView, e: DragEvent): void {
     // 只有真正离开窗口（relatedTarget 为空）才清理，避免在栏内子元素间移动时闪烁
     if (e.relatedTarget) return;
-    if (!view.dropBlank) return;
-    view.dropBlank = false;
-    view.refresh();
+    applyBlankHint(view, false);
 }
 
 export function onBlankDrop(view: DesignView, e: DragEvent): void {
     const source = view.dragSource;
     if (!source || !canDropToFrameworkBlank(dragQuery(view), source)) return;
     e.preventDefault();
-    view.dropBlank = false;
+    applyBlankHint(view, false);
     moveChildAcrossParents(view, source.parentId, source.sourceId, view.selectedFrameworkId!, '', false);
     view.dragSource = null;
     view.draggingId = null;
-    view.refresh();
-}
-
-export function setDropHint(view: DesignView, nodeId: string, hint: NodeLineDropHint | null): void {
-    if (!hint) return clearDropHint(view);
-    if (view.dropHint?.nodeId === nodeId && view.dropHint.hint === hint) return;
-    view.dropHint = { nodeId, hint };
-    view.refresh();
-}
-
-export function clearDropHint(view: DesignView): void {
-    if (!view.dropHint) return;
-    view.dropHint = null;
     view.refresh();
 }
 
@@ -162,7 +267,6 @@ export function bindDocumentContextMenu(view: DesignView): (e: MouseEvent) => vo
         e.stopPropagation();
         view.dragSource = null;
         view.draggingId = null;
-        view.dropBlank = false;
         clearDropHint(view);
     };
 }

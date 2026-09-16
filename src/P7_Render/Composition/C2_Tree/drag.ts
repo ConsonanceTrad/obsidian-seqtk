@@ -132,7 +132,7 @@ export function canDropToFrameworkBlank(q: DragQuery, source: DragSource): boole
     return canBeChildOf(fwKind, srcKind);
 }
 
-/** 拖拽指示 class（由行组件按 dropHint props 渲染；此处给出状态与 class 的对应） */
+/** 拖拽指示 class（由调用方直接切到目标行上；此处给出落点语义与 class 的对应） */
 export const DROP_HINT_CLASS: Record<DropTarget["zone"] | "invalid", string> = {
     above: "seqtk-drop-before",
     below: "seqtk-drop-after",

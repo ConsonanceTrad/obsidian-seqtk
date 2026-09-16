@@ -53,8 +53,6 @@ export interface LineOverlay {
     editing?: boolean;
     /** 该行是否正在被拖拽 */
     dragging?: boolean;
-    /** 该行作为落点的提示 */
-    dropHint?: NodeLineData["dropHint"];
 }
 
 /** 框架行的「预期时间段」徽章（左右栏共用） */
@@ -118,7 +116,6 @@ export function buildFrameLine(
         isLast: f.isLast,
         draggable: true,
         dragging: overlay.dragging,
-        dropHint: overlay.dropHint ?? null,
         editing: overlay.editing ? { mode: "rename", value: data.desc } : null,
     };
 }
@@ -184,7 +181,6 @@ export function buildNodeLine(
         draggable: !!f.parentId,
         carded: isFramework,
         dragging: overlay.dragging,
-        dropHint: overlay.dropHint ?? null,
         editing: overlay.editing ? { mode: "rename", value: data.desc } : null,
     };
 }

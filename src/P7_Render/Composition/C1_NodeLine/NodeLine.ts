@@ -152,8 +152,6 @@ export interface NodeLineData {
     draggable?: boolean;
     /** 是否用卡片容器包裹（右栏框架节点 → `seqtk-fw-card`） */
     carded?: boolean;
-    /** 拖拽落点指示 */
-    dropHint?: NodeLineDropHint | null;
     /** 行内编辑态（覆盖层输入框）；缺省 / null 表示非编辑态 */
     editing?: NodeLineEditing | null;
     /** 是否正在被拖拽（→ `seqtk-dragging`） */
@@ -187,7 +185,7 @@ export interface NodeLineActions {
     onDragStart?: (ctx: NodeLineCtx, event: DragEvent) => void;
     /** 拖拽结束 */
     onDragEnd?: (ctx: NodeLineCtx, event: DragEvent) => void;
-    /** 拖拽经过（调用方据事件位置判定落点并回填 dropHint） */
+    /** 拖拽经过（调用方按事件位置判定落点；落点提示由调用方自行落到行元素上，本层不持状态） */
     onDragOver?: (ctx: NodeLineCtx, event: DragEvent) => void;
     /** 拖拽离开本行 */
     onDragLeave?: (ctx: NodeLineCtx, event: DragEvent) => void;

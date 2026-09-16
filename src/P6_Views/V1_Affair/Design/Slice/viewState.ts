@@ -39,7 +39,6 @@ export function buildState(view: DesignView): DesignViewState {
         rightMode: 'empty',
         creating: view.creating,
         bodyEditing: view.bodyEditing,
-        dropBlank: view.dropBlank,
         // 委托开关来自共享状态源：委托面板被关闭时也会复位
         delegated: FRAMEWORK_TREE.delegated,
         leftPaneWidth: view.leftWidth,
@@ -133,11 +132,14 @@ function buildItems(view: DesignView, roots: TreeNode[], side: TreeSide, rootPar
     );
 }
 
-/** 瞬时交互态 → 行覆盖信息（重命名 / 拖拽中 / 落点提示） */
+/** 瞬时交互态 → 行覆盖信息（重命名 / 拖拽中）
+ *
+ * 落点提示不在这里：它由 design/dragHandlers 直接切行上的 class 表达，
+ * 不进视图状态，也就不会让整棵树为「提示变了一格」而重渲（见该切片文件头的说明）。
+ */
 function overlayFor(view: DesignView, nodeId: string): LineOverlay {
     return {
         editing: view.rename?.nodeId === nodeId,
         dragging: view.draggingId === nodeId,
-        dropHint: view.dropHint?.nodeId === nodeId ? view.dropHint.hint : null,
     };
 }
