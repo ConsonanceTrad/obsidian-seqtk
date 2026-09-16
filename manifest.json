@@ -1,7 +1,7 @@
 {
   "id": "seqtk",
   "name": "SeqTK",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "For manage dependencies and cross-references in complex long-term tasks. Additional convenient view, process script, and intelligent agent collaboration.",
   "author": "ConsonanceTrad",
   "authorUrl": "https://github.com/ConsonanceTrad",
