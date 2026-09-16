@@ -65,8 +65,6 @@ export interface DesignViewState {
     /** 瞬时交互态 */
     creating: DesignInlineCreating | null;
     bodyEditing: NodeInlineBody | null;
-    /** 右栏空白落点高亮 */
-    dropBlank: boolean;
     /** 框架树是否已委托到中控台侧栏 */
     delegated: boolean;
     /** 左栏宽度（记忆于设置；面板内拖动时以本地状态为准，结束时上报） */
@@ -88,7 +86,7 @@ export interface DesignActions {
     dragStart(ctx: NodeLineCtx, side: TreeSide, event: DragEvent): void;
     dragEnd(side: TreeSide, event: DragEvent): void;
     dragOver(ctx: NodeLineCtx, side: TreeSide, event: DragEvent): void;
-    dragLeave(side: TreeSide): void;
+    dragLeave(side: TreeSide, event: DragEvent): void;
     drop(ctx: NodeLineCtx, side: TreeSide, event: DragEvent): void;
     /** 行内重命名 */
     inlineCommit(nodeId: string, side: TreeSide, value: string): void;
@@ -134,7 +132,7 @@ function bindActions(a: DesignActions, side: TreeSide): NodeTreeActions {
         onDragStart: (ctx, e) => a.dragStart(ctx, side, e),
         onDragEnd: (_ctx, e) => a.dragEnd(side, e),
         onDragOver: (ctx, e) => a.dragOver(ctx, side, e),
-        onDragLeave: () => a.dragLeave(side),
+        onDragLeave: (_ctx, e) => a.dragLeave(side, e),
         onDrop: (ctx, e) => a.drop(ctx, side, e),
         onSourcesClick: (ctx, e) => a.sourcesClick(ctx.nodeId, side, e),
         onInlineCommit: (ctx, value) => a.inlineCommit(ctx.nodeId, side, value),
@@ -163,19 +161,34 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
      * 双栏比例：会话内状态（不持久化；「记忆窗口布局」属于清单里的另一项）。
      * 用 pointer 事件而非 mouse —— 指针捕获后，拖出视图或经过子元素同样收得到移动事件。
      */
-    // 初值取记忆值（0 = 用默认）；拖动期间只更新本地状态，结束后才上报
+    // 初值取记忆值（0 = 用默认）；拖动结束后才上报（拖动期间每帧写盘没有意义）
     const [leftWidth, setLeftWidth] = useState(state.leftPaneWidth || LEFT_WIDTH_DEFAULT);
     const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+    /** 左栏元素（拖动期间直接改它的宽度）与拖动期间的权威宽度 */
+    const leftPaneRef = useRef<HTMLDivElement | null>(null);
+    const widthRef = useRef(leftWidth);
 
     const onHandleDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-        dragRef.current = { startX: e.clientX, startW: leftWidth };
+        dragRef.current = { startX: e.clientX, startW: widthRef.current };
         e.currentTarget.setPointerCapture(e.pointerId);
     };
+    /**
+     * 拖动期间**不**写 React 状态，直接改左栏元素的宽度
+     *
+     * 宽度走 state 会让本组件每帧整棵树重渲（行组件与引导线浮层都在内）：既拖不跟手，
+     * 也会把浮层推进「重绘 → 写状态 → 重绘」的自反馈里（React #185，表现为整块视图闪退）。
+     * 直接改样式不经过 React，浮层只由它的 ResizeObserver 兜底重画。
+     */
     const onHandleMove = (e: ReactPointerEvent<HTMLDivElement>) => {
         const d = dragRef.current;
         if (!d) return;
         const next = Math.min(Math.max(d.startW + (e.clientX - d.startX), LEFT_WIDTH_MIN), LEFT_WIDTH_MAX);
-        setLeftWidth(next);
+        widthRef.current = next;
+        const pane = leftPaneRef.current;
+        if (pane) {
+            pane.style.width = `${next}px`;
+            pane.style.flexBasis = `${next}px`;
+        }
     };
     const onHandleUp = (e: ReactPointerEvent<HTMLDivElement>) => {
         const dragging = dragRef.current !== null;
@@ -183,8 +196,11 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
         if (e.currentTarget.hasPointerCapture(e.pointerId)) {
             e.currentTarget.releasePointerCapture(e.pointerId);
         }
-        // 拖动结束才上报 —— 拖动过程中每帧写盘是没有意义的
-        if (dragging) actions.setLeftWidth(leftWidth);
+        if (!dragging) return;
+        // 拖动结束：一次性把 React 状态与命令式改过的样式对齐，并上报给视图（由视图防抖写回设置）
+        const next = widthRef.current;
+        setLeftWidth(next);
+        actions.setLeftWidth(next);
     };
 
     /** 空白区右键：行自身的 contextmenu 已 stopPropagation，能冒泡到这里的就是空白 */
@@ -200,8 +216,11 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
             {/* （若只是隐藏仍会占位，那等于没让） */}
             {!state.delegated && (
             <div
+                ref={leftPaneRef}
                 className="seqtk-split-left"
-                style={{ width: leftWidth, flexBasis: leftWidth }}
+                /* 宽度取 ref 而不是 state：拖动期间宽度是命令式改的，
+                   重渲时若按旧 state 写回，宽度会跳回去（见 onHandleMove 的说明） */
+                style={{ width: widthRef.current, flexBasis: widthRef.current }}
                 onContextMenu={onPaneContextMenu("left", ".seqtk-frame-item")}
             >
                 <div className="seqtk-split-title">
@@ -243,7 +262,9 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
             )}
 
             <div
-                className={"seqtk-split-right" + (state.dropBlank ? " seqtk-drop-blank" : "")}
+                /* 空白落点高亮（seqtk-drop-blank）由 design/dragHandlers 直接切 class：
+                   拖拽期间走状态会让整棵树每帧重渲，既拖不跟手、提示也会闪 */
+                className="seqtk-split-right"
                 /* 空白判定用行级选择器（与左栏、与 ctxFromEvent 同一套）：
                    右栏的留白也在 .seqtk-tree 容器内，拿容器当判据会让「只有 title 区算空白」。
                    拖拽判定反过来必须用容器（见下），两者判据不同是刻意的。 */

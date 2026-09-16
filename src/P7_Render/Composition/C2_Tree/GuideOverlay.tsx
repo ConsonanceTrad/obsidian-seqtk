@@ -35,6 +35,18 @@ const BOX_INSET = 2;
 const BOX_HALF = COLLAPSE_BOX / 2;
 
 /**
+ * 自反馈闸门：时间窗口与窗口内允许的重绘次数
+ *
+ * 正常情形下重绘由「一次提交」或「尺寸 / 滚动」驱动，每帧最多一两次；
+ * 一旦某个几何量在两次提交之间反复变化，就会变成
+ * 「重绘 → 写状态 → 重新提交 → 再重绘」，一路撞上 React 的
+ * Maximum update depth exceeded（#185，表现为整块视图闪退）。
+ * 30 次 / 100ms 远高于真实交互频率，又远低于失控时的频率。
+ */
+const REDRAW_WINDOW_MS = 100;
+const REDRAW_MAX_PER_WINDOW = 30;
+
+/**
  * 两次方块列表是否等价（逐项比位置）
  *
  * 用于避免「新数组 = 状态变了」的误判：见 redraw 里的 setBoxes。
@@ -53,6 +65,8 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
     const [boxes, setBoxes] = useState<{ x: number; y: number }[]>([]);
     const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
     const rafRef = useRef(0);
+    /** 重绘闸门的窗口计数（见 redraw 入口） */
+    const guardRef = useRef({ windowStart: 0, count: 0, warned: false });
 
     /**
      * 量行 → 算 path / 方块 → 写状态
@@ -62,6 +76,28 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
      * 字符串（path）由 React 自己按值比较；对象与数组须自行比较后复用旧引用。
      */
     const redraw = useCallback(() => {
+        // 自反馈闸门：上面的「值不变就不写」救不了「值每次都不一样」的情形 ——
+        // 拖拽分栏把手改宽度时，几何在两次提交之间持续变化，于是
+        // 重绘 → 写状态 → 重新提交 → 再重绘 会一路跑到 React 抛 #185，整块视图闪退。
+        // 这里的窗口计数只做一件事：判定已进入自反馈就放弃本轮重绘（下帧自然还有机会）。
+        const now = performance.now();
+        const guard = guardRef.current;
+        if (now - guard.windowStart > REDRAW_WINDOW_MS) {
+            guard.windowStart = now;
+            guard.count = 0;
+        }
+        if (guard.count >= REDRAW_MAX_PER_WINDOW) {
+            if (!guard.warned) {
+                guard.warned = true;
+                console.warn(
+                    '[SeqTK] 引导线重绘疑似自反馈，已跳过本轮重绘以避免 React 无限更新（#185）。' +
+                        '如反复出现，请反馈本条消息与当时的操作。',
+                );
+            }
+            return;
+        }
+        guard.count += 1;
+
         const container = containerRef.current;
         if (!container) return;
 
@@ -99,13 +135,9 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
             const g = geo[i];
             const el = rows[i];
 
-            // 顺带把「父列竖线相对本行的水平偏移」写回行元素。
-            //
-            // 方块如今由本浮层直接画，这个变量是给行内其它需要对齐父列的装饰留的口子；
-            // 写的是相对值（容器坐标的 parentX 减去本行左缘），因为读取方在行内绝对定位。
-            if (g && g.parentX !== null) {
-                el.style.setProperty("--seqtk-parent-x", `${g.parentX - row.left}px`);
-            }
+            // 注：此处曾把「父列竖线相对本行的水平偏移」写成行上的 CSS 变量 --seqtk-parent-x。
+            // 该变量在样式表里已无任何读取方，留着等于「在重绘里改布局」——布局一变又要重绘，
+            // 正是 React #205/#185 那类无限更新的燃料（表现为拖拽分栏把手时整块视图闪退）。故移除。
 
             // 转角方块：位置本就是这个几何量的一部分，由浮层统一画，
             // 免得行自己再算一遍出现两个答案。
