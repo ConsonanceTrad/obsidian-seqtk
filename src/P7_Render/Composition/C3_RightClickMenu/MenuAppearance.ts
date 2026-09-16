@@ -48,7 +48,7 @@ export const SECTION = {
     danger: 'danger',
     /** 从磁盘刷新 */
     refresh: 'refresh',
-    /** 以文本编辑框架内容（右栏空白菜单独有） */
+    /** 批量编辑框架内容（右栏空白菜单独有） */
     framework: 'framework',
 } as const;
 

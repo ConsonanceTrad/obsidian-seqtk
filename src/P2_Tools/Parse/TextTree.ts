@@ -225,12 +225,14 @@ export interface TextTreeLine {
  * 序列化为文本树
  *
  * 与 PARSE_TextTree 共用同一套约定，因此 `PARSE(SERIALIZE(树))` 还原同一棵树。
- * 类型前缀只在**推断不出来**或**推断结果与本行不符**时才写 —— 这样正常的内容链
- * （构想→方向→目标→工序）读起来干净，而越出链条的部分（如工序下挂事件）仍可无损往返。
  *
- * `alwaysKind: true` 时每行都写前缀，输出更啰嗦但完全不依赖推断规则。
+ * 类型前缀只在**推断不出来**或**推断结果与本行不符**时才写。链路本身不必标注：
+ * 起始链路由「进入时的层级 + 放置位置」表明，往下每一层都能由父层推断出来，
+ * 所以正常的内容链（构想→方向→目标→工序、清单→事项）读起来干净；真正需要显式
+ * 带上类型的，是**岔出链路**的那部分（如工序下挂事件、清单下挂快照）—— 那才是
+ * 跨层级搬运时推断不出来的信息，且标在岔出那一层就够，更深层仍由它推断。
  */
-export function SERIALIZE_TextTree(roots: TextTreeNode[], opts?: { alwaysKind?: boolean }): string {
+export function SERIALIZE_TextTree(roots: TextTreeNode[]): string {
     const out: string[] = [];
 
     const visit = (node: TextTreeNode, depth: number, parentKind: NodeKindValue | null): void => {
@@ -238,7 +240,7 @@ export function SERIALIZE_TextTree(roots: TextTreeNode[], opts?: { alwaysKind?: 
         const mark = STATE_TO_MARK[node.state] ?? ' ';
         const short = KIND_TO_SHORT[node.kind];
         const inferred = inferKind(parentKind);
-        const needKind = opts?.alwaysKind === true || inferred !== node.kind;
+        const needKind = inferred !== node.kind;
         const prefix = needKind && short ? `K:${short} ` : '';
         out.push(`${indent}- [${mark}] ${prefix}${node.desc}`);
         for (const child of node.children) visit(child, depth + 1, node.kind);

@@ -3756,6 +3756,57 @@
   resize: vertical;
 }
 
+/* ============================================================
+   管理外部信息源（调顺序 / 删条目）
+   ============================================================ */
+
+.seqtk-source-manage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.seqtk-source-manage-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.seqtk-source-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+/* 名称与地址占满剩余宽度，按钮组固定在右侧 */
+.seqtk-source-manage-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.seqtk-source-manage-label {
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-source-manage-target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.seqtk-source-manage-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
 .seqtk-texttree-issues {
   margin-top: 8px;
 }

@@ -45,6 +45,7 @@ import {
     GET_SourceTarget,
     type ExternalSource,
 } from '../../P4_Nodes/NodeField/AttriGroup/External';
+import { ExternalSourcesModal } from '../../P7_Render/Structure/S2_Modal/ExternalSourcesModal';
 import { TextPromptModal } from '../../P7_Render/Structure/S2_Modal/TextPromptModal';
 import { TextTreeImportModal } from '../../P7_Render/Structure/S2_Modal/TextTreeImportModal';
 import {
@@ -741,8 +742,8 @@ export class DesignView extends ReactViewBase {
     /**
      * 复制子树为文本树到剪贴板（可再粘到别处导入）
      *
-     * 不强制标类型（不给 alwaysKind）：链路能推断出类型时就不写 `K:xxx`，粘出来更像一份
-     * 可读清单；编辑类入口（批量编辑 / 框架内容）仍强制标出类型，以便精确控制每一行。
+     * 类型只在推断不出来时才写 `K:xxx`（见 SERIALIZE_TextTree）：沿链路的行读起来干净，
+     * 岔出链路的部分仍能无损往返。
      */
     public async copySubtreeAsText(nodeId: string): Promise<void> {
         const text = EXPORT_SubtreeAsText(this.pipe, nodeId);
@@ -760,13 +761,15 @@ export class DesignView extends ReactViewBase {
      * 以文本批量编辑：导出整棵子树 → 编辑 → 按差异回写
      *
      * 只允许改**内容**（名称、状态、结构），不允许改根节点自身的类型 —— 那等于换了一棵树，
-     * 语义上不是「编辑」而是「删除 + 新建」，容易误操作。因此导出用 alwaysKind，
-     * 让每行的类型都写出来；用户改了根行类型时下面的提示会拦住。
+     * 语义上不是「编辑」而是「删除 + 新建」，容易误操作（用户改了根行类型时下面的提示会拦住）。
+     *
+     * 类型不逐行标注：起始链路由「进入时的层级 + 放置位置」表明，沿链路走的行都能推断出来；
+     * 只有岔出链路的类型才写 `K:` —— 那才是跨层级搬运时必须显式带上、推断不出来的信息。
      */
     public editSubtreeAsText(nodeId: string): void {
         const node = this.pipe.GET_Node(nodeId);
         if (!node) return;
-        const text = EXPORT_SubtreeAsText(this.pipe, nodeId, { alwaysKind: true });
+        const text = EXPORT_SubtreeAsText(this.pipe, nodeId);
         if (text === null) return;
 
         new TextTreeImportModal(this.app, {
@@ -810,7 +813,7 @@ export class DesignView extends ReactViewBase {
     public editFrameworkContentAsText(frameworkId: string): void {
         const framework = this.pipe.GET_Node(frameworkId);
         if (!framework) return;
-        const text = EXPORT_ChildrenAsText(this.pipe, frameworkId, { alwaysKind: true });
+        const text = EXPORT_ChildrenAsText(this.pipe, frameworkId);
         if (text === null) return;
 
         /** 把编辑后的多根包成框架节点的形状，交给现成的回写路径 */
@@ -823,11 +826,12 @@ export class DesignView extends ReactViewBase {
         });
 
         new TextTreeImportModal(this.app, {
-            title: `以文本编辑框架内容 · ${framework.desc}`,
+            title: `批量编辑 · ${framework.desc}`,
             desc:
                 '直接改这段文本：改名、改状态（[ ] [/] [x] [-]）、调整缩进改变从属。' +
                 '这里每一行都是框架的一级内容（框架本身那行不出现，根可以多个）。' +
-                '回写按「同层同位置」对齐，中间插入一行会让其后的同级行顺移一位。' +
+                '回写按「同层同位置」对齐，中间插入一行会让其后的同级行顺移一位' +
+                '（被视为修改而非删旧建新 —— 这样才不会丢正文）。' +
                 '改动量会在下方实时预告。',
             initialText: text,
             notice: (roots) => {
@@ -968,6 +972,35 @@ export class DesignView extends ReactViewBase {
             updates: { sources: [...(node.sources ?? []), source], modify: new Date().toISOString() },
         });
         new Notice('已添加外部信息源');
+    }
+
+    /** 写回整份外部信息源列表（顺序调整与删除都走这里，仍是一次字段更新） */
+    private saveSources(nodeId: string, sources: ExternalSource[]): void {
+        const node = this.pipe.GET_Node(nodeId);
+        if (!node) return;
+        this.pipe.EXEC_Mutation({
+            op: 'update',
+            kind: node.kind,
+            nodeId,
+            updates: { sources, modify: new Date().toISOString() },
+        });
+    }
+
+    /**
+     * 管理外部信息源：调整顺序、删掉过时或引入错误的条目
+     *
+     * 弹窗里每次操作即时写盘（没有「保存」按钮）—— 这类小改动即时生效比先攒后存更符合预期，
+     * 改错了再改回来也不比按保存麻烦。
+     */
+    public manageExternalSources(nodeId: string): void {
+        const node = this.pipe.GET_Node(nodeId);
+        if (!node) return;
+        new ExternalSourcesModal(this.app, node.sources ?? [], {
+            onChange: (next) => {
+                this.saveSources(nodeId, next);
+                this.refresh();
+            },
+        }).open();
     }
 
     /**
@@ -1204,7 +1237,7 @@ export class DesignView extends ReactViewBase {
         ];
     }
 
-    /** 右栏空白右键：新建三类 + 追加信息 + 以文本编辑框架内容 + 从磁盘刷新 */
+    /** 右栏空白右键：新建三类 + 追加信息 + 批量编辑 + 从磁盘刷新 */
     private getRightBlankMenuDefinitions(): MenuDefinitions {
         const parentId = this.selectedFrameworkId ?? undefined;
         return [
@@ -1231,7 +1264,7 @@ export class DesignView extends ReactViewBase {
             ...(parentId
                 ? [
                       {
-                          name: '以文本编辑框架内容',
+                          name: '批量编辑',
                           icon: ICON.editFrameworkContent,
                           section: SECTION.framework,
                           action: () => this.editFrameworkContentAsText(parentId),
@@ -1267,6 +1300,14 @@ export class DesignView extends ReactViewBase {
                 icon: ICON.editAttrs,
                 section: SECTION.main,
                 action: () => openEdit(this, node.nodeId),
+            },
+            {
+                // 框架卡片这一项编辑的是它的**内容**（框架自身那行不出现、根可多个），
+                // 与右栏空白处那条「批量编辑」是同一个入口
+                name: '批量编辑',
+                icon: ICON.batchEdit,
+                section: SECTION.main,
+                action: () => this.editFrameworkContentAsText(node.nodeId),
             },
             ...this.templateDefs(node),
             {
@@ -1365,7 +1406,7 @@ export class DesignView extends ReactViewBase {
         ];
     }
 
-    /** 外部信息组：挂一条外部链接，或就地为节点创建一份关联的快速文件 */
+    /** 外部信息组：挂一条外部链接、创建关联时间戳文档，或整理已有条目 */
     private externalInfoDefs(node: TreeNode): MenuDefinition[] {
         return [
             {
@@ -1379,9 +1420,14 @@ export class DesignView extends ReactViewBase {
                         action: () => this.addExternalSource(node.nodeId),
                     },
                     {
-                        name: '创建关联快速文件',
+                        name: '创建关联时间戳',
                         icon: 'file-plus',
                         action: () => void this.createTimestampDoc(node.nodeId),
+                    },
+                    {
+                        name: '管理外部信息源',
+                        icon: 'list-ordered',
+                        action: () => this.manageExternalSources(node.nodeId),
                     },
                 ],
             },

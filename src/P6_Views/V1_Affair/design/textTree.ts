@@ -98,31 +98,23 @@ export function BUILD_Subtree(pipe: DataPipe, rootNodeId: string): TextTreeNode 
  *
  * 取的是**当前缓存里的树**（全部后代，与展开状态无关），因此导出的是完整结构而非可见部分。
  */
-export function EXPORT_SubtreeAsText(
-    pipe: DataPipe,
-    rootNodeId: string,
-    opts?: { alwaysKind?: boolean },
-): string | null {
+export function EXPORT_SubtreeAsText(pipe: DataPipe, rootNodeId: string): string | null {
     const root = BUILD_Subtree(pipe, rootNodeId);
-    return root ? SERIALIZE_TextTree([root], opts) : null;
+    return root ? SERIALIZE_TextTree([root]) : null;
 }
 
 /** 回写前的差异预告（先让用户看见将要发生什么，再决定是否落盘） */
 /**
  * 导出某节点的**子节点们**为文本（多个根，顶层不缩进）
  *
- * 用于「以文本编辑框架内容」：框架里元素通常很多，若每次都必须从框架节点本身
+ * 用于「批量编辑」的框架内容入口：框架里元素通常很多，若每次都必须从框架节点本身
  * 那个根写起，等于每行都要多一层缩进，很别扭。所以这里直接以子节点为根 ——
  * 本质是把框架自身那行藏起来，只编辑它的内容。
  */
-export function EXPORT_ChildrenAsText(
-    pipe: DataPipe,
-    parentId: string,
-    opts: { alwaysKind?: boolean } = {},
-): string | null {
+export function EXPORT_ChildrenAsText(pipe: DataPipe, parentId: string): string | null {
     const parent = BUILD_Subtree(pipe, parentId);
     if (!parent) return null;
-    return SERIALIZE_TextTree(parent.children, opts);
+    return SERIALIZE_TextTree(parent.children);
 }
 
 export interface EditPlan {
