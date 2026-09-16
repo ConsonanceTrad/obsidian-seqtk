@@ -25,6 +25,7 @@ import {
     type TreeNode,
 } from './tree';
 import { buildFrameLine, buildNodeLine, buildTreeItems, type LineOverlay } from './viewModel';
+import { resolveNavBack } from './navigation';
 import { NODE_KIND_LABELS } from '../../../P4_Nodes/NodeFacade';
 import type { DesignViewState, TreeSide } from '../DesignPanel';
 import type { TreeNodeItem } from '../../../P7_Render/Composition/C2_Tree/NodeTree';
@@ -74,7 +75,7 @@ export function buildState(view: DesignView): DesignViewState {
 
     // 「返回父框架」= 回到下钻前的那个框架，因此只在**右栏卡片里下钻**进来时提供；
     // 左栏直接点选没有来路，自然不给这个入口（判定见 resolveNavBack）
-    base.parentFramework = view.resolveNavBack(fwId);
+    base.parentFramework = resolveNavBack(view, fwId);
 
     const direct = view.pipe.GET_Children(fwId).filter((c) => !!c.data);
     const sorted = sortByFollows(framework, direct);

@@ -53,6 +53,15 @@ import {
     editSubtreeAsText,
     openTextTreeImport,
 } from './design/textEdit';
+import {
+    changeParent,
+    selectFramework,
+    selectParentFramework,
+    toggleDelegate,
+    toggleExpand,
+    toggleExpandAll,
+    toggleState,
+} from './design/navigation';
 import { FRAMEWORK_TREE } from './design/FrameworkTreeShared';
 import {
     LEFT_PANE_DEFAULT,
@@ -229,9 +238,11 @@ export class DesignView extends ReactViewBase {
     public topOrder: string[] = [];
     /**
      * 右栏内下钻的来路栈（来源在栈顶）：只有「在右栏点框架行进它的内部」才记来源，
-     * 左栏点选会清空它 —— 见 selectFramework。栈空时框架不提供「返回父框架」入口。
+     * 左栏点选会清空它 —— 见 design/navigation.selectFramework。栈空时框架不提供「返回父框架」入口。
+     *
+     * 切片协作可见：选中 / 返回父框架 / 判定入口都在 design/navigation。
      */
-    private frameworkNavStack: string[] = [];
+    public frameworkNavStack: string[] = [];
     /** 当前拖拽源（dragstart 写入，dragover/drop 读取，dragend 清空） */
     public dragSource: DragSource | null = null;
     /** 左栏宽度（记忆于 settings.leftPaneWidth；拖动结束后才写回）；切片协作可见 */
@@ -418,10 +429,10 @@ export class DesignView extends ReactViewBase {
 
     private buildActions(): DesignActions {
         return {
-            toggle: (nodeId, side) => this.toggleExpand(nodeId, side),
-            select: (nodeId, side) => this.selectFramework(nodeId, side),
+            toggle: (nodeId, side) => toggleExpand(this, nodeId, side),
+            select: (nodeId, side) => selectFramework(this, nodeId, side),
             contextMenu: (nodeId, side, e) => this.showRowContextMenu(nodeId, side, e),
-            stateClick: (nodeId) => this.toggleState(nodeId),
+            stateClick: (nodeId) => toggleState(this, nodeId),
             stateContextMenu: (nodeId, _side, e) => this.showRowStateMenu(nodeId, e),
             dragStart: (ctx, _side, e) => this.onDragStart(ctx, e),
             dragEnd: () => this.onDragEnd(),
@@ -444,160 +455,11 @@ export class DesignView extends ReactViewBase {
             blankDragOver: (e) => this.onBlankDragOver(e),
             blankDragLeave: (e) => this.onBlankDragLeave(e),
             blankDrop: (e) => this.onBlankDrop(e),
-            toggleDelegate: () => this.toggleDelegate(),
-            selectParentFramework: () => this.selectParentFramework(),
+            toggleDelegate: () => toggleDelegate(this),
+            selectParentFramework: () => selectParentFramework(this),
             sourcesClick: (nodeId, _side, e) => showSourcesMenu(this, nodeId, e),
             setLeftWidth: (width) => setLeftWidth(this, width),
         };
-    }
-
-    /**
-     * 委托左栏框架树到中控台侧栏（进行 / 取消）
-     *
-     * 委托后两处共用同一状态源（design/FrameworkTreeShared），展开与选中互相同步；
-     * 左栏本身**不搬走**，只是多出一个同步的侧栏视图 —— 这样在别的视图工作时也能操作框架树。
-     * 用 workspace 的左侧栏 leaf 而非 activateView：本视图没有 plugin 引用，也无需走面板目录。
-     */
-    private toggleDelegate(): void {
-        // 先看侧栏是否已经有委托面板。重开库时工作区会把它恢复出来，而内存里的
-        // delegated 开关是新的（false）—— 此时若按「未委托」处理，就会再开一个，
-        // 侧栏里出现两个框架树。所以以实际存在的 leaf 为准，只同步开关。
-        // 落点：默认借用中控台容器，也可配成独立视图（见设置 delegateTarget）
-        const target = this.settings.delegateTarget ?? 'hub';
-        const viewType = target === 'view' ? VIEW_TYPE_DELEGATED_TREE : VIEW_TYPE_HUB_SIDE;
-
-        // 先看侧栏是否已经有落点。重开库时工作区会把它恢复出来，而内存里的
-        // delegated 开关是新的（false）—— 此时若按「未委托」处理，就会再开一个，
-        // 侧栏里出现两份框架树。所以以实际存在的 leaf 为准，只同步开关。
-        const opened = this.app.workspace.getLeavesOfType(viewType);
-        if (opened.length > 0) {
-            FRAMEWORK_TREE.delegated = true;
-            this.refresh();
-            return;
-        }
-
-        if (FRAMEWORK_TREE.delegated) {
-            FRAMEWORK_TREE.delegated = false;
-            for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_DELEGATED_TREE)) leaf.detach();
-            this.refresh();
-            return;
-        }
-        FRAMEWORK_TREE.delegated = true;
-        const leaf = this.app.workspace.getLeftLeaf(false);
-        if (leaf) {
-            void leaf.setViewState({ type: VIEW_TYPE_DELEGATED_TREE, active: true });
-            this.app.workspace.revealLeaf(leaf);
-        }
-        this.refresh();
-    }
-
-    /** 按栏切换展开/收起（左右栏展开状态相互独立） */
-    public toggleExpand(nodeId: string, side: TreeSide): void {
-        const set = side === 'left' ? this.expandedLeft : this.expandedRight;
-        if (set.has(nodeId)) set.delete(nodeId);
-        else set.add(nodeId);
-        this.refresh();
-    }
-
-    /** 按栏展开或收起该节点的全部子孙节点（依据该栏当前展开状态切换） */
-    public toggleExpandAll(node: TreeNode, side: TreeSide): void {
-        const set = side === 'left' ? this.expandedLeft : this.expandedRight;
-        const ids: string[] = [];
-        const collect = (n: TreeNode): void => {
-            ids.push(n.nodeId);
-            for (const c of n.children) collect(c);
-        };
-        collect(node);
-        if (set.has(node.nodeId)) for (const id of ids) set.delete(id);
-        else for (const id of ids) set.add(id);
-        this.refresh();
-    }
-
-    /**
-     * 变更归属：把节点移到另一个父节点下
-     *
-     * 移动的**执行**复用拖拽那条路径（design/drag.moveChildAcrossParents），
-     * 因此 follows 双向维护与 parent 字段的写法与拖拽完全一致，不存在两套语义。
-     * 候选父节点排除自身与全部后代 —— 选了会形成环。
-     */
-    public changeParent(nodeId: string): void {
-        const node = this.pipe.GET_Node(nodeId);
-        if (!node) return;
-        const exclude = [
-            nodeId,
-            ...this.pipe.COLLECT_Descendants(nodeId).map((d) => d.nodeId),
-        ];
-        new NodePickModal(this.app, this.pipe, {
-            title: '变更归属 · 选择目标父节点',
-            excludeIds: exclude,
-            // 只列「能容纳本节点类型」的父 —— 层级错位的候选不该出现在列表里。
-            // 判定与拖拽落点同一条（C2_Tree/drag.canBeChildOf），不会出现「拖不进去却能选出来」
-            allow: (_id, kind) => canBeChildOf(kind, node.kind),
-            emptyText: '没有能容纳该类型的父节点（自身与后代已排除）',
-            onPick: (targetParentId) => {
-                moveChildAcrossParents(this, node.parent ?? '', nodeId, targetParentId, '', false);
-            },
-        }).open();
-    }
-
-    /** 返回父框架（右栏标题栏按钮）：回到下钻前的那个框架 */
-    private selectParentFramework(): void {
-        // 来源失效（被删 / 不再是框架）就继续往前找，都没有则什么也不做
-        while (this.frameworkNavStack.length > 0) {
-            const from = this.frameworkNavStack.pop()!;
-            const node = this.pipe.GET_Node(from);
-            if (node && isFrameworkKind(node.kind)) {
-                this.selectedFrameworkId = from;
-                this.refresh();
-                return;
-            }
-        }
-    }
-
-    /**
-     * 「返回父框架」的目标：来源栈顶那一个框架
-     *
-     * 来源只在「在右栏卡片里下钻」时记下，因此它必然处在当前框架的祖先链上；
-     * 这里再校验一次 —— 用户从左栏 / 侧栏直接切走时入口会随之消失，
-     * 不会留下一个指向无关位置的回退按钮。
-     *
-     * 切片协作可见：design/viewState.buildState 用它算右栏「返回父框架」入口。
-     */
-    public resolveNavBack(fwId: string): { nodeId: string; title: string } | undefined {
-        const from = this.frameworkNavStack[this.frameworkNavStack.length - 1];
-        if (!from) return undefined;
-        const node = this.pipe.GET_Node(from);
-        if (!node || !isFrameworkKind(node.kind)) return undefined;
-        let cur = this.pipe.GET_Parent(fwId)?.nodeId;
-        for (let guard = 0; cur && guard < 64; guard++) {
-            if (cur === from) return { nodeId: from, title: `${NODE_KIND_LABELS[node.kind]} · ${node.desc}` };
-            cur = this.pipe.GET_Parent(cur)?.nodeId;
-        }
-        return undefined;
-    }
-
-    /**
-     * 选中框架（左栏行末「在右侧打开」/ 右栏框架行 / 右栏卡片内下钻）
-     *
-     * 只有**右栏内下钻**才记来路（在右栏点框架行 = 进入它的内部，需要能回到原处）；
-     * 左栏点选是「直接切过去」，等于重新开始，因此顺带清掉来路。
-     */
-    private selectFramework(nodeId: string, side: TreeSide): void {
-        const prev = this.selectedFrameworkId;
-        if (side === 'right') {
-            if (prev && prev !== nodeId) this.frameworkNavStack.push(prev);
-        } else {
-            this.frameworkNavStack.length = 0;
-        }
-        this.selectedFrameworkId = nodeId;
-        this.refresh();
-    }
-
-    /** 状态圆点左键：规划/进行 → 完成；完成 → 规划（循环切换） */
-    private toggleState(nodeId: string): void {
-        const node = this.pipe.GET_Node(nodeId);
-        if (!node) return;
-        setNodeState(this, nodeId, (node.state ?? 'plan') === 'done' ? 'plan' : 'done');
     }
 
     /** 状态圆点右键：完整状态菜单 */
@@ -668,7 +530,7 @@ export class DesignView extends ReactViewBase {
             {
                 ...(expanded ? COLLAPSE_ITEM : EXPAND_ITEM),
                 section: SECTION.main,
-                action: () => this.toggleExpandAll(node, side),
+                action: () => toggleExpandAll(this, node, side),
             },
         ];
     }
@@ -861,7 +723,7 @@ export class DesignView extends ReactViewBase {
                 name: '变更归属',
                 icon: ICON.changeParent,
                 section: SECTION.meta,
-                action: () => this.changeParent(node.nodeId),
+                action: () => changeParent(this, node.nodeId),
             },
             {
                 name: '重命名',
