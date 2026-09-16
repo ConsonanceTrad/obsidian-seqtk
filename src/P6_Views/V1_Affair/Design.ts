@@ -57,6 +57,14 @@ import {
 } from './design/textTree';
 import type { TextTreeNode } from '../../P2_Tools/Parse/TextTree';
 import { FRAMEWORK_TREE } from './design/FrameworkTreeShared';
+import {
+    LEFT_PANE_DEFAULT,
+    bindTreeScroll,
+    persistNow,
+    restoreTreeScroll,
+    schedulePersist,
+    setLeftWidth,
+} from './design/session';
 import { VIEW_TYPE_DELEGATED_TREE } from './DelegatedTree';
 import { VIEW_TYPE_HUB_SIDE } from '../V0_Common/Hub';
 import { NodePickModal } from '../../P7_Render/Structure/S2_Modal/NodePickModal';
@@ -171,12 +179,7 @@ async function deliverTextTree(
     }
 }
 
-/** 左栏宽度的默认值与取值范围（与 DesignPanel 的拖动上限保持一致） */
-const LEFT_PANE_DEFAULT = 280;
-const LEFT_PANE_MIN = 160;
-const LEFT_PANE_MAX = 640;
-
-/** 初始视图状态（未初始化时的空壳） */
+/** 初始视图状态（未初始化时的空壳）；左栏宽度的常量与读写见 design/session */
 const EMPTY_VIEW_STATE: DesignViewState = {
     leftItems: [],
     rightItems: [],
@@ -279,10 +282,10 @@ export class DesignView extends ReactViewBase {
     private frameworkNavStack: string[] = [];
     /** 当前拖拽源（dragstart 写入，dragover/drop 读取，dragend 清空） */
     public dragSource: DragSource | null = null;
-    /** 左栏宽度（记忆于 settings.leftPaneWidth；拖动结束后才写回） */
-    private leftWidth = LEFT_PANE_DEFAULT;
-    /** 设置写回的防抖计时器 */
-    private persistTimer: number | null = null;
+    /** 左栏宽度（记忆于 settings.leftPaneWidth；拖动结束后才写回）；切片协作可见 */
+    public leftWidth = LEFT_PANE_DEFAULT;
+    /** 设置写回的防抖计时器；切片协作可见 */
+    public persistTimer: number | null = null;
 
     /** 瞬时交互态（只影响渲染，不进 design/* 切片） */
     private rename: { nodeId: string; side: TreeSide } | null = null;
@@ -297,7 +300,6 @@ export class DesignView extends ReactViewBase {
     /** refresh() 执行中：防止共享状态回调与 refresh 互相触发 */
     private refreshing = false;
 
-    /** 立即把「可记忆的界面状态」写回设置 */
     /**
      * 立即把会话状态写回设置（不防抖）
      *
@@ -305,17 +307,7 @@ export class DesignView extends ReactViewBase {
      * 插件，onBeforeUnmount 未必会被调用，最后一次变更就可能丢掉。
      */
     public FLUSH_Session(): void {
-        this.persistNow();
-    }
-
-    private persistNow(): void {
-        this.settings.leftPaneWidth = this.leftWidth;
-        this.settings.expandedFrameworkIds = [...FRAMEWORK_TREE.expandedLeft];
-        this.settings.expandedRightIds = [...this.expandedRight];
-        // 会话状态：重开库时按这三项把视图恢复成关库前的样子
-        this.settings.delegated = FRAMEWORK_TREE.delegated;
-        this.settings.selectedFrameworkId = FRAMEWORK_TREE.selectedId;
-        this.persistSettings?.();
+        persistNow(this);
     }
 
     /**
@@ -324,46 +316,11 @@ export class DesignView extends ReactViewBase {
      * 用事件委托（捕获阶段）而不是给每棵树挂监听：树容器由 P7_Render 渲染，
      * 视图层不该去它内部找元素、更不该在重渲后重挂。判断是哪一栏靠 closest，
      * 与 DesignPanel 里其它“按栏分派”的写法一致。
+     *
+     * 实现与绑定工厂在 design/session —— 字段初始化器先于 constructor 体执行，
+     * 故工厂内只捕获 view 引用，字段要等事件触发时再读。
      */
-    private onTreeScroll = (e: Event): void => {
-        const el = e.target as HTMLElement | null;
-        if (!el || !el.classList || !el.classList.contains('seqtk-tree')) return;
-        if (el.closest('.seqtk-split-left')) this.settings.treeScrollLeft = el.scrollTop;
-        else this.settings.treeScrollRight = el.scrollTop;
-        this.schedulePersist();
-    };
-
-    /** 把两栏树容器滚回上次的位置（树渲染完成后再设，早了会被内容高度归零冲掉） */
-    private restoreTreeScroll(): void {
-        const left = this.settings.treeScrollLeft;
-        const right = this.settings.treeScrollRight;
-        if (!left && !right) return;
-        window.requestAnimationFrame(() => {
-            const root = this.containerEl;
-            const trees = Array.from(root.querySelectorAll<HTMLElement>('.seqtk-tree'));
-            for (const el of trees) {
-                const want = el.closest('.seqtk-split-left') ? left : right;
-                if (want) el.scrollTop = want;
-            }
-        });
-    }
-
-    /** 防抖写回：拖动过程与连续展开不会频繁落盘 */
-    private schedulePersist(): void {
-        if (this.persistTimer !== null) window.clearTimeout(this.persistTimer);
-        this.persistTimer = window.setTimeout(() => {
-            this.persistTimer = null;
-            this.persistNow();
-        }, 600);
-    }
-
-    /** 左栏宽度变更（由渲染件在拖动结束后上报） */
-    private setLeftWidth(width: number): void {
-        const clamped = Math.min(Math.max(Math.round(width), LEFT_PANE_MIN), LEFT_PANE_MAX);
-        if (clamped === this.leftWidth) return;
-        this.leftWidth = clamped;
-        this.schedulePersist();
-    }
+    public onTreeScroll = bindTreeScroll(this);
 
     constructor(
         leaf: WorkspaceLeaf,
@@ -371,8 +328,8 @@ export class DesignView extends ReactViewBase {
         public pipe: DataPipe,
         public settings: PluginSettings,
         public onTopOrderChange?: (order: string[]) => void,
-        /** 把设置写回磁盘（由装配层注入，视图类不直接依赖插件实例） */
-        private persistSettings?: () => void,
+        /** 把设置写回磁盘（由装配层注入，视图类不直接依赖插件实例）；切片协作可见 */
+        public persistSettings?: () => void,
     ) {
         super(leaf);
         this.topOrder = [...(this.settings.topFrameworkOrder ?? [])];
@@ -416,7 +373,7 @@ export class DesignView extends ReactViewBase {
         // 只持久化是不够的 —— 从委托面板那侧关掉委托时，本视图的 stateStore 不会变，
         // 左栏与把手就一直不回来（委托开关就藏在共享状态里）。
         this.unsubShared = FRAMEWORK_TREE.store.subscribe(() => {
-            this.schedulePersist();
+            schedulePersist(this);
             this.onSharedChanged();
         });
         // 恢复会话状态：上次打开的是哪个框架（选中 = 右栏打开它）、两栏各自的展开集合。
@@ -429,13 +386,13 @@ export class DesignView extends ReactViewBase {
         // 滚动位置：捕获阶段，容器由 P7_Render 渲染，不必去它内部挂监听
         this.containerEl.addEventListener('scroll', this.onTreeScroll, true);
         this.refresh();
-        this.restoreTreeScroll();
+        restoreTreeScroll(this);
     }
 
     protected onBeforeUnmount(): void {
         this.containerEl.removeEventListener('scroll', this.onTreeScroll, true);
         // 关视图前把当前滚动位置落盘（防抖可能还没到点）
-        this.persistNow();
+        persistNow(this);
         document.removeEventListener('contextmenu', this.onDocumentContextMenu, true);
         this.unsub?.();
         this.unsub = null;
@@ -444,7 +401,7 @@ export class DesignView extends ReactViewBase {
         if (this.persistTimer !== null) {
             window.clearTimeout(this.persistTimer);
             this.persistTimer = null;
-            this.persistNow();   // 关闭视图前把最后一次状态落盘，避免丢掉
+            persistNow(this);   // 关闭视图前把最后一次状态落盘，避免丢掉
         }
     }
 
@@ -646,7 +603,7 @@ export class DesignView extends ReactViewBase {
             toggleDelegate: () => this.toggleDelegate(),
             selectParentFramework: () => this.selectParentFramework(),
             sourcesClick: (nodeId, _side, e) => this.showSourcesMenu(nodeId, e),
-            setLeftWidth: (width) => this.setLeftWidth(width),
+            setLeftWidth: (width) => setLeftWidth(this, width),
         };
     }
 
