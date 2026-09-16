@@ -335,28 +335,3 @@ function COUNT_Removed(pipe: DataPipe, nodeId: string): number {
     }
     return n;
 }
-
-/**
- * 把子树导出为 Markdown
- *
- * 与「导出为文本树」共用同一份数据（BUILD_Subtree），只是呈现不同：
- * md 用标题 + 勾选列表，适合在库外阅读、打印或贴给他人；文本树紧凑，适合再导入。
- * 两者都只是**视图**，事实源始终是节点文件本身。
- */
-export function EXPORT_SubtreeAsMarkdown(pipe: DataPipe, rootNodeId: string): string | null {
-    const root = BUILD_Subtree(pipe, rootNodeId);
-    if (!root) return null;
-
-    const mark = (s: TextTreeNode['state']): string =>
-        ({ plan: ' ', open: '/', done: 'x', drop: '-' } as Record<string, string>)[s] ?? ' ';
-
-    const lines: string[] = [`# ${root.desc}`, ''];
-    const visit = (node: TextTreeNode, depth: number): void => {
-        // 顶层下的直接子项不加缩进，读起来更像普通清单
-        lines.push(`${'  '.repeat(depth)}- [${mark(node.state)}] ${node.desc}`);
-        for (const child of node.children) visit(child, depth + 1);
-    };
-    for (const child of root.children) visit(child, 0);
-
-    return lines.join('\n') + '\n';
-}

@@ -567,20 +567,24 @@
   cursor: pointer;
 }
 
+/* 四态配色：待定浅灰 / 进行浅绿 / 完成取主题的高对比色 / 放弃浅红。
+   「完成」用 --text-normal 而不是纯黑：深色主题下纯黑等于看不见，而这个高对比色正是
+   它要表达的「黑」—— 浅色主题下近黑、深色主题下自动反相为近白。
+   三种彩色都用中等亮度，明暗主题下都看得清。 */
 .seqtk-state-dot.state-plan {
-  background: var(--color-base-50);
+  background: #b9b9b9;
 }
 
 .seqtk-state-dot.state-open {
-  background: var(--color-blue);
+  background: #7ec98f;
 }
 
 .seqtk-state-dot.state-done {
-  background: var(--color-green);
+  background: var(--text-normal);
 }
 
 .seqtk-state-dot.state-drop {
-  background: var(--color-red);
+  background: #e79a9a;
 }
 
 /* 行末“在右侧打开”按钮（左栏行） */
@@ -3724,8 +3728,26 @@
    文本树导入（提取选中文本为节点组）
    ============================================================ */
 
+/* 文本树弹窗比常规弹窗宽：这里编辑的是长文本，宽度不够会频繁横向滚动。
+   窄窗口下用 min() 自动收缩到视口内。 */
+.modal.seqtk-texttree-modal {
+  width: min(880px, 92vw);
+}
+
+/* 通用文本弹窗里的多行字段（如节点描述正文）：占满宽度、可垂直拉伸 */
+.seqtk-prompt-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 160px;
+  font-family: var(--font-text);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  resize: vertical;
+}
+
 .seqtk-texttree-input {
   width: 100%;
+  box-sizing: border-box;
   min-height: 180px;
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
@@ -3765,13 +3787,9 @@
   padding: 2px 0;
 }
 
-.seqtk-texttree-mark {
-  flex-shrink: 0;
-  font-family: var(--font-monospace);
-  color: var(--text-muted);
-}
-
+/* 预览行：状态圆点要落在行末，所以描述自己撑满剩余宽度 */
 .seqtk-texttree-desc {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

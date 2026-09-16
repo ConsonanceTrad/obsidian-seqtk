@@ -301,7 +301,7 @@ export function saveNodeBody(view: DesignView, node: TreeNode, body: string): vo
  * 归档节点：置 open:false（从快速缓存移除，保留于全量缓存供回收/决策视图）
  *
  * 后代是否一并归档由设置 archiveChildren 决定；是否弹确认由 archiveConfirm 决定
- * （none 直接执行 / simple 确认 / strict 需输入确认词）。
+ * （none 直接执行 / children 仅当含子节点时 / simple 确认 / strict 需输入确认词）。
  */
 export function archiveNode(view: NodeEditHost, nodeId: string): void {
   const node = view.pipe.GET_Node(nodeId);
@@ -335,7 +335,9 @@ export function archiveNode(view: NodeEditHost, nodeId: string): void {
       : '已归档（可在回收模式中还原）');
   };
 
-  if (!NEEDS_Confirm(s.archiveConfirm)) {
+  // 「仅当含子节点时提示」那一档要的判据：有无子节点由数据层给，策略模块据此决定拦不拦
+  const hasChildren = view.pipe.GET_Children(nodeId).some((c) => !!c.data);
+  if (!NEEDS_Confirm(s.archiveConfirm, hasChildren)) {
     run();
     return;
   }
@@ -353,7 +355,7 @@ export function archiveNode(view: NodeEditHost, nodeId: string): void {
 /**
  * 删除节点：后代如何处理由设置 deleteChildren 决定
  * （keep 只删自身、后代脱离父级；archive 后代改归档；delete 级联删除）。
- * 是否弹确认由 deleteConfirm 决定（none / simple / strict）。
+ * 是否弹确认由 deleteConfirm 决定（none / children 仅当含子节点时 / simple / strict）。
  */
 export function deleteNodeTree(view: DesignView, node: TreeNode): void {
   const s = view.settings;
@@ -414,7 +416,8 @@ export function deleteNodeTree(view: DesignView, node: TreeNode): void {
     new Notice(`已删除 ${targets.length} 个节点`);
   };
 
-  if (!NEEDS_Confirm(s.deleteConfirm)) {
+  // 同上：有无子节点决定「仅当含子节点时提示」这一档拦不拦
+  if (!NEEDS_Confirm(s.deleteConfirm, directChildren.length > 0)) {
     run();
     return;
   }

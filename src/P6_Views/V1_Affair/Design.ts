@@ -51,7 +51,6 @@ import {
     APPLY_TextTreeEdit,
     DELIVER_TextTree,
     EXPORT_ChildrenAsText,
-    EXPORT_SubtreeAsMarkdown,
     EXPORT_SubtreeAsText,
     PLAN_TextTreeEdit,
 } from './design/textTree';
@@ -97,6 +96,7 @@ import {
     EXPAND_ITEM,
     ICON,
     SECTION,
+    STATE_ICON,
 } from '../../P7_Render/Composition/C3_RightClickMenu/MenuAppearance';
 import { EVIDENCE_KINDS } from '../../P7_Render/Composition/C2_Tree/drag';
 import { kindUsesState } from '../../P7_Render/Structure/S2_Modal/TransactionModals';
@@ -158,6 +158,15 @@ async function deliverTextTree(
         new Notice(`导入中断：已建 ${result.created} 个节点，失败原因：${result.error}`);
     } else {
         new Notice(`已导入 ${result.created} 个节点`);
+    }
+    // 导入后把落点节点整棵完全展开，导完就能直接查阅。
+    // 父子两层都加：既铺开导入进来的层级，也铺开落点原有的折叠子节点 —— 否则「完全展开」
+    // 会名不副实。这条路径只有 pipe（编辑器命令调用），拿不到 DesignView 那份右栏展开状态，
+    // 所以只写左栏共享集合；落点选「顶层」时无可展开对象，跳过。
+    if (parentId) {
+        FRAMEWORK_TREE.expandedLeft.add(parentId);
+        for (const d of pipe.COLLECT_Descendants(parentId)) FRAMEWORK_TREE.expandedLeft.add(d.nodeId);
+        FRAMEWORK_TREE.markExpandedChanged();
     }
 }
 
@@ -730,36 +739,13 @@ export class DesignView extends ReactViewBase {
     }
 
     /**
-     * 导出子树为 Markdown 文件并打开
+     * 复制子树为文本树到剪贴板（可再粘到别处导入）
      *
-     * 写到数据目录下的 exports/（同名则覆盖）—— 放在库里而不是弹个另存为对话框，
-     * 是为了让「导出」和「打印」都只有一步：导出后直接打开，Ctrl+P 即可。
-     * 名称取自节点名，因此同一个节点反复导出不会堆出一串副本。
+     * 不强制标类型（不给 alwaysKind）：链路能推断出类型时就不写 `K:xxx`，粘出来更像一份
+     * 可读清单；编辑类入口（批量编辑 / 框架内容）仍强制标出类型，以便精确控制每一行。
      */
-    public async exportSubtreeAsMarkdown(nodeId: string): Promise<void> {
-        const node = this.pipe.GET_Node(nodeId);
-        if (!node) return;
-        const md = EXPORT_SubtreeAsMarkdown(this.pipe, nodeId);
-        if (!md) return;
-
-        const folder = this.settings.rootFolder ? `${this.settings.rootFolder}/exports` : 'exports';
-        const path = `${folder}/${node.desc}.md`;
-        try {
-            if (!this.app.vault.getFolderByPath(folder)) await this.app.vault.createFolder(folder);
-            const existing = this.app.vault.getFileByPath(path);
-            if (existing) await this.app.vault.modify(existing, md);
-            else await this.app.vault.create(path, md);
-            new Notice(`已导出到 ${path}`);
-            void this.app.workspace.openLinkText(path, '', false);
-        } catch (err) {
-            console.error('[SeqTK] 导出 Markdown 失败:', err);
-            new Notice('导出失败，请查看控制台');
-        }
-    }
-
-    /** 复制子树为文本树到剪贴板（可再粘到别处导入） */
     public async copySubtreeAsText(nodeId: string): Promise<void> {
-        const text = EXPORT_SubtreeAsText(this.pipe, nodeId, { alwaysKind: true });
+        const text = EXPORT_SubtreeAsText(this.pipe, nodeId);
         if (text === null) return;
         try {
             await navigator.clipboard.writeText(text);
@@ -804,6 +790,8 @@ export class DesignView extends ReactViewBase {
                 }
                 return lines;
             },
+            // 批量编辑：点到弹窗外不关闭（那段文本可能改了很久，误点丢不起）
+            closeOnClickOutside: false,
             onConfirm: (roots) => void this.applySubtreeEdit(nodeId, roots),
         }).open();
     }
@@ -853,6 +841,8 @@ export class DesignView extends ReactViewBase {
                 }
                 return lines;
             },
+            // 同上：框架内容通常更多，误点一下更丢不起
+            closeOnClickOutside: false,
             onConfirm: (roots) => void this.applyFrameworkContentEdit(frameworkId, roots),
         }).open();
     }
@@ -1147,7 +1137,7 @@ export class DesignView extends ReactViewBase {
         ];
     }
 
-    /** 行内新建子项：左栏是子框架；右栏按该行允许的子类型（目标固定为工序） */
+    /** 行内追加子项：左栏是子框架；右栏按该行允许的子类型（目标固定为工序） */
     private newChildDefs(node: TreeNode, e: MouseEvent, side: TreeSide): MenuDefinition[] {
         const kind = node.data.kind;
         const kinds = side === 'left' ? [NODE_KIND.TRANS] : getAllowedChildKinds(kind);
@@ -1155,7 +1145,7 @@ export class DesignView extends ReactViewBase {
         const allowed = kind === NODE_KIND.TARGET ? [NODE_KIND.PROCESS] : kinds;
         return [
             {
-                name: side === 'right' ? '新建子项' : '新建子框架',
+                name: side === 'right' ? '追加子项' : '追加子框架',
                 icon: ICON.newChild,
                 section: SECTION.main,
                 action: () => this.startCreateChild(this.ctxFromEvent(e, node), side, allowed),
@@ -1288,25 +1278,26 @@ export class DesignView extends ReactViewBase {
         ];
     }
 
-    /** 普通节点行右键：结构操作 + 编辑 + 状态 + 模板 + 归属/信息源/导出 + 归档 */
+    /**
+     * 普通节点行右键：分四组 —— 结构 + 编辑 / 归属 · 命名 · 复制 · 打开 / 工具（模板、外部信息）/ 归档
+     *
+     * 组与组之间由装配器按 section 变化插分隔符，声明里不写分隔标记。
+     * 归档独立成组：它是破坏性操作，单独隔一道线与上面的日常项分开，免得手滑点到。
+     */
     private getRowMenuDefinitions(node: TreeNode, e: MouseEvent, side: TreeSide): MenuDefinitions {
         const addEvidence = (kind: NodeKindValue): void =>
             this.startCreateChild(this.ctxFromEvent(e, node), side, [kind]);
         return [
+            // ── 第一组：结构 + 编辑 ──
             ...this.expandDefs(node, side),
             ...this.newChildDefs(node, e, side),
             ...this.evidenceSubmenuDefs(addEvidence),
-            {
-                name: '重命名',
-                icon: ICON.rename,
-                section: SECTION.main,
-                action: () => this.startRename(node.nodeId, side),
-            },
+            ...this.stateDefs(node),
             {
                 name: '编辑描述',
                 icon: ICON.editDesc,
                 section: SECTION.main,
-                action: () => this.startBodyEdit(node.nodeId),
+                action: () => this.openBodyEdit(node.nodeId),
             },
             {
                 name: '时间规则',
@@ -1314,60 +1305,90 @@ export class DesignView extends ReactViewBase {
                 section: SECTION.main,
                 action: () => openEdit(this, node.nodeId),
             },
-            ...this.stateDefs(node),
-            ...this.templateDefs(node),
+            {
+                name: '批量编辑',
+                icon: ICON.batchEdit,
+                section: SECTION.main,
+                action: () => this.editSubtreeAsText(node.nodeId),
+            },
+
+            // ── 第二组：归属 · 命名 · 复制 · 打开 ──
             {
                 name: '变更归属',
-                icon: 'move',
+                icon: ICON.changeParent,
                 section: SECTION.meta,
                 action: () => this.changeParent(node.nodeId),
             },
             {
-                name: '添加外部信息源',
-                icon: 'link',
+                name: '重命名',
+                icon: ICON.rename,
                 section: SECTION.meta,
-                action: () => this.addExternalSource(node.nodeId),
+                action: () => this.startRename(node.nodeId, side),
             },
             {
-                name: '创建时间戳文档并关联',
-                icon: 'file-plus',
-                section: SECTION.meta,
-                action: () => void this.createTimestampDoc(node.nodeId),
-            },
-            {
-                name: '以文本批量编辑',
-                icon: 'file-edit',
-                section: SECTION.meta,
-                action: () => this.editSubtreeAsText(node.nodeId),
-            },
-            {
-                name: '导出为 Markdown',
-                icon: 'file-down',
-                section: SECTION.meta,
-                action: () => void this.exportSubtreeAsMarkdown(node.nodeId),
-            },
-            {
-                name: '复制为文本树',
-                icon: 'clipboard-copy',
+                name: '复制子树',
+                icon: ICON.copyText,
                 section: SECTION.meta,
                 action: () => void this.copySubtreeAsText(node.nodeId),
             },
             {
                 name: '打开文件',
-                icon: 'external-link',
+                icon: ICON.openFile,
                 section: SECTION.meta,
                 action: () => void openNodeFile(this, node.nodeId),
             },
+
+            // ── 第三组：工具（模板与外部信息各收成一个子菜单）──
+            ...this.templateGroupDefs(node),
+            ...this.externalInfoDefs(node),
+
+            // ── 第四组：归档（破坏性操作，靠上一道分隔线隔开）──
             {
                 name: '归档',
                 icon: ICON.archive,
                 section: SECTION.danger,
+                warning: true,
                 action: () => archiveNode(this, node.nodeId),
             },
         ];
     }
 
-    /** 状态更改子菜单：当前状态打勾（该类型不带状态时整项不出） */
+    /** 模板组：两个模板动作用一个子菜单收拢，少占一行 */
+    private templateGroupDefs(node: TreeNode): MenuDefinition[] {
+        return [
+            {
+                name: '模板使用',
+                icon: ICON.templateGroup,
+                section: SECTION.tools,
+                items: this.templateDefs(node),
+            },
+        ];
+    }
+
+    /** 外部信息组：挂一条外部链接，或就地为节点创建一份关联的快速文件 */
+    private externalInfoDefs(node: TreeNode): MenuDefinition[] {
+        return [
+            {
+                name: '外部信息',
+                icon: ICON.externalGroup,
+                section: SECTION.tools,
+                items: [
+                    {
+                        name: '添加外部信息源',
+                        icon: ICON.externalGroup,
+                        action: () => this.addExternalSource(node.nodeId),
+                    },
+                    {
+                        name: '创建关联快速文件',
+                        icon: 'file-plus',
+                        action: () => void this.createTimestampDoc(node.nodeId),
+                    },
+                ],
+            },
+        ];
+    }
+
+    /** 状态更改子菜单：每态一个图标 + 当前状态打勾（该类型不带状态时整项不出） */
     private stateDefs(node: TreeNode): MenuDefinition[] {
         if (!kindUsesState(node.data.kind)) return [];
         const current = node.data.state ?? 'plan';
@@ -1378,6 +1399,7 @@ export class DesignView extends ReactViewBase {
                 section: SECTION.main,
                 items: [...STATE_VALUES].map((s) => ({
                     name: NODE_STATE_LABELS[s],
+                    icon: STATE_ICON[s],
                     checked: current === s,
                     action: () => setNodeState(this, node.nodeId, s),
                 })),
@@ -1390,6 +1412,7 @@ export class DesignView extends ReactViewBase {
         const current = node.data.state ?? 'plan';
         return [...STATE_VALUES].map((s) => ({
             name: NODE_STATE_LABELS[s],
+            icon: STATE_ICON[s],
             checked: current === s,
             section: SECTION.main,
             action: () => setNodeState(this, node.nodeId, s),
@@ -1486,7 +1509,35 @@ export class DesignView extends ReactViewBase {
         this.refresh();
     }
 
-    /** 进入正文编辑态（由菜单「编辑描述」触发） */
+    /**
+     * 编辑描述：走模态框（菜单「编辑描述」的入口）
+     *
+     * 描述是整段 Markdown，弹窗里改比行内浮层从容；行内浮层那条链（startBodyEdit）
+     * 留给行上的直接编辑入口。
+     */
+    private openBodyEdit(nodeId: string): void {
+        const data = this.pipe.GET_Node(nodeId);
+        if (!data) return;
+        new TextPromptModal(this.app, {
+            title: `编辑描述 · ${data.desc}`,
+            desc: '节点的正文（Markdown）。留空即清空。',
+            fields: [
+                {
+                    key: 'body',
+                    label: '描述',
+                    type: 'textarea',
+                    value: this.pipe.GET_NodeBody(nodeId) ?? '',
+                },
+            ],
+            confirmText: '保存',
+            onConfirm: (values) => {
+                saveNodeBody(this, buildNode(this.pipe, nodeId, data), values.body ?? '');
+                this.refresh();
+            },
+        }).open();
+    }
+
+    /** 进入正文编辑态（行内浮层，见 openBodyEdit 的说明） */
     public startBodyEdit(nodeId: string): void {
         this.bodyEditing = { nodeId, value: this.pipe.GET_NodeBody(nodeId) ?? '' };
         this.refresh();

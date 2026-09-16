@@ -6,7 +6,7 @@
  * 保持 Obsidian 原生 Modal（与 S2_Modal 下其它弹窗一致，见 dec-db13741643639699）。
  */
 
-import { App, Modal, Setting, TextComponent } from 'obsidian';
+import { App, Modal, Setting, TextAreaComponent, TextComponent } from 'obsidian';
 import { FileInputSuggest } from './FileInputSuggest';
 
 export interface TextPromptField {
@@ -17,10 +17,11 @@ export interface TextPromptField {
     value?: string;
     /**
      * 字段形态：text（普通输入）| file（库内文件，额外给一个可搜索的选择按钮）
+     * | textarea（多行文本，如节点描述正文 —— 回车换行，不提交）
      *
      * 用 file 时输入框仍可编辑 —— 从别处粘一条相对路径常比搜索快。
      */
-    type?: 'text' | 'file';
+    type?: 'text' | 'file' | 'textarea';
 }
 
 export interface TextPromptOptions {
@@ -33,6 +34,7 @@ export interface TextPromptOptions {
 
 export class TextPromptModal extends Modal {
     private readonly inputs: Record<string, HTMLInputElement> = {};
+    private readonly areas: Record<string, HTMLTextAreaElement> = {};
 
     constructor(app: App, private opts: TextPromptOptions) {
         super(app);
@@ -47,6 +49,16 @@ export class TextPromptModal extends Modal {
 
         for (const f of this.opts.fields) {
             const setting = new Setting(contentEl).setName(f.label);
+            // 多行：正文这类整段文本，弹窗里改比行内浮层从容
+            if (f.type === 'textarea') {
+                setting.addTextArea((t: TextAreaComponent) => {
+                    t.setPlaceholder(f.placeholder ?? '').setValue(f.value ?? '');
+                    t.inputEl.rows = 8;
+                    t.inputEl.addClass('seqtk-prompt-textarea');
+                    this.areas[f.key] = t.inputEl;
+                });
+                continue;
+            }
             let inputEl: HTMLInputElement | null = null;
             setting.addText((t: TextComponent) => {
                 t.setPlaceholder(f.placeholder ?? '').setValue(f.value ?? '');
@@ -63,7 +75,10 @@ export class TextPromptModal extends Modal {
 
         const collect = (): Record<string, string> => {
             const out: Record<string, string> = {};
-            for (const f of this.opts.fields) out[f.key] = this.inputs[f.key]?.value.trim() ?? '';
+            for (const f of this.opts.fields) {
+                const el = this.inputs[f.key] ?? this.areas[f.key];
+                out[f.key] = el?.value.trim() ?? '';
+            }
             return out;
         };
 
@@ -76,12 +91,14 @@ export class TextPromptModal extends Modal {
             )
             .addButton((b) => b.setButtonText('取消').onClick(() => this.close()));
 
-        // 单字段时直接把焦点放进输入框；回车提交
-        const first = this.inputs[this.opts.fields[0]?.key ?? ''];
+        // 单字段时直接把焦点放进输入框；回车提交 —— 多行字段除外，那里的回车是换行
+        const firstKey = this.opts.fields[0]?.key ?? '';
+        const first: HTMLInputElement | HTMLTextAreaElement | undefined =
+            this.inputs[firstKey] ?? this.areas[firstKey];
         if (first) {
             first.focus();
             first.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && this.inputs[firstKey]) {
                     e.preventDefault();
                     this.close();
                     this.opts.onConfirm(collect());

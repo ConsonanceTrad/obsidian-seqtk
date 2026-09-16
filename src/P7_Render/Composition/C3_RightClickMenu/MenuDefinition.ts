@@ -40,6 +40,8 @@ export interface MenuDefinition {
     label?: boolean;
     /** 勾选态（用于「当前状态」这类互斥项） */
     checked?: boolean;
+    /** 危险操作：装配成警示色（Obsidian 的 setWarning），如归档 */
+    warning?: boolean;
     /** 子菜单（对应 SettingDefinition.items 的嵌套语义） */
     items?: MenuDefinition[];
     /** 点击执行；缺省则该项不响应（见装配器的说明） */
@@ -56,6 +58,7 @@ function renderDefinition(menu: Menu, def: MenuDefinition): void {
         if (def.icon) item.setIcon(def.icon);
         if (def.label) item.setIsLabel(true);
         if (def.checked) item.setChecked(true);
+        if (def.warning) item.setWarning(true);
 
         if (def.items && def.items.length > 0) {
             const setSubmenu = (item as unknown as { setSubmenu?: () => Menu }).setSubmenu;

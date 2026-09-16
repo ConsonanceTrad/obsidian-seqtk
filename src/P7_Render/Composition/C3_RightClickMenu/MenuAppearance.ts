@@ -38,9 +38,11 @@ export const EVIDENCE_ICONS: Record<string, string> = {
 export const SECTION = {
     /** 主体操作：新建 / 编辑 / 状态 */
     main: 'main',
+    /** 工具：模板与外部信息（节点行菜单的第二组） */
+    tools: 'tools',
     /** 模板：存为 / 使用 */
     template: 'template',
-    /** 元信息：归属、信息源、导出、打开文件 */
+    /** 元信息：归属、导出、打开文件 */
     meta: 'meta',
     /** 归档 */
     danger: 'danger',
@@ -62,12 +64,36 @@ export const ICON = {
     editAttrs: 'settings-2',
     editDesc: 'file-text',
     editFrameworkContent: 'file-text',
+    /** 批量文本编辑（整棵子树来回改） */
+    batchEdit: 'file-edit',
+    /** 模板组的入口 */
+    templateGroup: 'bookmark',
+    /** 外部信息组的入口 */
+    externalGroup: 'link',
+    /** 变更归属 */
+    changeParent: 'move',
+    /** 复制为文本 */
+    copyText: 'clipboard-copy',
+    /** 打开文件 */
+    openFile: 'external-link',
     saveAsTemplate: 'bookmark-plus',
     useTemplate: 'bookmark-check',
     archive: 'archive',
     syncFromFiles: 'refresh-cw',
     changeState: 'refresh-cw',
 } as const;
+
+/**
+ * 状态圆点 / 状态菜单项的图标（四态各一）
+ *
+ * 与行上的圆点同源：圆点用颜色区分，菜单里既要颜色又要图标，于是给状态项配这一组。
+ */
+export const STATE_ICON: Record<string, string> = {
+    plan: 'circle',
+    open: 'loader',
+    done: 'check-circle',
+    drop: 'x-circle',
+};
 
 /** 展开：标题与图标随即将执行的行为变化（无子项的行不出现） */
 export const EXPAND_ITEM = { name: '展开', icon: 'unfold-vertical' } as const;

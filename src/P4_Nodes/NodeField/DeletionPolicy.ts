@@ -26,10 +26,12 @@ export type DeleteChildrenMode =
  * 破坏性操作的提示级别
  *
  * - `none`：直接执行，不打断
+ * - `children`：仅当该节点**含子节点**时才提示 —— 平衡安全与迅捷：动一棵子树前问一句，
+ *   日常对叶子节点的操作则不打断
  * - `simple`：确认 / 取消（显示影响范围）
  * - `strict`：另需手动输入确认词，防误触
  */
-export type ConfirmLevel = 'none' | 'simple' | 'strict';
+export type ConfirmLevel = 'none' | 'children' | 'simple' | 'strict';
 
 /** 归档 / 删除相关策略（存放于 PluginSettings） */
 export interface DestructivePolicy {
@@ -44,21 +46,31 @@ export interface DestructivePolicy {
 }
 
 /**
- * 默认策略（与改造前的既有行为一致，但都可配）
+ * 默认策略
  *
  * 归档：只动自身（归档语义是「从快速缓存移除」，子孙不该被牵连）
  * 删除：级联删子树（原先就是级联；改成可配后默认仍是它，行为不变）
- * 提示：两者都给一次普通确认 —— 破坏性操作默认问一句更安全
+ * 提示：归档可逆且是日常动作 → 只在动到子树时问一句（`children`）；
+ *       删除级联且进系统回收站、风险更高 → 默认总是问一次（`simple`）
  */
 export const DEFAULT_DESTRUCTIVE_POLICY: DestructivePolicy = {
     archiveChildren: 'keep',
     deleteChildren: 'delete',
-    archiveConfirm: 'simple',
+    archiveConfirm: 'children',
     deleteConfirm: 'simple',
 };
 
-/** 该提示级别是否需要弹窗 */
-export const NEEDS_Confirm = (level: ConfirmLevel): boolean => level !== 'none';
+/**
+ * 该提示级别在「本次操作对象有无子节点」下是否需要弹窗
+ *
+ * `children` 档把「有无子节点」当判据；这个事实由调用方从数据层取好传进来 ——
+ * 本模块只做策略判断，不查数据。
+ */
+export const NEEDS_Confirm = (level: ConfirmLevel, hasChildren: boolean): boolean => {
+    if (level === 'none') return false;
+    if (level === 'children') return hasChildren;
+    return true;
+};
 
 /** strict 级别需要手动输入的确认词 */
 export const STRICT_CONFIRM_WORD = '删除';
@@ -77,6 +89,7 @@ export const DELETE_CHILDREN_LABELS: Record<DeleteChildrenMode, string> = {
 
 export const CONFIRM_LEVEL_LABELS: Record<ConfirmLevel, string> = {
     none: '不提示，直接执行',
+    children: '仅当含子节点时提示',
     simple: '提示一次（确认 / 取消）',
     strict: `提示并要求输入「${STRICT_CONFIRM_WORD}」`,
 };

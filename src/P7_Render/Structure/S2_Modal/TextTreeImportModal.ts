@@ -19,6 +19,7 @@ import {
     type TextTreeNode,
 } from '../../../P2_Tools/Parse/TextTree';
 import { GET_KindClass } from '../../../P4_Nodes/NodeKind/KindColors';
+import { NODE_STATE_LABELS } from '../../../P4_Nodes/NodeField/StateKeys';
 
 export interface TextTreeImportOptions {
     title: string;
@@ -32,17 +33,15 @@ export interface TextTreeImportOptions {
      * 影响范围跟着变，而不是等按下按钮才被告知要删什么。
      */
     notice?: (roots: TextTreeNode[]) => string[];
+    /**
+     * 点到弹窗外部是否关闭（默认 true）
+     *
+     * 批量编辑传 false：那段文本可能改了很久，误点一下外部就丢掉代价太大。
+     * 关掉之后仍可用 Esc 或「取消」结束。
+     */
+    closeOnClickOutside?: boolean;
     onConfirm: (roots: TextTreeNode[]) => void;
 }
-
-
-/** 状态 → 显示符号（与文本约定一致） */
-const STATE_MARK: Record<string, string> = {
-    plan: ' ',
-    open: '/',
-    done: 'x',
-    drop: '-',
-};
 
 export class TextTreeImportModal extends Modal {
     private textarea!: HTMLTextAreaElement;
@@ -58,8 +57,26 @@ export class TextTreeImportModal extends Modal {
         const { contentEl } = this;
         contentEl.empty();
         contentEl.addClass('seqtk-modal');
+        // 宽一档：这里编辑的是长文本，宽度不够会频繁横向滚动（宽度写在样式表里）
+        this.modalEl.addClass('seqtk-texttree-modal');
         this.setTitle(this.opts.title);
         if (this.opts.desc) contentEl.createEl('p', { text: this.opts.desc });
+
+        // 批量编辑：点到弹窗外部不关闭 —— 遮罩上的 mousedown 被拦下，
+        // Obsidian 那套「点外部关闭」便不会触发；Esc 与「取消」照旧有效。
+        if (this.opts.closeOnClickOutside === false) {
+            const container = this.containerEl;
+            container.addEventListener(
+                'mousedown',
+                (ev) => {
+                    if (ev.target === container) {
+                        ev.stopPropagation();
+                        ev.preventDefault();
+                    }
+                },
+                true,
+            );
+        }
 
         this.textarea = contentEl.createEl('textarea', {
             cls: 'seqtk-texttree-input',
@@ -142,9 +159,14 @@ export class TextTreeImportModal extends Modal {
         for (const row of rows) {
             const line = this.previewEl.createDiv({ cls: 'seqtk-texttree-row' });
             line.style.paddingLeft = `${row.depth * 14}px`;
-            line.createEl('span', { cls: 'seqtk-texttree-mark', text: `[${STATE_MARK[row.state] ?? ' '}]` });
             line.createEl('span', { cls: `seqtk-kind-badge ${GET_KindClass(row.kind)}`, text: row.kindLabel });
             line.createEl('span', { cls: 'seqtk-texttree-desc', text: row.desc });
+            // 状态放行末，用与正常节点行同一个圆点样式（含悬停状态名），让预览一眼就像那棵树；
+            // 文本语法里的 [ ] 只留在上面的编辑框里（那是回写要用的语法）
+            line.createEl('span', {
+                cls: `seqtk-state-dot state-${row.state}`,
+                attr: { title: NODE_STATE_LABELS[row.state] },
+            });
         }
 
         // 调用方提供的额外提示（如编辑模式下的删除预告）
