@@ -65,6 +65,7 @@ import {
     schedulePersist,
     setLeftWidth,
 } from './design/session';
+import { buildState } from './design/viewState';
 import { VIEW_TYPE_DELEGATED_TREE } from './DelegatedTree';
 import { VIEW_TYPE_HUB_SIDE } from '../V0_Common/Hub';
 import { NodePickModal } from '../../P7_Render/Structure/S2_Modal/NodePickModal';
@@ -287,13 +288,13 @@ export class DesignView extends ReactViewBase {
     /** 设置写回的防抖计时器；切片协作可见 */
     public persistTimer: number | null = null;
 
-    /** 瞬时交互态（只影响渲染，不进 design/* 切片） */
-    private rename: { nodeId: string; side: TreeSide } | null = null;
-    private creating: DesignInlineCreating | null = null;
-    private bodyEditing: { nodeId: string; value: string } | null = null;
-    private dropHint: { nodeId: string; hint: NodeLineDropHint } | null = null;
-    private draggingId: string | null = null;
-    private dropBlank = false;
+    /** 瞬时交互态（只影响渲染）；切片协作可见 */
+    public rename: { nodeId: string; side: TreeSide } | null = null;
+    public creating: DesignInlineCreating | null = null;
+    public bodyEditing: { nodeId: string; value: string } | null = null;
+    public dropHint: { nodeId: string; hint: NodeLineDropHint } | null = null;
+    public draggingId: string | null = null;
+    public dropBlank = false;
 
     private unsub: (() => void) | null = null;
     private unsubShared: (() => void) | null = null;
@@ -436,7 +437,7 @@ export class DesignView extends ReactViewBase {
         // 若订阅回调直接再调 refresh，就成了一来一回的死循环。
         this.refreshing = true;
         try {
-            this.stateStore.set(this.buildState());
+            this.stateStore.set(buildState(this));
             // 通知共享 store：展开集合可能刚被改动，委托面板据此重算（若未委托则无人订阅，开销可忽略）
             FRAMEWORK_TREE.markExpandedChanged();
         } finally {
@@ -458,115 +459,7 @@ export class DesignView extends ReactViewBase {
         this.refresh();
     }
 
-    /** 组装完整视图状态 */
-    private buildState(): DesignViewState {
-        const base: DesignViewState = {
-            leftItems: [],
-            rightItems: [],
-            rightMode: 'empty',
-            creating: this.creating,
-            bodyEditing: this.bodyEditing,
-            dropBlank: this.dropBlank,
-            // 委托开关来自共享状态源：委托面板被关闭时也会复位
-            delegated: FRAMEWORK_TREE.delegated,
-            leftPaneWidth: this.leftWidth,
-        };
-
-        if (!this.pipe.isInitialized) {
-            base.leftEmpty = '正在加载缓存…';
-            base.rightEmpty = '正在加载缓存…';
-            return base;
-        }
-
-        // 左栏：框架树
-        const roots = buildFrameworkTree(this.pipe, this.topOrder);
-        base.leftEmpty = roots.length === 0 ? '暂无框架，右键空白处新建' : undefined;
-        base.leftItems = this.buildItems(roots, 'left');
-
-        // 右栏：选中框架的节点树 / 全部事务总览
-        if (this.selectedFrameworkId === null) {
-            return this.buildOverviewOrPlaceholder(base);
-        }
-        const framework = this.pipe.GET_Node(this.selectedFrameworkId);
-        if (!framework) {
-            this.selectedFrameworkId = null;
-            return this.buildOverviewOrPlaceholder(base);
-        }
-
-        base.rightMode = 'framework';
-        base.rightTitle = `${NODE_KIND_LABELS[framework.kind]} · ${framework.desc}`;
-
-        const fwId = this.selectedFrameworkId;
-        // 右栏根级行挂在框架下 —— 行内新建要按它判断附加行属于哪一层
-        base.rightRootParentId = fwId;
-
-        // 「返回父框架」= 回到下钻前的那个框架，因此只在**右栏卡片里下钻**进来时提供；
-        // 左栏直接点选没有来路，自然不给这个入口（判定见 resolveNavBack）
-        base.parentFramework = this.resolveNavBack(fwId);
-
-        const direct = this.pipe.GET_Children(fwId).filter((c) => !!c.data);
-        const sorted = sortByFollows(framework, direct);
-        if (sorted.length === 0) {
-            base.rightEmpty = '该框架暂无内部节点\n在右栏空白处右键可创建子节点';
-            return base;
-        }
-        base.rightItems = this.buildItems(
-            sorted.map((c) => buildNode(this.pipe, c.nodeId, c.data!)),
-            'right',
-            fwId,
-        );
-        return base;
-    }
-
-    /** 未选中框架：总览（入口开启时）或占位提示 */
-    private buildOverviewOrPlaceholder(base: DesignViewState): DesignViewState {
-        if (!this.settings.showAllOverview) {
-            base.rightEmpty = '在左侧选择框架以查看内容';
-            return base;
-        }
-        const concept = buildConceptTree(this.pipe);
-        const checklist = buildChecklistTree(this.pipe);
-        if (concept.length === 0 && checklist.length === 0) {
-            base.rightEmpty = '暂无事务节点\n在右栏空白处右键新建';
-            return base;
-        }
-        base.rightMode = 'overview';
-        base.overview = {
-            concept: this.buildItems(concept, 'right'),
-            checklist: this.buildItems(checklist, 'right'),
-        };
-        return base;
-    }
-
-    /**
-     * 把（已展开状态过滤后的）树转成组件视图模型
-     *
-     * `rootParentId`：根级行的父 id —— 左栏与总览传空串（顶级无父），
-     * 右栏选中框架的树必须传该框架 id，否则根级行被当成无父节点（不可拖、落点判定失效）。
-     */
-    private buildItems(roots: TreeNode[], side: TreeSide, rootParentId = ''): TreeNodeItem[] {
-        const expanded = side === 'left' ? this.expandedLeft : this.expandedRight;
-        return buildTreeItems(this.pipe, rootParentId, roots, expanded, (node, flags) =>
-            side === 'left'
-                ? buildFrameLine(
-                      this.pipe,
-                      node,
-                      flags,
-                      this.selectedFrameworkId === node.nodeId,
-                      this.overlayFor(node.nodeId),
-                  )
-                : buildNodeLine(this.pipe, node, flags, this.overlayFor(node.nodeId)),
-        );
-    }
-
-    /** 瞬时交互态 → 行覆盖信息（重命名 / 拖拽中 / 落点提示） */
-    private overlayFor(nodeId: string): LineOverlay {
-        return {
-            editing: this.rename?.nodeId === nodeId,
-            dragging: this.draggingId === nodeId,
-            dropHint: this.dropHint?.nodeId === nodeId ? this.dropHint.hint : null,
-        };
-    }
+    // 视图状态构建（buildState / 总览 / 行模型 / 覆盖信息）见 design/viewState
 
     // ============================================================
     // 交互数据传递：DesignActions 的实现
@@ -1016,8 +909,10 @@ export class DesignView extends ReactViewBase {
      * 来源只在「在右栏卡片里下钻」时记下，因此它必然处在当前框架的祖先链上；
      * 这里再校验一次 —— 用户从左栏 / 侧栏直接切走时入口会随之消失，
      * 不会留下一个指向无关位置的回退按钮。
+     *
+     * 切片协作可见：design/viewState.buildState 用它算右栏「返回父框架」入口。
      */
-    private resolveNavBack(fwId: string): { nodeId: string; title: string } | undefined {
+    public resolveNavBack(fwId: string): { nodeId: string; title: string } | undefined {
         const from = this.frameworkNavStack[this.frameworkNavStack.length - 1];
         if (!from) return undefined;
         const node = this.pipe.GET_Node(from);
