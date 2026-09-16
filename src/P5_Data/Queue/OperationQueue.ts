@@ -18,6 +18,14 @@ import { Notice } from 'obsidian';
 /** 操作错误回调类型 */
 type ErrorHandler = (error: Error, context: string) => void;
 
+/**
+ * 写回防抖（毫秒）：固定值，不做成配置项
+ *
+ * 界面读的是缓存、改动立刻可见，这个值只决定「攒多久再一起写回源文件」。
+ * 做成配置项的唯一效果是让人把它调到很小、更频繁地碰磁盘 —— 那是行为约定，不是旋钮。
+ */
+export const FILE_QUEUE_DEBOUNCE_MS = 300;
+
 export class OperationQueue {
   /** CacheQueue 同步操作队列 */
   private cacheQueue: (() => void)[] = [];
@@ -27,8 +35,13 @@ export class OperationQueue {
   private fileQueueRunning = false;
   /** FileQueue 防抖定时器 */
   private fileQueueTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 防抖时间（毫秒） */
-  private debounceTime: number;
+  /**
+   * 写回防抖时间（毫秒）—— 固定值，不是配置项
+   *
+   * 它是「改动攒多久再一起写回源文件」的行为约定：界面读的是缓存、改动立刻可见，
+   * 调小这个值不会让界面更快，只会更频繁地碰磁盘（进而牵动其它插件的文件事件）。
+   */
+  private readonly debounceTime = FILE_QUEUE_DEBOUNCE_MS;
   /** 错误处理器 */
   private onError: ErrorHandler;
 
@@ -41,8 +54,7 @@ export class OperationQueue {
   /** 上次闸门提示时间（毫秒），用于合并同一次操作产生的多次提示 */
   private lastBlockedNotice = 0;
 
-  constructor(debounceTime = 300) {
-    this.debounceTime = debounceTime;
+  constructor() {
     this.onError = (err, ctx) => {
       console.error(`[SeqTK] ${ctx}:`, err);
       new Notice(`操作失败: ${err.message}`);
@@ -54,13 +66,6 @@ export class OperationQueue {
    */
   setOnFileOpsComplete(callback: () => void): void {
     this.onFileOpsComplete = callback;
-  }
-
-  /**
-   * 更新防抖时间
-   */
-  setDebounceTime(ms: number): void {
-    this.debounceTime = ms;
   }
 
   /**

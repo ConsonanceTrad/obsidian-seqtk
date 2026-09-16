@@ -25,7 +25,7 @@ export interface DataLayer {
 export function CREATE_DataLayer(app: App, settings: PluginSettings): DataLayer {
     const fileManager = new NodeFileManager(app, settings);
     const cache = new NodeCache();
-    const queue = new OperationQueue(settings.fileQueueDebounce);
+    const queue = new OperationQueue();
     const pipe = new DataPipe({fileManager, cache, queue, settings});
     return {fileManager, cache, queue, pipe};
 }

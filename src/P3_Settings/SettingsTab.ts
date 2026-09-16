@@ -77,17 +77,6 @@ export class SettingsTab extends PluginSettingTab {
                         },
                     },
                     {
-                        name: '写回防抖（毫秒）',
-                        desc: '节点改动写回源文件的延迟；越小越即时、越大越省磁盘。',
-                        aliases: ['debounce', '延迟'],
-                        control: {
-                            type: 'number',
-                            key: 'fileQueueDebounce',
-                            defaultValue: 300,
-                            min: 0,
-                        },
-                    },
-                    {
                         name: '默认排序方式',
                         control: {
                             type: 'dropdown',

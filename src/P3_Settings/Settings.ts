@@ -22,9 +22,6 @@ export interface PluginSettings {
     /** 数据根文件夹路径（相对于 vault 根目录） */
     rootFolder: string;
 
-    /** FileQueue 防抖时间（毫秒） */
-    fileQueueDebounce: number;
-
     /** 默认排序方式 */
     defaultSort: 'create' | 'modify' | 'desc' | 'state';
 
@@ -89,7 +86,6 @@ export interface PluginSettings {
 /** 默认设置 */
 export const DEFAULT_SETTINGS: PluginSettings = {
     rootFolder: DEFAULT_ROOT_FOLDER,
-    fileQueueDebounce: 300,
     defaultSort: 'create',
     defaultSortDirection: 'desc',
     stateRules: DEFAULT_STATE_RULES.map((r) => ({ ...r, from: [...r.from] })),
