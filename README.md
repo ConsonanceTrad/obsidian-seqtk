@@ -1,5 +1,196 @@
 # SeqTK
 
+>[!CAUTION] 
+>The interface language of this plugin is Chinese. There are plans for multi-language adaptation, but it has not been implemented yet.
+
+An Obsidian project management plugin designed for long-term and complex tasks. **
+Write "one thing" as an independent node document, organize and connect different nodes through subordination, status and basis to form a combined project, and then let the process and script push the next task to be done to you according to the rules you set without immediate decision-making.
+
+This is suitable for the needs of "long-term, multi-parallel projects": papers, long-term development, event planning, research tracking, and decision-making processes that require traceability.
+
+> Current version 0.1.4 · Requires Obsidian 1.13.0 or higher · Available on desktop and mobile
+
+- The development of this plugin was initially to meet my personal needs, so I will carry out long-term updates and maintenance on it
+- This plugin has been completely restructured. Currently, only **transaction design** has been confirmed as fully usable. The remaining available views are available for development and will continue to be migrated and developed later.
+
+---
+
+## What Problems Does It Solve
+
+Other personal task management tools often struggle to maintain long-term tasks:
+
+1. **Disorganized Structure** - There is no clear project hierarchy or lifecycle, and they are managed mainly by tasks and lists as the levels.
+2. **Difficult Organization** - It is difficult to perform batch editing or writing using text. One must rely on the inconvenient visualization tools provided by the software.
+3. **Information Separation** - Information and task items are scattered across different software or different descriptions of task items. It is difficult to review and organize long descriptions or complex, structured descriptions.
+4. **Lack of Design** - Information cannot be embedded at the same level as the tasks, meaning it is impossible to leave traces for thinking during the design process.
+5. **Rule Pushing** - There is no system to recommend tasks based on rules. The list always shows the complete list of tasks to be completed, and you always have to make an immediate decision on what to do next, which is very exhausting when the task volume is large.
+
+What needs to be done here is to ensure visualization while increasing the freedom of personal long-term task management.
+
+SeqTK's approach is to place these three things in their respective positions and completely manage the information in the form of node files:
+**Structure** is assigned to the hierarchy of frameworks and transactions,
+**Status** is assigned to the propagable node attributes,
+**Based on** is assigned to the nodes attached to the nodes.
+All three are within the same node system and can be referenced, re-arranged as a whole, and batch rewritten.
+
+---
+
+## Design Orientation
+
+- **Nodes are Documents.** Each node represents a Markdown document in the repository. You can leave the plugin at any time and read, search, synchronize, and perform version control using the native methods of Obsidian - the plugin is not the gatekeeper of the data.
+- **Relationships are Written in the Document.** Dependencies, sequence, status, evidence are all recorded within the node document itself. The plugin maintains only a **query cache that can be rebuilt at any time**.
+- **Design Comes Before Execution.** First, use "transaction design" to clearly think through the structure and basis, then hand it over to time and scripts using "draft → design → push" process. The design phase does not promise a specific time, and the execution phase does not repeat the design.
+- **Only Touch the Directories It Manages.** The plugin only reads and writes nodes within its own data root directory; your other notes are not affected. Uninstalling the plugin will not lose any nodes.
+- **It Does Not Make Decisions for You.** It does not enforce workflows, does not send reminders, and does not use cloud services; destructive operations (archiving, deletion) are executed according to the confirmation level you have configured.
+
+---
+
+## Core Concepts
+
+### Nodes and Categories
+
+Nodes are classified into five categories based on their functions, and each category further includes specific types (these specific types are what you are given when creating a node):
+
+| Category | Specific Type | Purpose |
+| --- | --- | --- |
+| Framework | Transaction framework, Information framework, Template framework | The framework for holding things: an entire project, a data area, a set of reusable structures |
+| Transaction | Concept, Project, Direction, Goal, Process, List, Item, Event | The thing you want to advance, from idea all the way down to executable actions |
+| Evidence | Object, Condition, Information, State | The basis for judging a transaction: the involved object, preconditions, data clues, snapshot state |
+| Operation | Edit log, Behavior log, Process status | Automatic recording: what changes occurred when, where the process reached |
+| Script | Process script, Execution script, Query script | Write rules as executable things, let the process advance automatically according to time or events |
+
+### Hierarchy and Dependency
+
+There are clear dependencies and sequences between nodes, so "which stage an event belongs to and where it ranks" is part of the structure itself and does not need to be hinted at through labels or naming conventions:
+
+- Frameworks can be nested to form a hierarchy such as "big project → sub-project → specific direction";
+- Transactions are decomposed layer by layer along the chain (concept → direction → goal → process; list → item), each layer only accommodating the type it should, and moving to the wrong position will be blocked;
+- There is a sequence between peers, and dragging directly can re-arrange; dragging will automatically maintain the order and the records of dependency on both sides, and there will be no "it seems moved but actually didn't change" misalignment.
+
+### Status
+
+Transaction nodes have statuses: **planning / in progress / completed / abandoned**. There are also **normal / suspended / blocked** as additional statuses to express "in progress but temporarily unable to move forward".
+
+Status can be propagated between parent and child nodes according to the rules you configure: when the parent node enters a certain state, it changes the child nodes accordingly, or when all descendants meet the requirements, the result is aggregated upwards. Rules are configured in the settings, and you can also leave them unconfigured. This is the solution for the "invisible status" side - **progress grows automatically from the structure, without the need to maintain a separate progress table manually**.
+
+### Evidence
+
+Evidence is an independent node attached to transaction nodes (object, condition, information, state), not a paragraph of text in the main body. The advantage is that it can be retrieved separately, can be reused by multiple transactions, can be connected across transactions, and can be viewed as a network of relationships in the "Evidence Overview". External materials (web links, library files, timestamp documents) are hung on nodes separately, and do not interfere with the internal relationships.
+
+### Templates, Archiving, and Recycling
+
+- **Templates**: Any subtree can be "saved as a template", and then applied to other frameworks; template libraries are uniformly managed in the "Template Mode".
+- **Archiving**: Things that are no longer active but still want to keep can be archived, and they will no longer disturb you in the default view; the handling method for descendants can be configured during archiving.
+- **Recycling**: Archived nodes are concentrated in the "Recycling Mode", where they can be restored or completely deleted (the confirmation level for deletion can be configured).
+
+---
+
+## Function Overview
+
+All panels of the plugin are listed by chapters in the "Control Console", and they can also be opened directly using commands.
+
+### Transaction Design
+
+| Panel | Function | Status |
+| --- | --- | --- |
+| Transaction Design | Main Interface: The left column is the framework tree, and the right column shows the content of the selected framework. Creating nodes, changing states, dragging and reordering, renaming, and batch editing can all be done here; the left column can also be delegated to the sidebar for easy operation while writing notes | Available |
+| Evidence Overview | Without focusing on a single transaction, browse the global evidence relationships like a whiteboard, and connect cross-transaction evidence and establish unpointed evidence | Available |
+| Line Mode | Project Line Chart: View the implicit connections and composite progress between frameworks | Available |
+| Template Mode | Template Library Management: Organize template units, edit placeholders, and apply templates to target frameworks | Available |
+
+Several capabilities in the transaction design are worth mentioning separately:
+
+- **Batch Text Editing** - Export an entire subtree or the entire content of a framework as indented text, make changes, and then rewrite. The rewrites align according to "same level and position", so inserting a line will only shift it without treating the following content as a new node, and the main text will not be lost.
+- **Extracting Node Groups from Text** - Select a block of indented list in the editor, and it directly becomes a node group; the categories are inferred by hierarchy, saving a lot of manual creation.
+- **Copying Subtrees** - Copy to the same format of indented text, and it can be re-imported by pasting elsewhere.
+- **Delegating Framework Tree** - Delegate the left column framework tree to the sidebar (using the side bar of the central control panel or an independent view), and the expansion and selection of both sides remain synchronized.
+
+### Rule Design
+
+| Panel | Function | Status |
+| --- | --- | --- |
+| Draft Process | Draft Board: Multiple parallel event axes, quickly finalize "what to do when" using time blocks. Blocks can either be read-only linked to nodes or directly write text | Available |
+| Process Design | Write push rules for periods, dates, and time points; built-in switchable visual process programs and process script programs | Available |
+| Process Push | Display the pushed task sequence on the right sidebar according to the specified process script | Available |
+| Execution Binding | Bind execution actions to time points, or automatically trigger upon completion of a certain event | Under planning |
+| Execution Design | Visually write execution programs, providing trigger-based or manual-based automation | Under planning |
+| Query Design | Use built-in scripts for complex queries and parse the output of the query results | Under planning |
+
+The process draft does not have dedicated grammar or reminders; it only focuses on setting the time, and the actual advancement is handled by the scripts in the process design.
+
+### General Nodes
+
+| Panel | Function | State |
+| --- | --- | --- |
+| Console Panel | Entry directory for all panels, organized by chapters, adjustable for display and order | Available |
+| Recycling Mode | Viewing archived nodes, restoring or completely deleting | Available |
+| Log Reading | Reading and searching logs in a categorized manner | In progress |
+| Intelligent Collaboration | Intelligent agent identity and workflow records: Work control, memory review, terminology management | In progress |
+
+---
+
+## Typical Usage
+
+**Start with a draft.** Write down your thoughts in a bulleted list with indentation in your mind, select it, use the command or right-click menu to extract it into a node group, and then continue adjusting the structure in the transaction design: remove what should be removed, attach evidence where necessary, set the status as required.
+
+**Shape as you go.** If the hierarchy is incorrect, drag it; if the name is wrong, use the "Rename" option in the row menu to modify it in place. If you need to change a lot at once, use "Batch Text Editing" to export the entire subtree and modify it before overwriting. The entire process can be done without leaving this two-column interface.
+
+**Transform a mature structure into a template.** If a certain framework dissection method works well, save it as a template; for the next project, simply apply it and only need to modify the placeholder content.
+
+**Let time take over.** After the structure is determined, use the process draft to create a parallel event axis and finalize the start and end times; then use the process design to write the push rules; during daily work, the process push in the sidebar will tell you what to do at this moment.
+
+**Clean up the site.** Archive completed tasks, restore them in the recycle mode when needed; delete outdated ones completely.
+
+---
+
+## Data and Security
+
+- **Your nodes are the Markdown documents in your library.** Uninstalling plugins, changing devices, or using Git for version control do not affect them.
+- **Plugins only read and write within their own directories.** The default data root directory is `_Root/_Plugin/SeqTK`, and it can be changed to any location in the settings; plugins will not access notes outside this directory.
+- **The only additional maintenance is a query cache, used to speed up retrieval and overview.** It can be discarded when necessary, and can be regenerated using the command "Rebuild Query Cache", without affecting the node documents themselves.
+- **There are confirmation strategies for destructive operations.** Archiving and deletion can each be configured with a prompt level, and can also set what to do with descendants when dealing with parent nodes.
+- **There are no external services.** No internet connection, no uploads, and no reliance on any accounts.
+
+---
+
+## Installation
+
+1. Prepare three files: `main.js`, `manifest.json`, and `styles.css` (these are directly usable in the `output/` directory of the repository).
+2. Place them in the `<your-library>/.obsidian/plugins/seqtk/` directory within your library.
+3. Reload Obsidian and enable **SeqTK** in "Settings → Third-party Plugins".
+
+Requirements: Obsidian 1.13.0 or higher. Both desktop and mobile versions are compatible; the plugin is a single `main.js` file and no additional runtime files need to be downloaded and run.
+
+---
+
+## Quick Start
+
+1. Open "Settings → SeqTK" and change the **data root folder** to the desired location (default is `_Root/_Plugin/SeqTK`).
+2. Open the **command panel** and go to the **control panel**. It will list all the panels.
+3. Open **transaction design**: Right-click in the blank area on the left → New frame.
+4. In the right column, continue to right-click to create transactions, attach evidence; drag and adjust the order and dependencies; switch the status with the status circle; and change the name and description in the row menu.
+5. If you want to keep the framework tree in the sidebar permanently, enable **delegate** in the transaction design.
+6. To reuse the structure, "Save as template". For batch processing, use "Batch text editing".
+
+When you need to reuse the structure, use "Save as template". For batch processing, use "Batch text editing".
+
+---
+
+## Boundaries and Current State
+
+- This is a specialized management tool designed for **long-term complex tasks**, not a general to-do list tool. Short tasks without hierarchy, evidence, or traceability are not suitable for it; instead, it becomes cumbersome.
+- The panels of "Intelligent Collaboration", "Log Review", "Execution Binding", "Execution Design", and "Query Design" are still under planning and will be marked in the control panel.
+- The draft of the process intentionally does not have exclusive grammar or reminder functions; reminders and automation belong to the "Execution" step and are still to be implemented.
+- The project is continuously evolving, and the interface text and settings may be adjusted with each version.
+
+---
+
+## Delving into the Source Code
+
+This README only covers usage and design orientation. To understand the layered structure, the boundaries of each layer's responsibilities, and development conventions, refer to `src/README.md` and the documentation for each layer; the slicing organization rules for the design view can be found in `src/P6_Views/Views.md`.
+
+# SeqTK
+
 **为长期复杂任务而做的 Obsidian 项目管理插件。** 
 把「一件事」写成独立节点文档，通过从属、状态和依据组织与串联不同节点，形成组合项目，再让流程与脚本按你定下的规则不需要即时决策的向你推送下一件要做的事。
 
