@@ -66,15 +66,16 @@ export const GET_LineIndent = (depth: number, m: NodeLineMetrics): number =>
 
 /** 本行父列 x（折叠方块定位用；depth 0 无父列，取 base） */
 /**
- * 引导线竖线相对行左缘的内缩量（当前 = 0：竖线贴着行左缘）
+ * 引导线竖线相对行左缘的内缩量（当前 = 2px）
  *
  * 引导线（C2_Tree/TreeGuides 画）与转角方块共用这一个基准 —— 两处若各写各的数值，
  * 方块就会偏离竖线。放在 C1 是因为 C2 依赖 C1，反过来不成立。
  *
- * 它也是「竖线往左 / 往右」的唯一旋钮：0 = 贴行左缘，正数往右让开，负值会让线落到行外。
+ * 它也是「竖线往左 / 往右」的唯一旋钮，对**所有层级一视同仁**：
+ * 0 = 贴行左缘（显得偏左，尤其在框架卡片内会贴着卡片边），正数往右让开，负值会让线落到行外。
  * styles.css 里「顶级展开行的粗黑段」（那条 ::before 的 left）与它同轴，改这里必须同步那一处。
  */
-export const GUIDE_INSET = 0;
+export const GUIDE_INSET = 2;
 
 /** 本行父列竖线的 x（转角方块与引导线据此对齐） */
 export const GET_ParentX = (depth: number, m: NodeLineMetrics): number =>

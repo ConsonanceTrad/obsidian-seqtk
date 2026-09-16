@@ -16,29 +16,21 @@
 }
 
 /* 展开态：仅顶级（depth 0）展开行保留加粗指示——画一段竖向粗黑段，
-   位置与引导线竖线同一基准（x = 0，见 P7_Render/.../NodeLine.ts 的 GUIDE_INSET，
+   位置与引导线竖线同一基准（x = 2px，见 P7_Render/.../NodeLine.ts 的 GUIDE_INSET，
    两处改动须同步），作为子树第 1 列竖线的起点，粗段接细线自然过渡；
    子节点行的「有子」信息已由转角方块与可见子树表达，
-   故以 :not(.seqtk-row-in-expanded) 排除（非顶级行均带该类）。 */
+   故以 :not(.seqtk-row-in-expanded) 排除（非顶级行均带该类）。
+   卡片内外基准一致：竖线对所有层级一视同仁，黑段因此只需要这一个值。 */
 .seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before,
 .seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before {
   content: "";
   position: absolute;
-  left: 0;
+  left: 2px;
   top: 0;
   bottom: 0;
   width: 2px;
   background: rgb(0 0 0 / 0.67);
   pointer-events: none;
-}
-
-/* 卡片内的顶级展开行：黑段与竖线保持同轴 —— 竖线在框架卡片内会多让出 2px
-   （见 P7_Render/.../TreeGuides.ts 的 CARD_LINE_INSET，两处改动须同步），
-   黑段若不同步就会比细线靠左 2px，粗接细处出现错位。
-   卡片之外（左栏框架树、右栏直属的非框架行）不受影响，仍是 left: 0。 */
-.seqtk-fw-card .seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before,
-.seqtk-fw-card .seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before {
-  left: 2px;
 }
 
 /* 折叠标识小方块（有子节点且未展开时显示；展开态隐藏）：

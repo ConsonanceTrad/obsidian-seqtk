@@ -38,17 +38,7 @@ export interface GuideRowInput {
     height: number;
     /** 是否为其父的最后一个子（竖笔在本行中心收尾） */
     isLast: boolean;
-    /**
-     * 该行是否位于框架卡片内（由调用方从 DOM 判断）
-     *
-     * 卡片边缘没有留白，竖线贴着它就会显得偏左；几何层据此对「以卡片内行为父」的竖线
-     * 加一点补偿（见 CARD_LINE_INSET）。
-     */
-    inCard?: boolean;
 }
-
-/** 卡片内竖线的补偿量（px）：只挪线，不动行的内容与缩进 */
-const CARD_LINE_INSET = 2;
 
 /**
  * 计算整棵树的引导线 path。
@@ -91,12 +81,9 @@ export function GET_GuideGeometry(rows: GuideRowInput[], m: NodeLineMetrics): Gu
         stack.length = row.depth + 1;
 
         const parent = row.depth > 0 ? stack[row.depth - 1] : undefined;
-        // 竖线：贴行左缘（比内容基准更靠左，避免紧贴文字影响观感）。
-        // 父行在框架卡片内时再右移一点：卡片边缘没有留白，线贴上去会显得偏左。
-        // 这是纯几何补偿 —— 行内容、缩进、层级关系都不动（折叠方块与线同源，会跟着一起移）。
-        const parentX = parent
-            ? parent.left + GUIDE_INSET + (row.depth - 1) * m.step + (parent.inCard ? CARD_LINE_INSET : 0)
-            : null;
+        // 竖线：贴行左缘再往右让开 GUIDE_INSET（比内容基准更靠左，避免紧贴文字影响观感）。
+        // 该基量对所有层级一视同仁；卡片嵌套时由 parent.left 的实测差异自然适配。
+        const parentX = parent ? parent.left + GUIDE_INSET + (row.depth - 1) * m.step : null;
         const contentX = row.left + m.base + row.depth * m.step;
         const midY = row.top + row.height / 2;
 
