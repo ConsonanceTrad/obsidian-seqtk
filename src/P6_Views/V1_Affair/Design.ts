@@ -1,27 +1,31 @@
 /**
- * DesignView — 事务设计（视图层）
+ * DesignView — 事务设计（视图层 · 装配壳）
  *
  * 本类只做五件事（见 P6_Views/Views.md「视图的职责边界（组件化后）」）：
  * 1. 装配：`renderPanel()` 把渲染件 DesignPanel 放进视图容器
  * 2. 注册：视图类与命令（@AutoView / @AutoRegister / registerCommands）
  * 3. 微调：向渲染件注入左/右栏的视图状态（标题、排序模式、瞬时编辑态…）
- * 4. 数据注入：订阅活跃缓存（经 pipe.SUB_ActiveView）→ 用 design/viewModel 把节点算成视图模型 → 写入 SimpleStore
- * 5. 交互数据传递：接住组件回调（DesignActions），在这里落到数据层（actions / drag 执行 / 菜单）
+ * 4. 数据注入：订阅活跃缓存（pipe.SUB_ActiveView）→ design/viewState 算成视图模型 → 写入 SimpleStore
+ * 5. 交互数据传递：接住组件回调（DesignActions），逐项转发给 `design/*` 切片
  *
- * 元素创建、树递归、行内编辑覆盖层、引导线全部在 P7_Render（C1_NodeLine / C2_Tree）——
- * 本文件里**不应再出现** createEl / createDiv / addClass。
- *
- * 数据面（见 P6_Views/Views.md 边界判据）：本类自身的读写一律经 **DataPipe** 门面。
- * 数据面（见 P6_Views/Views.md 边界判据）：读写与订阅一律经 **DataPipe**；
- * design/* 切片同样只通过 `view.pipe` 取用数据面（切片已全部迁移完成）。
+ * 元素创建、树递归、行内编辑覆盖层、引导线全部在 P7_Render（C1_NodeLine / C2_Tree）；
+ * 数据面读写与订阅一律经 **DataPipe**（`view.pipe`）。本文件里**不应再出现**
+ * createEl / createDiv / addClass，也不应再长出菜单声明、拖拽判定或数据写操作。
  *
  * ── 视图侧切片（都以 `view` 为第一参数协作，故本类多数状态与方法为 public）──
  *   design/tree.ts            树构建纯函数（形参已是 DataPipe）
  *   design/viewModel.ts       节点 → 组件视图模型（形参已是 DataPipe）
+ *   design/viewState.ts       视图状态构建：buildState / 总览 / 行模型 / 覆盖信息
+ *   design/session.ts         会话状态：左栏宽度 / 两栏滚动位置 / 展开与选中落盘
  *   design/actions.ts         节点数据写：创建 / 时间规则 / 状态 / 归档 / 级联删除 / 保存 / 打开文件
- *   getXxxMenuDefinitions     全部右键 / 空白 / 状态菜单（装配在 P7_Render/Composition/C3_RightClickMenu）
+ *   design/navigation.ts      选中 / 展开 / 归属 / 委托 / 状态切换
+ *   design/inlineEdit.ts      行内编辑态：重命名 / 附加行新建 / 正文浮层
+ *   design/textEdit.ts        文本批量编辑与「提取为节点组」命令
+ *   design/externalInfo.ts    外部信息源：增删改 / 时间戳文档 / 行内跳转
+ *   design/menuDefinitions.ts 全部右键 / 空白 / 状态菜单声明（装配在 P7_Render/Composition/C3_RightClickMenu）
  *   design/templateActions.ts 右键「存为模板 / 使用模板」编排
- *   design/drag.ts            拖拽「执行」（判定在 P7_Render/Composition/C2_Tree/drag.ts）
+ *   design/dragHandlers.ts    拖拽事件（判定在 P7_Render/Composition/C2_Tree/drag.ts）
+ *   design/drag.ts            拖拽「执行」（写数据）
  */
 
 import {AutoView} from "../../P1_Register/View";
@@ -29,7 +33,7 @@ import {AutoRegister} from "../../P1_Register/Comd";
 import type SeqtkPlugin from "../../main";
 import type {PanelEntry} from "../panelRegistry";
 import { createElement, type ReactNode } from 'react';
-import { Menu, Notice, WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
+import { WorkspaceLeaf, setIcon, setTooltip } from 'obsidian';
 import { ReactViewBase } from '../../P0_UI/ViewBase';
 import {
     DesignPanel,
@@ -40,6 +44,19 @@ import {
 } from './DesignPanel';
 import { SimpleStore } from '../../P5_Data/Svelte/SimpleStore';
 import { Save_Setting } from '../../P3_Settings/Settings';
+import { BUILD_Menu } from '../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
+import type { DragSource } from '../../P7_Render/Composition/C2_Tree/drag';
+import type { NodeLineDropHint } from '../../P7_Render/Composition/C1_NodeLine/NodeLine';
+import { FRAMEWORK_TREE } from './design/FrameworkTreeShared';
+import {
+    LEFT_PANE_DEFAULT,
+    bindTreeScroll,
+    persistNow,
+    restoreTreeScroll,
+    schedulePersist,
+    setLeftWidth,
+} from './design/session';
+import { buildState } from './design/viewState';
 import { showSourcesMenu } from './design/externalInfo';
 import {
     bindDocumentContextMenu,
@@ -76,78 +93,8 @@ import {
     showRowContextMenu,
     showRowStateMenu,
 } from './design/menuDefinitions';
-import { FRAMEWORK_TREE } from './design/FrameworkTreeShared';
-import {
-    LEFT_PANE_DEFAULT,
-    bindTreeScroll,
-    persistNow,
-    restoreTreeScroll,
-    schedulePersist,
-    setLeftWidth,
-} from './design/session';
-import { buildState } from './design/viewState';
 import type { PluginSettings } from '../../P3_Settings/Settings';
-import type { NodeKindValue } from '../../P4_Nodes/NodeKind/NodeKind';
-import {
-    NODE_KIND,
-    NODE_KIND_LABELS,
-    NODE_STATE_LABELS,
-    STATE_VALUES,
-    getAllowedChildKinds,
-    isFrameworkKind,
-} from '../../P4_Nodes/NodeFacade';
 import type { DataPipe } from '../../P5_Data/CoPipe/DataPipe';
-import {
-    buildFrameworkTree,
-    buildConceptTree,
-    buildChecklistTree,
-    buildFrameworkNode,
-    buildNode,
-    sortByFollows,
-    type TreeNode,
-} from './design/tree';
-import {
-    buildFrameLine,
-    buildNodeLine,
-    buildTreeItems,
-    type LineOverlay,
-} from './design/viewModel';
-import {
-    BUILD_Menu,
-    type MenuDefinition,
-    type MenuDefinitions,
-} from '../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
-import {
-    COLLAPSE_ITEM,
-    EVIDENCE_ICONS,
-    EXPAND_ITEM,
-    ICON,
-    SECTION,
-    STATE_ICON,
-} from '../../P7_Render/Composition/C3_RightClickMenu/MenuAppearance';
-import { EVIDENCE_KINDS } from '../../P7_Render/Composition/C2_Tree/drag';
-import { kindUsesState } from '../../P7_Render/Structure/S2_Modal/TransactionModals';
-import { moveChildInFollows, moveTopInOrder, moveChildAcrossParents } from './design/drag';
-import {
-    archiveNode,
-    createNode,
-    openEdit,
-    openNodeFile,
-    saveNodeBody,
-    saveNodeDesc,
-    setNodeState,
-} from './design/actions';
-import { saveAsTemplate, useTemplate } from './design/templateActions';
-import {
-    canBeChildOf,
-    canDrop as canDropByTarget,
-    canDropToFrameworkBlank,
-    resolveDropTarget,
-    type DragQuery,
-    type DragSource,
-} from '../../P7_Render/Composition/C2_Tree/drag';
-import type { NodeLineCtx, NodeLineDropHint } from '../../P7_Render/Composition/C1_NodeLine/NodeLine';
-import type { TreeNodeItem } from '../../P7_Render/Composition/C2_Tree/NodeTree';
 
 export const VIEW_TYPE_DESIGN = 'seqtk-design';
 
@@ -247,12 +194,7 @@ export class DesignView extends ReactViewBase {
     }
     /** 顶级框架排序（nodeId 顺序，持久化于 settings.topFrameworkOrder） */
     public topOrder: string[] = [];
-    /**
-     * 右栏内下钻的来路栈（来源在栈顶）：只有「在右栏点框架行进它的内部」才记来源，
-     * 左栏点选会清空它 —— 见 design/navigation.selectFramework。栈空时框架不提供「返回父框架」入口。
-     *
-     * 切片协作可见：选中 / 返回父框架 / 判定入口都在 design/navigation。
-     */
+    /** 右栏内下钻的来路栈（来源在栈顶）；切片协作可见，见 design/navigation.selectFramework */
     public frameworkNavStack: string[] = [];
     /** 当前拖拽源（dragstart 写入，dragover/drop 读取，dragend 清空） */
     public dragSource: DragSource | null = null;
@@ -270,12 +212,15 @@ export class DesignView extends ReactViewBase {
     public dropBlank = false;
 
     /**
-     * 拖拽进行中右键：取消本次拖拽并清理指示（原 installDragCancelHandler 的等价实现）
+     * 拖拽进行中右键：取消本次拖拽并清理指示
      *
      * 实现与绑定工厂在 design/dragHandlers —— 字段初始化器先于 constructor 体执行，
      * 故工厂内只捕获 view 引用，字段要等事件触发时再读。
      */
     public onDocumentContextMenu = bindDocumentContextMenu(this);
+
+    /** 树容器滚动记录器：实现与绑定工厂在 design/session（同上，只捕获 view 引用） */
+    public onTreeScroll = bindTreeScroll(this);
 
     private unsub: (() => void) | null = null;
     private unsubShared: (() => void) | null = null;
@@ -291,18 +236,6 @@ export class DesignView extends ReactViewBase {
     public FLUSH_Session(): void {
         persistNow(this);
     }
-
-    /**
-     * 记录树容器的滚动位置
-     *
-     * 用事件委托（捕获阶段）而不是给每棵树挂监听：树容器由 P7_Render 渲染，
-     * 视图层不该去它内部找元素、更不该在重渲后重挂。判断是哪一栏靠 closest，
-     * 与 DesignPanel 里其它“按栏分派”的写法一致。
-     *
-     * 实现与绑定工厂在 design/session —— 字段初始化器先于 constructor 体执行，
-     * 故工厂内只捕获 view 引用，字段要等事件触发时再读。
-     */
-    public onTreeScroll = bindTreeScroll(this);
 
     constructor(
         leaf: WorkspaceLeaf,
@@ -350,10 +283,8 @@ export class DesignView extends ReactViewBase {
     protected onMounted(): void {
         document.addEventListener('contextmenu', this.onDocumentContextMenu, true);
         this.unsub = this.pipe.SUB_ActiveView(() => this.refresh());
-        // 共享状态变化（本视图或委托面板发起）→ 安排一次写回，用不着重绘（本视图自己的变更已 refresh 过）
-        // 共享状态变了：既持久化，也**刷新视图**。
-        // 只持久化是不够的 —— 从委托面板那侧关掉委托时，本视图的 stateStore 不会变，
-        // 左栏与把手就一直不回来（委托开关就藏在共享状态里）。
+        // 共享状态变了：既持久化，也**刷新视图**。只持久化是不够的 —— 从委托面板那侧
+        // 关掉委托时，本视图的 stateStore 不会变，左栏与把手就一直不回来（开关藏在共享状态里）。
         this.unsubShared = FRAMEWORK_TREE.store.subscribe(() => {
             schedulePersist(this);
             this.onSharedChanged();
@@ -373,8 +304,7 @@ export class DesignView extends ReactViewBase {
 
     protected onBeforeUnmount(): void {
         this.containerEl.removeEventListener('scroll', this.onTreeScroll, true);
-        // 关视图前把当前滚动位置落盘（防抖可能还没到点）
-        persistNow(this);
+        persistNow(this);                  // 关视图前把当前滚动位置落盘（防抖可能还没到点）
         document.removeEventListener('contextmenu', this.onDocumentContextMenu, true);
         this.unsub?.();
         this.unsub = null;
@@ -383,7 +313,7 @@ export class DesignView extends ReactViewBase {
         if (this.persistTimer !== null) {
             window.clearTimeout(this.persistTimer);
             this.persistTimer = null;
-            persistNow(this);   // 关闭视图前把最后一次状态落盘，避免丢掉
+            persistNow(this);              // 关闭视图前把最后一次状态落盘，避免丢掉
         }
     }
 
@@ -393,7 +323,7 @@ export class DesignView extends ReactViewBase {
     }
 
     // ============================================================
-    // 数据注入：状态重建
+    // 数据注入：状态重建（视图状态构建见 design/viewState）
     // ============================================================
 
     /**
@@ -442,10 +372,8 @@ export class DesignView extends ReactViewBase {
         this.refresh();
     }
 
-    // 视图状态构建（buildState / 总览 / 行模型 / 覆盖信息）见 design/viewState
-
     // ============================================================
-    // 交互数据传递：DesignActions 的实现
+    // 交互数据传递：DesignActions 的实现（每一项都只是转发到 design/* 切片）
     // ============================================================
 
     private buildActions(): DesignActions {
@@ -482,5 +410,4 @@ export class DesignView extends ReactViewBase {
             setLeftWidth: (width) => setLeftWidth(this, width),
         };
     }
-
 }
