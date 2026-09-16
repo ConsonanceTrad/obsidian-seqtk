@@ -32,6 +32,15 @@
   pointer-events: none;
 }
 
+/* 卡片内的顶级展开行：黑段与竖线保持同轴 —— 竖线在框架卡片内会多让出 2px
+   （见 P7_Render/.../TreeGuides.ts 的 CARD_LINE_INSET，两处改动须同步），
+   黑段若不同步就会比细线靠左 2px，粗接细处出现错位。
+   卡片之外（左栏框架树、右栏直属的非框架行）不受影响，仍是 left: 0。 */
+.seqtk-fw-card .seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before,
+.seqtk-fw-card .seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before {
+  left: 2px;
+}
+
 /* 折叠标识小方块（有子节点且未展开时显示；展开态隐藏）：
    顶级（最外侧）节点保持在行左上角；展开祖先链内的行则坐在引导线 L 形转角的竖线上
    （横竖线交汇点），作为「此处向下还有内容被折叠」的断点标记。
