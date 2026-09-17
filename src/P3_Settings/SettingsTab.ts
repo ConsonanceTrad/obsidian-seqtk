@@ -443,6 +443,13 @@ export class SettingsTab extends PluginSettingTab {
         this.kindSummaryEl = el.createEl('p', { cls: 'setting-item-description' });
         this.renderKindSummary();
 
+        // 生效时机只说一次（每行都写就成噪音了）：
+        // 配色走 CSS 变量所以立即生效；名字要等界面重画，因此得重开视图
+        el.createEl('p', {
+            cls: 'setting-item-description',
+            text: '配色与字体反色改完立即生效；名字改完需要重开视图（或重载插件）才生效。',
+        });
+
         const labelOverrides = this.plugin.settings.kindLabels;
         const inverted = this.plugin.settings.kindTextInverted ?? {};
 
@@ -485,10 +492,10 @@ export class SettingsTab extends PluginSettingTab {
         defaultLabel: string,
         overrides: Record<string, string>,
     ): void {
-        // 生效时机写在这一行的描述里（而不是页面开头的大段说明）：配色是即时的，名字要重开视图
+        // 生效时机统一写在页面顶部，这里不重复
         const row = new Setting(el)
             .setName(defaultLabel)
-            .setDesc(`类型值 ${kind} · 留空即用回默认名；名字改完重开视图才生效。`);
+            .setDesc(`类型值 ${kind} · 留空即用回默认名。`);
         // 当前生效名（改过就是改后的名字）：既是输入框初值，也是"没动就失焦"时要提交的值
         const current = NODE_KIND_LABELS[kind] ?? defaultLabel;
         // 「恢复默认」按钮要就地复位这个输入框，所以把引用留到 addText 回调之外
