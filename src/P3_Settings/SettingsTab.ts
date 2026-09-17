@@ -455,8 +455,8 @@ export class SettingsTab extends PluginSettingTab {
 
         for (const group of GET_KindAppearanceGroups(inverted)) {
             el.createEl('h4', { text: group.title });
-            // 每个大类先给它的基色：该大类下没有角色色的类型（如项目 / 事件）都吃这个色
-            this.renderKindColorRow(el, group.categoryItem, group.title);
+            // 大类基色：事务组没有这一行（它的类型各自有角色色，见 KindColors 的 NO_CATEGORY_COLOR）
+            if (group.categoryItem) this.renderKindColorRow(el, group.categoryItem, group.title);
             for (const item of group.kinds) {
                 this.renderKindLabelRow(el, item.kind, item.defaultLabel, labelOverrides);
                 // 角色色紧跟在它所属类型之后 —— 同一类型的名字与颜色就此挨在一起

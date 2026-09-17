@@ -246,7 +246,8 @@ export interface KindAppearanceType {
 /** 设置页的一组：一个大类 + 它的大类基色 + 该类下的类型（各自带可选的角色色） */
 export interface KindAppearanceGroup {
     title: string;
-    categoryItem: KindColorItem;
+    /** 该组的大类基色行；null = 这个大类不提供配置（见 NO_CATEGORY_COLOR） */
+    categoryItem: KindColorItem | null;
     kinds: KindAppearanceType[];
 }
 
@@ -261,14 +262,23 @@ const APPEARANCE_CATEGORY_ORDER: NodeCategoryValue[] = [
 ];
 
 /**
+ * 不提供「大类基色」配置的大类
+ *
+ * 事务：它的类型几乎都有自己的角色色（构想 → 方向 → 目标 → 工序，清单 / 事项），
+ * 基色只剩项目 / 事件在用 —— 单为它们摆一行"事务用什么色"，反而让人以为事务整体另有一色。
+ * 出厂值照旧生效（白板与徽章仍按大类取色），只是不摆到设置页上。
+ */
+const NO_CATEGORY_COLOR: NodeCategoryValue[] = ['AFFAIR'];
+
+/**
  * 设置页用：把「类型名」与「配色」按大类聚合到一处
  *
- * 设置页照着它就能一行行渲染：每组先一行大类基色，随后每个类型一行更名，
- * 类型若还有自己的角色色，则紧跟一行角色色 —— 名字与颜色因此总是挨在一起，
- * 不必在"一长串名字"和"一长串颜色"之间来回对照。
+ * 设置页照着它就能一行行渲染：每组先一行大类基色（不提供配置的组跳过，见 NO_CATEGORY_COLOR），
+ * 随后每个类型一行更名，类型若还有自己的角色色，则紧跟一行角色色 —— 名字与颜色因此总是
+ * 挨在一起，不必在"一长串名字"和"一长串颜色"之间来回对照。
  *
  * 组的粒度沿用既有分色体系，不做更细的"每个类型一个色"：
- * - 大类基色 6 项（框架 / 事务 / 证据 / 运行 / 脚本 / 外部）
+ * - 大类基色（框架 / 证据 / 运行 / 脚本 / 外部；事务不列）
  * - 事务链路角色色 6 项（构想 → 方向 → 目标 → 工序，清单 / 事项）
  *
  * @param inverted 逐项的「字体反色」开关状态（键同上面的覆盖键）
@@ -282,13 +292,15 @@ export function GET_KindAppearanceGroups(
         const categoryKey = `${KEY_CATEGORY}${category}`;
         return {
             title: CATEGORY_LABELS[category],
-            categoryItem: {
-                key: categoryKey,
-                label: '大类基色',
-                value: CATEGORY_COLORS[category],
-                defaultColor: BUILTIN_CATEGORY_COLORS[category],
-                inverted: !!inverted[categoryKey],
-            },
+            categoryItem: NO_CATEGORY_COLOR.includes(category)
+                ? null
+                : {
+                      key: categoryKey,
+                      label: '大类基色',
+                      value: CATEGORY_COLORS[category],
+                      defaultColor: BUILTIN_CATEGORY_COLORS[category],
+                      inverted: !!inverted[categoryKey],
+                  },
             kinds: allKinds
                 .filter((kind) => GET_CategoryOfNode(kind) === category)
                 .map((kind) => {
