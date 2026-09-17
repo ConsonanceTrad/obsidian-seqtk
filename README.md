@@ -1,4 +1,4 @@
-# SeqTK English README
+# SeqTK English README (Translated by Google)
 
 >[!CAUTION] 
 >The interface language of this plugin is Chinese. There are plans for multi-language adaptation, but it has not been implemented yet.
@@ -8,10 +8,10 @@ Write "one thing" as an independent node document, organize and connect differen
 
 This is suitable for the needs of "long-term, multi-parallel projects": papers, long-term development, event planning, research tracking, and decision-making processes that require traceability.
 
-> Current version 0.1.4 · Requires Obsidian 1.13.0 or higher · Available on desktop and mobile
+> Requires Obsidian 1.13.0 or higher · Available on desktop and mobile
 
 - The development of this plugin was initially to meet my personal needs, so I will carry out long-term updates and maintenance on it
-- This plugin has been completely restructured. Currently, only **transaction design** has been confirmed as fully usable. The remaining available views are available for development and will continue to be migrated and developed later.
+- This plugin has been completely restructured. Currently, only **transaction design** 、**Template Mode** has been confirmed as fully usable. The remaining available views are available for development and will continue to be migrated and developed later.
 
 ---
 
@@ -196,10 +196,10 @@ This README only covers usage and design orientation. To understand the layered 
 
 适合那种「长期、多并行项目」的需求：论文、长线开发、活动筹备、研究跟踪、需要留痕的决策过程。
 
-> 当前版本 0.1.4 · 需要 Obsidian 1.13.0 或更高 · 桌面与移动端均可用
+> 需要 Obsidian 1.13.0 或更高 · 桌面与移动端均可用
 
 - 这个插件的开发首先是为了满足我个人需求，因此，我会对其进行长期的更新与维护
-- 这个插件经过完全重构，目前仅有 **事务设计** 被确认为完全可用，其余可用视图、待开发后续会进行继续迁移与开发
+- 这个插件经过完全重构，目前仅有 **事务设计** 、**模板模式** 被确认为可用，其余可用视图、待开发后续会进行继续迁移与开发
 
 ---
 
