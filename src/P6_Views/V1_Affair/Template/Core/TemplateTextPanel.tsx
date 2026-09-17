@@ -2,8 +2,13 @@
  * TemplateTextPanel — 模板模式右栏「文本区」
  *
  * 这里编辑的就是**选中模板框架的内容**（框架自身那行不出现，于是根可以多个）——
- * 模板内容直接用文本表示，增删改都在这一份文本里做：上方文本框，下方实时解析预览 +
- * 带行号的问题列表（语法 / 类型链 / 占位符）+ 差异预告。
+ * 模板内容直接用文本表示，增删改都在这一份文本里做。
+ *
+ * 上下两块高度固定（按容器比例分），各自独立滚动：
+ *   上 = 实时解析预览（带行号的问题列表与差异预告紧跟其下）
+ *   下 = 编辑文本框（主体，占余下的高度）
+ * 于是无论内容多长，两块都在原地滚，不会互相挤压、也不会把整栏撑高。
+ *
  * 语法与键盘辅助（Tab 缩进、Shift+Tab 反缩进、Enter 续写语法头）与「以文本批量编辑」
  * 弹窗同一套 —— 逻辑都在 P2_Tools/Parse/TextTree 的纯函数里，两处不会漂移。
  *
@@ -93,32 +98,11 @@ export function TemplateTextPanel({ title, text, onChange, onCommit, onReset }: 
                     占位可写 {'{{变量:提示|默认值}}'}、{'{{父.desc}}'}、{'{{框架名}}'}
                 </span>
                 <span className="seqtk-spacer" />
-                <button className="seqtk-btn" disabled={!changed} onClick={onReset}>撤销改动</button>
-                <button className="seqtk-btn mod-cta" disabled={!text.canApply} onClick={onCommit}>回写</button>
+                <button className="seqtk-btn" disabled={!changed} onClick={onReset}>还原</button>
+                <button className="seqtk-btn mod-cta" disabled={!text.canApply} onClick={onCommit}>确认</button>
             </div>
 
-            <textarea
-                className="seqtk-template-text-input"
-                value={text.value}
-                spellCheck={false}
-                placeholder={"- [ ] 构想名\n  - [ ] 方向名\n    - [ ] 目标名"}
-                onChange={(e) => onChange(e.target.value)}
-                onKeyDown={onKeyDown}
-            />
-
-            <div className="seqtk-template-text-issues">
-                {text.issues.map((issue, i) => (
-                    <div className="seqtk-texttree-issue" key={`issue-${i}`}>
-                        第 {issue.line} 行：{issue.message}
-                    </div>
-                ))}
-                {text.notice.map((line, i) => (
-                    <div className="seqtk-texttree-issue seqtk-texttree-notice" key={`notice-${i}`}>
-                        {line}
-                    </div>
-                ))}
-            </div>
-
+            {/* 上：实时预览（固定高度、自己滚） */}
             <div className="seqtk-template-text-preview">
                 {text.preview.length === 0 ? (
                     <div className="seqtk-texttree-empty">（暂无内容）</div>
@@ -139,6 +123,30 @@ export function TemplateTextPanel({ title, text, onChange, onCommit, onReset }: 
                     ))
                 )}
             </div>
+
+            {/* 问题与差异预告：紧贴编辑区上方（改的是哪几行，一眼能看到） */}
+            <div className="seqtk-template-text-issues">
+                {text.issues.map((issue, i) => (
+                    <div className="seqtk-texttree-issue" key={`issue-${i}`}>
+                        第 {issue.line} 行：{issue.message}
+                    </div>
+                ))}
+                {text.notice.map((line, i) => (
+                    <div className="seqtk-texttree-issue seqtk-texttree-notice" key={`notice-${i}`}>
+                        {line}
+                    </div>
+                ))}
+            </div>
+
+            {/* 下：编辑区（占余下的高度、自己滚） */}
+            <textarea
+                className="seqtk-template-text-input"
+                value={text.value}
+                spellCheck={false}
+                placeholder={"- [ ] 构想名\n  - [ ] 方向名\n    - [ ] 目标名"}
+                onChange={(e) => onChange(e.target.value)}
+                onKeyDown={onKeyDown}
+            />
         </div>
     );
 }

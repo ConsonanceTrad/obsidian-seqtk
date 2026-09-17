@@ -71,6 +71,9 @@ export interface PluginSettings {
     /** 事务设计：左栏宽度（px；0 = 使用默认宽度） */
     leftPaneWidth: number;
 
+    /** 模板模式：左栏宽度（px；0 = 使用默认宽度） */
+    templateLeftPaneWidth: number;
+
     /** 事务设计：左栏展开的框架 nodeId（记忆展开状态） */
     expandedFrameworkIds: string[];
 
@@ -115,6 +118,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     kindTextInverted: {},
     topFrameworkOrder: [],
     leftPaneWidth: 0,
+    templateLeftPaneWidth: 0,
     expandedFrameworkIds: [],
     expandedRightIds: [],
     hub: {},

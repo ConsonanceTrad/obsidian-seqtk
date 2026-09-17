@@ -20,6 +20,8 @@ import type { NodeInlineCreating, TreeNodeItem } from "../../../P7_Render/Compos
 
 export interface DelegatedTreeState {
     items: TreeNodeItem[];
+    /** 面板标题（由委托来源给出：「框架」/「模板框架」） */
+    title: string;
     emptyText?: string;
     /** 当前选中的框架 nodeId（与设计视图共享） */
     selectedId: string | null;
@@ -60,13 +62,13 @@ export function DelegatedTreePanel({ store, actions, host }: DelegatedTreePanelP
     return (
         <NodeTreePane
             className="seqtk-delegated-tree"
-            title="框架"
+            title={state.title}
             titleExtra={
-                /* 与设计视图左栏的委托开关同款：收在标题末尾的图标按钮，方向相反 */
+                /* 与来源视图左栏的委托开关同款：收在标题末尾的图标按钮，方向相反 */
                 <IconButton
                     className="seqtk-icon-btn seqtk-delegate-btn is-active"
                     icon="chevrons-right"
-                    tip="取消委托（框架树交还设计视图左栏）"
+                    tip="取消委托（把树交还来源视图）"
                     host={host}
                     onClick={() => actions.onCancelDelegate()}
                 />

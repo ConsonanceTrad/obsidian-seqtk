@@ -10,9 +10,8 @@ import type {DataPipe} from "./P5_Data/CoPipe/DataPipe";
 import {Module_Register} from "./P1_Register/Zxport";
 import type {PanelEntry} from "./P6_Views/panelRegistry";
 import {FRAMEWORK_TREE} from "./P6_Views/V1_Affair/Design/Slice/FrameworkTreeShared";
-import {VIEW_TYPE_DELEGATED_TREE} from "./P6_Views/Special/Delegate/DelegatedTree";
+import {START_Delegate} from "./P6_Views/Special/Delegate/delegateTargets";
 import {DesignView, VIEW_TYPE_DESIGN} from "./P6_Views/V1_Affair/Design/Core/Design";
-import {VIEW_TYPE_HUB_SIDE} from "./P6_Views/Special/Hub/Hub";
 
 /** 缓存落盘防抖（毫秒）：文件队列跑完后延迟落盘，密集变更只写一次 */
 const CACHE_SAVE_DEBOUNCE_MS = 10_000;
@@ -68,12 +67,8 @@ export default class SeqtkPlugin extends Plugin {
     // 恢复委托状态：上次关库时框架树被委托到侧栏，这里把它重新放回去。
     // 放在 onReady 而不是 onload —— 布局就绪后再开侧栏，不会被工作区恢复流程覆盖。
     if (this.settings.delegated) {
-      FRAMEWORK_TREE.delegated = true;
-      // 恢复到配置的落点：默认借用中控台容器，配成独立视图时开那个视图
-      const viewType = this.settings.delegateTarget === 'view'
-        ? VIEW_TYPE_DELEGATED_TREE
-        : VIEW_TYPE_HUB_SIDE;
-      void this.activateView(viewType, 'left');
+      // 登记处接回设计来源，落点（中控台那一节 / 独立视图）按 delegateTarget 打开
+      START_Delegate(this.app, this.settings, 'design');
     }
   }
 

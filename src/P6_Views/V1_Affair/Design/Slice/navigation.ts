@@ -23,9 +23,9 @@
 import { NodePickModal } from '../../../../P7_Render/Structure/S2_Modal/NodePickModal';
 import { canBeChildOf } from '../../../../P7_Render/Composition/C2_Tree/drag';
 import { NODE_KIND_LABELS, isFrameworkKind } from '../../../../P4_Nodes/NodeFacade';
-import { VIEW_TYPE_DELEGATED_TREE } from '../../../Special/Delegate/DelegatedTree';
-import { VIEW_TYPE_HUB_SIDE } from '../../../Special/Hub/Hub';
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
+import { DELEGATE } from '../../../Special/Delegate/DelegateRegistry';
+import { START_Delegate } from '../../../Special/Delegate/delegateTargets';
 import { moveChildAcrossParents } from './drag';
 import { setNodeState } from './actions';
 import type { TreeNode } from '../Tool/tree';
@@ -40,35 +40,11 @@ import type { DesignView } from '../Core/Design';
  * 用 workspace 的左侧栏 leaf 而非 activateView：本视图没有 plugin 引用，也无需走面板目录。
  */
 export function toggleDelegate(view: DesignView): void {
-    // 先看侧栏是否已经有委托面板。重开库时工作区会把它恢复出来，而内存里的
-    // delegated 开关是新的（false）—— 此时若按「未委托」处理，就会再开一个，
-    // 侧栏里出现两个框架树。所以以实际存在的 leaf 为准，只同步开关。
-    // 落点：默认借用中控台容器，也可配成独立视图（见设置 delegateTarget）
-    const target = view.settings.delegateTarget ?? 'hub';
-    const viewType = target === 'view' ? VIEW_TYPE_DELEGATED_TREE : VIEW_TYPE_HUB_SIDE;
-
-    // 先看侧栏是否已经有落点。重开库时工作区会把它恢复出来，而内存里的
-    // delegated 开关是新的（false）—— 此时若按「未委托」处理，就会再开一个，
-    // 侧栏里出现两份框架树。所以以实际存在的 leaf 为准，只同步开关。
-    const opened = view.app.workspace.getLeavesOfType(viewType);
-    if (opened.length > 0) {
-        FRAMEWORK_TREE.delegated = true;
-        view.refresh();
-        return;
-    }
-
-    if (FRAMEWORK_TREE.delegated) {
-        FRAMEWORK_TREE.delegated = false;
-        for (const leaf of view.app.workspace.getLeavesOfType(VIEW_TYPE_DELEGATED_TREE)) leaf.detach();
-        view.refresh();
-        return;
-    }
-    FRAMEWORK_TREE.delegated = true;
-    const leaf = view.app.workspace.getLeftLeaf(false);
-    if (leaf) {
-        void leaf.setViewState({ type: VIEW_TYPE_DELEGATED_TREE, active: true });
-        view.app.workspace.revealLeaf(leaf);
-    }
+    // 登记的互斥、落点的开合都交给登记处与「发起委托」那条路：
+    // 已在委托 → 释放（谁持有就释放谁）；否则让设计来源进入委托。
+    // 同来源幂等，因此重开库时被工作区恢复出来的落点不会被误判成「尚未委托」。
+    if (FRAMEWORK_TREE.delegated) DELEGATE.release('design');
+    else START_Delegate(view.app, view.settings, 'design');
     view.refresh();
 }
 

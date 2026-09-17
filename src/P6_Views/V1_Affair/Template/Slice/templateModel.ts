@@ -12,7 +12,7 @@
 import type { DataPipe } from '../../../../P5_Data/CoPipe/DataPipe';
 import type { TreeNodeItem } from '../../../../P7_Render/Composition/C2_Tree/NodeTree';
 import { buildTemplateTree } from '../../Design/Tool/tree';
-import { buildFrameLine, buildTreeItems } from '../../Design/Tool/viewModel';
+import { buildFrameLine, buildTreeItems, type LineOverlay } from '../../Design/Tool/viewModel';
 
 /**
  * 清掉视图未接线的交互标记
@@ -27,16 +27,22 @@ function CLEAR_Interactions(items: TreeNodeItem[]): TreeNodeItem[] {
     }));
 }
 
-/** 左栏：全部模板框架（含嵌套的模板子框架），选中态来自 selectedId */
+/**
+ * 左栏：全部模板框架（含嵌套的模板子框架），选中态与行覆盖态由调用方给出
+ *
+ * `overlayFor` 用于行内重命名（委托面板里点了「重命名」要显示输入框）；
+ * 模板视图侧自己那棵树不走行内编辑，因此可以不传。
+ */
 export function BUILD_TemplateLeftItems(
     pipe: DataPipe,
     expanded: Set<string>,
     selectedId: string | null,
+    overlayFor?: (nodeId: string) => LineOverlay,
 ): TreeNodeItem[] {
     const roots = buildTemplateTree(pipe);
     return CLEAR_Interactions(
         buildTreeItems(pipe, '', roots, expanded, (node, flags) =>
-            buildFrameLine(pipe, node, flags, node.nodeId === selectedId),
+            buildFrameLine(pipe, node, flags, node.nodeId === selectedId, overlayFor?.(node.nodeId)),
         ),
     );
 }

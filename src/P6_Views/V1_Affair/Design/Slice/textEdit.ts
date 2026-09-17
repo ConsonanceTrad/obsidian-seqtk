@@ -88,7 +88,7 @@ export async function copySubtreeAsText(view: DesignView, nodeId: string): Promi
     if (text === null) return;
     try {
         await navigator.clipboard.writeText(text);
-        new Notice('已复制为文本树（可粘贴到别处再导入）');
+        new Notice('已复制为文本树');
     } catch (err) {
         console.error('[SeqTK] 复制失败:', err);
         new Notice('复制失败，请查看控制台');
@@ -113,13 +113,11 @@ export function editSubtreeAsText(view: DesignView, nodeId: string): void {
     new TextTreeImportModal(view.app, {
         title: `以文本批量编辑 · ${node.desc}`,
         desc:
-            '直接改这段文本：改名、改状态（[ ] [/] [x] [-]）、调整缩进改变从属。' +
-            '回写按「同层同位置」对齐，因此在中间插入一行，会让其后的同级行顺移一位' +
-            '（被视为修改而非删旧建新 —— 这样才不会丢正文）。改动量会在下方实时预告。',
+            '每行代表一个节点。Tab/Ctrl+Tab 调整缩进以改变从属。' ,
         initialText: text,
         notice: (roots) => {
             if (roots.length !== 1) {
-                return [`根节点必须恰好一个（当前 ${roots.length} 个）；请保持首行不缩进。`];
+                return [`根节点必须恰好一个,请保持首行不缩进。`];
             }
             const plan = PLAN_TextTreeEdit(view.pipe, nodeId, roots[0]);
             const lines = [

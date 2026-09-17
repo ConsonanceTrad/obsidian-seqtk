@@ -1,7 +1,8 @@
 /**
  * Template/Slice/templateActions — 模板模式的数据写操作切片
  *
- * 按 P6_Views/Views.md 的切片契约组织：以 `view` 为第一参数、只 `import type` 视图类，
+ * 按 P6_Views/Views.md 的切片契约组织：以「宿主」为第一参数、只 `import type` 宿主契约
+ * （见 TemplateHost —— 视图本就是它的实现，委托面板则用 app / pipe / settings 拼一个），
  * 数据面读写一律经 `view.pipe`（不碰 nodeCache / fileManager / operationQueue）。
  *
  * 覆盖模板库的增删与打开正文；「应用模板」另在 templateApply（阶段推进中），
@@ -14,11 +15,11 @@ import { kindUsesState } from '../../../../P7_Render/Structure/S2_Modal/Transact
 import type { SeqtkNode } from '../../../../P4_Nodes/Node';
 import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import type { SeqtkState } from '../../../../P4_Nodes/NodeField/StateKeys';
-import type { TemplateView } from '../Core/Template';
+import type { TemplateHost } from './TemplateHost';
 
 /** 创建一个节点（parentId 提供时挂到该父框架下，双向维护 follows + parent） */
 export async function CREATE_TemplateNode(
-    view: TemplateView,
+    view: TemplateHost,
     input: { kind: NodeKindValue; desc: string; state: SeqtkState },
     parentId?: string,
 ): Promise<void> {
@@ -48,7 +49,7 @@ export async function CREATE_TemplateNode(
 }
 
 /** 打开节点文件编辑（模板单元正文；模板库里的单元没有别的编辑入口） */
-export function OPEN_NodeFile(view: TemplateView, nodeId: string): void {
+export function OPEN_NodeFile(view: TemplateHost, nodeId: string): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     const filePath = GET_FileByPath(node.kind, nodeId, view.settings);
@@ -64,7 +65,7 @@ export function OPEN_NodeFile(view: TemplateView, nodeId: string): void {
  * 文件侧逐个删除；缓存侧走**单次** EXEC_RemoveTree（一次清 active + archive 两库后代，
  * 且只刷一次快照 —— 子树里可能含已归档后代，逐条移除会残留）。
  */
-export function DELETE_TemplateTree(view: TemplateView, nodeId: string): void {
+export function DELETE_TemplateTree(view: TemplateHost, nodeId: string): void {
     const root = view.pipe.GET_Node(nodeId);
     if (!root) return;
 

@@ -2709,19 +2709,17 @@ button.seqtk-icon-btn.is-active {
    ============================================================ */
 
 /*
- * 左栏：与设计视图左栏同一套外观（seqtk-split-left），但没有宽度把手
- * （模板树的层级有限），因此宽度取定值 —— 与设计视图的默认宽度一致，
- * 两个视图间切换时栏宽不跳。
+ * 左栏：与设计视图左栏同一套外观（seqtk-split-left）。
+ * 宽度不再定死在这里 —— 面板按记忆值内联给出（双栏比例把手，与事务设计同款），
+ * 两个视图的默认宽度一致，切换时栏宽不跳。
  */
-.seqtk-template-left {
-  width: 280px;
-  flex-basis: 280px;
-}
 
 /*
- * 右栏 = 选中框架的内容，直接用文本表示（文本框 + 问题列表 + 预览 + 回写）。
- * 它是右栏唯一的内容区，因此占满整个高度；内部三段各自 min-height:0 ——
- * flex 子项默认 min-height:auto，会拒绝收缩到内容之下，于是谁也不滚、整栏一起被撑高。
+ * 右栏 = 选中框架的内容，直接用文本表示。
+ * 上下两块**高度固定**（按容器比例分），各自独立滚动 —— 上预览、下编辑：
+ * 于是内容多长都在原地滚，不会互相挤压，也不会把整栏撑高。
+ * 各段都要 min-height:0：flex 子项默认 min-height:auto，会拒绝收缩到内容之下，
+ * 于是谁也不滚、整栏一起被撑高。
  */
 .seqtk-template-text {
   display: flex;
@@ -2731,6 +2729,7 @@ button.seqtk-icon-btn.is-active {
 }
 
 .seqtk-template-text-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2745,9 +2744,30 @@ button.seqtk-icon-btn.is-active {
   flex: 0 0 auto;
 }
 
-/* 文本框：占满余下的高度并自己滚；宽度拖拽交还给整栏（故 resize 关闭） */
+/* 上：实时预览（固定高度、自己滚） */
+.seqtk-template-text-preview {
+  flex: 0 0 40%;
+  min-height: 0;
+  margin-top: 6px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+}
+
+/* 问题与差异预告：紧贴编辑区上方；有内容时自己滚，不挤掉编辑区 */
+.seqtk-template-text-issues {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 20%;
+  margin-top: 6px;
+  overflow-y: auto;
+}
+
+/* 下：编辑文本框（占余下的固定高度、自己滚；宽度拖拽交还给整栏，故 resize 关闭） */
 .seqtk-template-text-input {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
@@ -2756,24 +2776,6 @@ button.seqtk-icon-btn.is-active {
   font-size: var(--font-ui-smaller);
   line-height: 1.6;
   white-space: pre;
-}
-
-.seqtk-template-text-issues {
-  flex: 0 0 auto;
-  margin-top: 6px;
-}
-
-/* 预览：只作兜底高度 —— 文本框是主体，预览再撑高会把它压没 */
-.seqtk-template-text-preview {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: 30%;
-  margin-top: 6px;
-  padding: 6px;
-  overflow-y: auto;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  background: var(--background-primary);
 }
 
 /* 栏标题行里的按钮：比常规 .seqtk-btn 紧凑，免得抢标题的视线 */

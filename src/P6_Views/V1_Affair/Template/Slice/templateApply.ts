@@ -1,9 +1,10 @@
 /**
  * Template/Slice/templateApply — 把模板单元插进目标框架
  *
- * 以 `view` 为第一参数、只 `import type` 视图类（见 P6_Views/Views.md 切片契约）。
- * 克隆本身全部交给 `P2_Tools/Parse/TempParse` 的 cloneSubtree（单一入口），
- * 本文件只管「问清落到哪儿、校验能不能落」。
+ * 以「宿主」为第一参数、只 `import type` 宿主契约（见 TemplateHost；视图与委托面板
+ * 都能充当宿主，判定与写盘那条线完全共用）。克隆本身全部交给
+ * `P2_Tools/Parse/TempParse` 的 cloneSubtree（单一入口），本文件只管
+ * 「问清落到哪儿、校验能不能落」。
  *
  * 校验口径：顶层单元的 kind 必须能被目标框架接纳（NodeFacade 的 getAllowedChildKinds），
  * 与事务设计右键「使用模板」保持一致 —— 两处入口的判定不许各写一份。
@@ -17,10 +18,10 @@ import {
 } from '../../../../P4_Nodes/NodeFacade';
 import { cloneSubtree, TEMPLATE_FRAMEWORK_NAME_TOKEN } from '../../../../P2_Tools/Parse/TempParse';
 import { SelectFrameworkModal } from '../../../../P7_Render/Structure/S2_Modal/TemplateModals';
-import type { TemplateView } from '../Core/Template';
+import type { TemplateHost } from './TemplateHost';
 
 /** 可作为模板落点的目标框架（事务框架 / 信息框架） */
-export function LIST_TargetFrameworks(view: TemplateView): { nodeId: string; label: string }[] {
+export function LIST_TargetFrameworks(view: TemplateHost): { nodeId: string; label: string }[] {
     return [
         ...view.pipe.GET_ByKind(NODE_KIND.TRANS),
         ...view.pipe.GET_ByKind(NODE_KIND.INFO),
@@ -28,7 +29,7 @@ export function LIST_TargetFrameworks(view: TemplateView): { nodeId: string; lab
 }
 
 /** 目标框架能否接纳这个顶层单元类型 */
-export function CAN_InsertUnit(view: TemplateView, targetId: string, unitId: string): boolean {
+export function CAN_InsertUnit(view: TemplateHost, targetId: string, unitId: string): boolean {
     const target = view.pipe.GET_Node(targetId);
     const unit = view.pipe.GET_Node(unitId);
     if (!target || !unit) return false;
@@ -36,7 +37,7 @@ export function CAN_InsertUnit(view: TemplateView, targetId: string, unitId: str
 }
 
 /** 应用入口：选目标框架 → 校验 → 克隆整棵子树（{{框架名}} 替换为目标框架名） */
-export function APPLY_Template(view: TemplateView, templateId: string): void {
+export function APPLY_Template(view: TemplateHost, templateId: string): void {
     const template = view.pipe.GET_Node(templateId);
     if (!template) return;
 
@@ -66,7 +67,7 @@ export function APPLY_Template(view: TemplateView, templateId: string): void {
 
 /** 递归克隆模板单元整棵子树到目标框架下 */
 export async function APPLY_TemplateTo(
-    view: TemplateView,
+    view: TemplateHost,
     targetId: string,
     targetDesc: string,
     templateId: string,

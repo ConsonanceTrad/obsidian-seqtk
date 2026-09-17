@@ -3,12 +3,15 @@
  *
  * 本类只做五件事（见 P6_Views/Views.md「视图的职责边界」）：
  * 装配 / 注册 / 微调 / 数据注入 / 交互转发；其余按功能切片放在 `Template/Slice/`：
- *   Slice/templateModel.ts   数据 → 视图模型（左栏模板框架树）
- *   Slice/templateText.ts    右栏文本区：导出 / 校验预览 / 回写
- *   Slice/templateActions.ts 新建 / 删除 / 打开正文
- *   Slice/templateApply.ts   把模板内容插进目标框架
+ *   Slice/templateModel.ts     数据 → 视图模型（左栏模板框架树）
+ *   Slice/templateText.ts      右栏文本区：导出 / 校验预览 / 回写
+ *   Slice/templateActions.ts   新建 / 删除 / 打开正文
+ *   Slice/templateApply.ts     把模板内容插进目标框架
+ *   Slice/TemplateTreeShared.ts 左栏共享状态（与委托面板同源）
+ *   Slice/templateDelegate.ts  模板来源的委托描述（委托到侧栏时按它渲染）
  *
- * 布局：左栏 = 模板框架树（与事务设计左栏同一个树组件），只负责「选哪个框架 / 增删框架」；
+ * 布局：左栏 = 模板框架树（与事务设计左栏同一个树组件），只负责「选哪个框架 / 增删框架」，
+ * 并且**与事务设计同法可以委托到侧栏**（委托出去的就是这棵模板框架树）；
  * 右栏 = 选中框架的内容，**直接用文本表示** —— 对框架内容做解析预览、合法性校验，再按差异
  * 回写。内容的增删改一律在文本里进行，不再另画一棵单元树。
  *
@@ -16,7 +19,7 @@
  * `{{框架名}}`、`{{父.字段}}`、`{{变量:提示|默认值}}` 在插入时求值（语法与求值见
  * P2_Tools/Parse/TempParse.ts）。
  *
- * 两个 store 分开：结构态（树 / 选中）与文本区态（正在编辑的文本）——
+ * 两个 store 分开：结构态（树 / 选中 / 委托）与文本区态（正在编辑的文本）——
  * 按键只刷后者，左栏树不跟着每帧重渲。
  */
 
@@ -26,6 +29,7 @@ import { AutoView } from "../../../../P1_Register/View";
 import { AutoRegister } from "../../../../P1_Register/Comd";
 import { ReactViewBase } from "../../../../P0_UI/ViewBase";
 import { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
+import { Save_Setting } from "../../../../P3_Settings/Settings";
 import { NODE_KIND } from "../../../../P4_Nodes/NodeKind/NodeKind";
 import { NODE_KIND_LABELS } from "../../../../P4_Nodes/NodeKind/NodeLabel";
 import { PARSE_TextTree } from "../../../../P2_Tools/Parse/TextTree";
@@ -38,6 +42,7 @@ import {
     type TemplateTextState,
 } from "./TemplatePanel";
 import { BUILD_TemplateLeftItems } from "../Slice/templateModel";
+import { TEMPLATE_TREE } from "../Slice/TemplateTreeShared";
 import {
     APPLY_TemplateFrameworkText,
     CHECK_TemplateFrameworkText,
@@ -49,6 +54,11 @@ import {
     OPEN_NodeFile,
 } from "../Slice/templateActions";
 import { APPLY_Template } from "../Slice/templateApply";
+// 副作用导入：模板来源的工厂在该模块顶层注册给委托登记处，
+// 少了它 `DELEGATE.delegate('template')` 会找不到来源（委托按钮点了没反应）
+import "../Slice/templateDelegate";
+import { DELEGATE } from "../../../Special/Delegate/DelegateRegistry";
+import { START_Delegate } from "../../../Special/Delegate/delegateTargets";
 import type SeqtkPlugin from "../../../../main";
 import type { PanelEntry } from "../../../panelRegistry";
 import type { DataPipe } from "../../../../P5_Data/CoPipe/DataPipe";
@@ -69,17 +79,30 @@ const EMPTY_TEXT_STATE: TemplateTextState = {
     canApply: false,
 };
 
+/** 左栏宽度范围（px）与默认值 —— 与 DesignPanel 同一口径，两个视图间切换时栏宽不跳 */
+const LEFT_WIDTH_MIN = 160;
+const LEFT_WIDTH_MAX = 640;
+const LEFT_WIDTH_DEFAULT = 280;
+/** 设置写回的防抖等待（拖动结束与连续展开不必每帧落盘） */
+const PERSIST_DEBOUNCE_MS = 600;
+
 @AutoView()
 @AutoRegister()
 export class TemplateView extends ReactViewBase {
     /** 面板目录条目 */
     static metas: PanelEntry[] = [
-        {viewType: VIEW_TYPE_TEMPLATE, title: '模板模式', icon: 'copy', description: '模板库管理：左栏模板框架树负责选框架与增删，右栏以文本直接编辑选中框架的内容（实时解析预览与合法性校验）；创建模板在事务设计右键「存为模板」。', category: '事务设计'},
+        {viewType: VIEW_TYPE_TEMPLATE, title: '模板模式', icon: 'copy', description: '模板库管理：左栏模板框架树负责选框架与增删（可像事务设计那样委托到侧栏），右栏以文本直接编辑选中框架的内容（实时解析预览与合法性校验）；创建模板在事务设计右键「存为模板」。', category: '事务设计'},
     ];
 
     /** 视图工厂：由 Register_View 以 (leaf) 调用 */
     static create(leaf: WorkspaceLeaf, plugin: SeqtkPlugin, viewType: string): TemplateView {
-        return new TemplateView(leaf, plugin.allDeps.dataPipe, plugin.allDeps.settings);
+        return new TemplateView(
+            leaf,
+            plugin.allDeps.dataPipe,
+            plugin.allDeps.settings,
+            // 常规写盘回调：视图类不直接依赖插件实例
+            () => void Save_Setting(plugin),
+        );
     }
 
     /** 打开命令（手写；统一经 plugin.activateView 打开/聚焦） */
@@ -94,28 +117,47 @@ export class TemplateView extends ReactViewBase {
     /** 视图容器附加类（基座 addClass 用） */
     protected cssClass = 'seqtk-template-view';
 
-    /** 结构态：左栏框架树 / 选中（渲染件经 useStore 订阅） */
+    /** 结构态：左栏框架树 / 选中 / 委托（渲染件经 useStore 订阅） */
     private readonly stateStore = new SimpleStore<TemplateState>({
         initializing: true,
         leftItems: [],
         selectedId: null,
+        delegated: false,
+        leftPaneWidth: LEFT_WIDTH_DEFAULT,
     });
 
     /** 文本区态：正在编辑的文本与它的预览 / 校验（与结构态分开，按键只刷这一份） */
     private readonly textStore = new SimpleStore<TemplateTextState>(EMPTY_TEXT_STATE);
 
-    /** 左栏展开集合（模板框架树） */
-    private readonly expandedLeft = new Set<string>();
+    /**
+     * 左栏展开集合 —— 指向共享状态源（见 Slice/TemplateTreeShared）。
+     * 左栏可被「委托」到侧栏显示，两处必须同源，故不放视图实例；
+     * 这里保持 `view.expandedLeft` 的既有写法不变。
+     */
+    public expandedLeft = TEMPLATE_TREE.expanded;
 
-    /** 当前选中的模板框架 nodeId（null = 未选）；切片协作可见 */
-    public selectedFrameworkId: string | null = null;
+    /** 当前选中的模板框架 nodeId（null = 未选）；与委托面板共享，转发到共享状态 */
+    public get selectedFrameworkId(): string | null {
+        return TEMPLATE_TREE.selectedId;
+    }
+
+    public set selectedFrameworkId(v: string | null) {
+        TEMPLATE_TREE.selectedId = v;
+    }
+
     /**
      * 文本区正在编辑的内容（null = 未改动，显示该框架的导出结果）；
      * 切片协作可见（回写后由本类置回 null）
      */
     public textDraft: string | null = null;
 
+    /** 左栏宽度（记忆于 settings.templateLeftPaneWidth；拖动结束后才写回）；切片协作可见 */
+    public leftWidth = LEFT_WIDTH_DEFAULT;
+    /** 设置写回的防抖计时器；切片协作可见 */
+    public persistTimer: number | null = null;
+
     private unsub: (() => void) | null = null;
+    private unsubShared: (() => void) | null = null;
 
     constructor(
         leaf: WorkspaceLeaf,
@@ -123,8 +165,11 @@ export class TemplateView extends ReactViewBase {
         public pipe: DataPipe,
         /** 打开模板框架正文时按它算文件路径（GET_FileByPath） */
         public settings: PluginSettings,
+        /** 把设置写回磁盘（由装配层注入，视图类不直接依赖插件实例） */
+        public persistSettings?: () => void,
     ) {
         super(leaf);
+        this.leftWidth = this.settings.templateLeftPaneWidth || LEFT_WIDTH_DEFAULT;
     }
 
     getViewType(): string {
@@ -151,19 +196,48 @@ export class TemplateView extends ReactViewBase {
 
     protected onMounted(): void {
         this.unsub = this.pipe.SUB_ActiveView(() => this.refresh());
+        // 共享状态（展开 / 选中 / 委托）变化 → 重刷：委托期间左栏与把手要收起来，
+        // 从委托面板那侧取消委托时本视图也必须跟着回来
+        this.unsubShared = TEMPLATE_TREE.store.subscribe(() => this.refresh());
         this.refresh();
     }
 
     protected onBeforeUnmount(): void {
         this.unsub?.();
         this.unsub = null;
+        this.unsubShared?.();
+        this.unsubShared = null;
+        if (this.persistTimer !== null) {
+            window.clearTimeout(this.persistTimer);
+            this.persistTimer = null;
+            this.persistNow();             // 关闭视图前把最后一次宽度变更落盘
+        }
+    }
+
+    // ============================================================
+    // 会话状态落盘（左栏宽度）
+    // ============================================================
+
+    /** 立即把左栏宽度写回设置（不防抖） */
+    public persistNow(): void {
+        this.settings.templateLeftPaneWidth = this.leftWidth;
+        this.persistSettings?.();
+    }
+
+    /** 防抖写回：拖动结束与连续操作不会频繁落盘 */
+    private schedulePersist(): void {
+        if (this.persistTimer !== null) window.clearTimeout(this.persistTimer);
+        this.persistTimer = window.setTimeout(() => {
+            this.persistTimer = null;
+            this.persistNow();
+        }, PERSIST_DEBOUNCE_MS);
     }
 
     // ============================================================
     // 数据注入：状态重建
     // ============================================================
 
-    /** 重建结构态与文本区（数据变化 / 选中变化 / 展开变化后调用） */
+    /** 重建结构态与文本区（数据变化 / 选中变化 / 展开变化 / 委托变化后调用） */
     public refresh(): void {
         this.collapseSelectionIfGone();
 
@@ -181,6 +255,8 @@ export class TemplateView extends ReactViewBase {
                     : undefined,
             selectedId: frameworkId,
             rightTitle: current ? `${NODE_KIND_LABELS[current.kind]} · ${current.desc}` : undefined,
+            delegated: TEMPLATE_TREE.delegated,
+            leftPaneWidth: this.leftWidth,
         });
         this.refreshText();
     }
@@ -233,6 +309,8 @@ export class TemplateView extends ReactViewBase {
             toggle: (nodeId) => {
                 if (this.expandedLeft.has(nodeId)) this.expandedLeft.delete(nodeId);
                 else this.expandedLeft.add(nodeId);
+                // 广播：模板树若正被委托，侧栏那份也要重算
+                TEMPLATE_TREE.markExpandedChanged();
                 this.refresh();
             },
             select: (nodeId) => {
@@ -255,6 +333,18 @@ export class TemplateView extends ReactViewBase {
                 this.textDraft = null;
                 this.refreshText();
             },
+            toggleDelegate: () => {
+                // 全局互斥：已在委托就释放这份；否则让模板来源进入委托并把落点开出来
+                if (TEMPLATE_TREE.delegated) DELEGATE.release('template');
+                else START_Delegate(this.app, this.settings, 'template');
+                this.refresh();
+            },
+            setLeftWidth: (width) => {
+                const clamped = Math.min(Math.max(Math.round(width), LEFT_WIDTH_MIN), LEFT_WIDTH_MAX);
+                if (clamped === this.leftWidth) return;
+                this.leftWidth = clamped;
+                this.schedulePersist();
+            },
         };
     }
 
@@ -263,6 +353,7 @@ export class TemplateView extends ReactViewBase {
      *
      * 只针对模板框架本身 —— 模板内容不在这棵树上管理（内容 = 右栏的文本），所以菜单里
      * 没有「新建单元」这类内容级动作；「应用此模板到框架…」把整个框架的内容插进目标框架。
+     * 委托出去的那份树用的是同一套菜单（见 Slice/templateDelegate）。
      */
     private showRowMenu(nodeId: string, event: MouseEvent): void {
         const defs: MenuDefinition[] = [

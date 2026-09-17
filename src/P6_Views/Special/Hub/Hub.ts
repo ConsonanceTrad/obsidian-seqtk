@@ -6,9 +6,11 @@
  *
  * 设计约定：各类型面板不设置 ribbon 按钮，仅通过内置指令与中控台打开；
  *
- * 另外它还承载「委托」的默认落点：设计视图左栏把框架树委托出来时，框架树作为一节
- * 直接渲染在本容器里（借用容器），而不是另开一个视图。两种落点由设置项 delegateTarget
- * 决定，渲染的树与状态完全相同（共用 DelegateTreeController）。
+ * 另外它还承载「委托」的默认落点：来源视图左栏把树委托出来时（设计视图的框架树、
+ * 模板模式的模板框架树），被委托的树作为一节直接渲染在本容器里（借用容器），
+ * 而不是另开一个视图。两种落点由设置项 delegateTarget 决定，渲染的树与状态完全相同
+ * （共用 DelegateTreeController，见 Special/Delegate）。委托是全局互斥的：同一时刻只有
+ * 一份，新委托会先释放旧的（见 DelegateRegistry）。
  *
  * 委托期间面板目录**让位**：它本来就是「选一个面板打开」的入口，而此刻用户在用框架树，
  * 目录只会挤占空间、分散注意。用容器上的 seqtk-hub-delegated 类切换，不重建目录。
@@ -26,7 +28,7 @@ import type SeqtkPlugin from "../../../main";
 import type {PluginSettings} from "../../../P3_Settings/Settings";
 import {HUB_CATEGORIES, HUB_DEFAULT_ORDER, type PanelEntry} from "../../panelRegistry";
 import {DelegateTreeController} from '../Delegate/DelegateTreeController';
-import {FRAMEWORK_TREE} from '../../V1_Affair/Design/Slice/FrameworkTreeShared';
+import {DELEGATE} from '../Delegate/DelegateRegistry';
 import {mountReact} from '../../../P0_UI/ReactHost';
 import type {Root} from 'react-dom/client';
 import type {DataPipe} from '../../../P5_Data/CoPipe/DataPipe';
@@ -157,11 +159,12 @@ export class HubView extends ItemView {
      * 重挂比做差量更简单也更不容易错。
      */
     private renderDelegateSection(container: HTMLElement): void {
+        // 谁被委托看登记处（全局只有一份委托）；本容器只在「借用中控台」这个落点上渲染它
         const wantTree = () =>
             !!this.pipe &&
             !!this.pluginSettings &&
             this.pluginSettings.delegateTarget === 'hub' &&
-            FRAMEWORK_TREE.delegated;
+            DELEGATE.active !== null;
 
         /** 目录显隐随委托状态切换：委托期间把它让出来，取消后还原 */
         const syncListVisibility = (): void => {
@@ -175,7 +178,9 @@ export class HubView extends ItemView {
                 this.app,
                 this.pipe!,
                 this.pluginSettings!,
-                () => { FRAMEWORK_TREE.delegated = false; },
+                DELEGATE.active!,
+                // 取消 = 释放当前这份委托（谁持有就释放谁：设计来源与模板来源都成立）
+                () => DELEGATE.release(),
             );
             this.controller.start();
             this.treeRoot = mountReact(host, this.controller.render());
@@ -183,7 +188,7 @@ export class HubView extends ItemView {
 
         mount();
         syncListVisibility();
-        this.unsubShared = FRAMEWORK_TREE.store.subscribe(() => {
+        this.unsubShared = DELEGATE.store.subscribe(() => {
             const shouldShow = wantTree();
             const isShown = !!this.treeRoot;
             // 显隐先同步：即使这一节的挂载状态没变，目录也该跟上（两处都以同一个条件为准）
