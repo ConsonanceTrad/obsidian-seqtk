@@ -171,9 +171,11 @@ export class SettingsTab extends PluginSettingTab {
             },
             {
                 // 子页：类型名逐项可改，同样是声明式表达不了的"任意条数的编辑器"
+                // （框架类型不在其中，理由见 P4_Nodes/NodeKind/NodeLabel 的分组顺序说明）
                 type: 'page',
                 name: '类型显示名',
                 desc: '给各类型换个叫法；只影响界面显示，不改文件内容。',
+                // 页头摘要：数一数覆盖表里有几项是"真改过的"（空串等于没改，跟落盘口径一致）
                 displayValue: () => {
                     const overrides = this.plugin.settings.kindLabels ?? {};
                     const n = Object.values(overrides).filter(
