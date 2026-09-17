@@ -179,7 +179,20 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
             if (row.depth !== 0) return;
             if (!el.classList.contains("seqtk-row-expanded")) return;
             if (el.classList.contains("seqtk-row-in-expanded")) return;
-            nextLeads.push({ x: row.left + GUIDE_INSET - LEAD_HALF, y: row.top, h: row.height });
+            //
+            // 卡片内的行：黑段如今画在浮层里，不再被卡片的 overflow 按圆角裁掉，
+            // 上端于是会在卡片圆角处"探头"。让出一段即可绕开 —— 卡片圆角是 6px，
+            // 取 4px 留余量；下端照旧到行底。卡片外的行不受影响（仍从行顶起）。
+            //
+            const CARD_RADIUS_INSET = 4;
+            const cardInset = el.closest(".seqtk-fw-card") !== null ? CARD_RADIUS_INSET : 0;
+            const leadHeight = row.height - cardInset;
+            if (leadHeight <= 0) return;
+            nextLeads.push({
+                x: row.left + GUIDE_INSET - LEAD_HALF,
+                y: row.top + cardInset,
+                h: leadHeight,
+            });
         });
         //
         // 内容没变就复用旧数组。
