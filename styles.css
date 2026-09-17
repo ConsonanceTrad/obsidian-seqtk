@@ -446,7 +446,7 @@ button.seqtk-source-badge:hover {
 }
 
 /* 事务链路的角色色阶：两条链路各一色相、按从属深度加深
-   （主线 构想→方向→目标→工序；支线 清单→事项）。
+   （主线 构想→方向→目标→工序；支线 清单→行动）。
    色值与文字色都走变量（见 P4_Nodes/NodeKind/KindColors 的 GET_RoleColorVar / GET_RoleTextVar）。
    位置有意放在大类色之后：徽章与附加行预览共用这几个类，且需压过同特异性的 `.kind-affair`。
    文字色与底色一样默认；早先这三档浅色（构想 / 方向 / 清单）写死深字，现在统一为白，
