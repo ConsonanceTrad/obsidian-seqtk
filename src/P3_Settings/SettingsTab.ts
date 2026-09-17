@@ -10,17 +10,25 @@
  *
  * 两处仍需命令式渲染（都是"任意条数的编辑器"，声明式表达不了）：
  *   - **状态传播规则**：可增删的规则表，放在一个 sub-page 里用 Setting 渲染
- *   - **类型显示名**：全部类型名逐项可改，同样一个 sub-page，每项带「恢复默认」按钮
+ *   - **类型外观**：类型名与配色逐项可改，同样一个 sub-page，每项带「恢复默认」按钮
  * 两者的 render 回调都不会自动保存，改动要自己落盘（见各自的 render 方法）。
  *
  * update() 的代价：它是"重建整个设置面板"，所有设置项 DOM 会换一遍 —— 焦点与滚动位置
  * 随之回到面板开头。因此**只有会改变可见项结构**的改动才调它（规则增删、方向切换），
- * 单纯改值一律就地更新（见 commit / commitKindLabel / renderKindSummary）。
+ * 单纯改值一律就地更新（见 commit / commitKindLabel / commitKindColor / renderKindSummary）。
  *
  * manifest 的 minAppVersion 已提到 1.13.0 —— 该 API 的下限。
  */
 
-import { App, Notice, PluginSettingTab, Setting, type SettingDefinitionItem } from 'obsidian';
+import {
+    App,
+    Notice,
+    PluginSettingTab,
+    Setting,
+    type ColorComponent,
+    type SettingDefinitionItem,
+    type ToggleComponent,
+} from 'obsidian';
 import type SeqtkPlugin from "../main";
 import {Save_Setting, DELEGATE_TARGET_LABELS} from "./Settings";
 import { NODE_STATE_LABELS, STATE_VALUES, type SeqtkState } from "../P4_Nodes/NodeField/StateKeys";
@@ -35,6 +43,7 @@ import {
     DELETE_CHILDREN_LABELS,
 } from "../P4_Nodes/NodeField/DeletionPolicy";
 import { GET_KindLabelGroups, NODE_KIND_LABELS } from "../P4_Nodes/NodeKind/NodeLabel";
+import { GET_KindColorItems, type KindColorItem } from "../P4_Nodes/NodeKind/KindColors";
 import type { NodeKindValue } from "../P4_Nodes/NodeKind/NodeKind";
 
 /** 生成一个不会与现有规则撞车的 id */
@@ -43,6 +52,19 @@ function nextRuleId(rules: StatePropagationRule[]): string {
     while (rules.some((r) => r.id === `rule-${n}`)) n++;
     return `rule-${n}`;
 }
+
+/** 覆盖表里有几项是"真改过的"（空串等于没改，与落盘口径一致） */
+function COUNT_CustomEntries(table: Record<string, string> | undefined): number {
+    return Object.values(table ?? {}).filter((v) => typeof v === 'string' && v.trim() !== '').length;
+}
+
+/**
+ * 取色器落盘的防抖窗口（ms）
+ *
+ * ColorComponent 只暴露 onChange，而拖动取色时它会连续触发；逐次写盘等于一路敲磁盘。
+ * 内存里的覆盖值当场更新，所以效果是即时的，防的只是写盘频率。
+ */
+const COLOR_SAVE_DEBOUNCE_MS = 300;
 
 const SORT_LABELS: Record<string, string> = {
     create: '创建时间',
@@ -174,26 +196,29 @@ export class SettingsTab extends PluginSettingTab {
                 ],
             },
             {
-                // 子页：类型名逐项可改，同样是声明式表达不了的"任意条数的编辑器"
-                // （框架类型不在其中，理由见 P4_Nodes/NodeKind/NodeLabel 的分组顺序说明）
+                // 子页：类型名与配色逐项可改，同样是声明式表达不了的"任意条数的编辑器"
+                // （框架类型不参与命名，理由见 P4_Nodes/NodeKind/NodeLabel 的分组顺序说明）
                 type: 'page',
-                name: '类型显示名',
-                desc: '给各类型换个叫法；只影响界面显示，不改文件内容。',
-                // 页头摘要：数一数覆盖表里有几项是"真改过的"（空串等于没改，跟落盘口径一致）。
+                name: '类型外观',
+                desc: '给各类型换个叫法、调一调配色；只影响界面显示，不改文件内容。',
+                // 页头摘要：统计"真改过的"项数（口径与落盘一致）。
                 // 它只在本页被重画时才读一次，页内的即时摘要见 renderKindSummary。
                 displayValue: () => {
-                    const overrides = this.plugin.settings.kindLabels ?? {};
-                    const n = Object.values(overrides).filter(
-                        (v) => typeof v === 'string' && v.trim() !== '',
-                    ).length;
-                    return n > 0 ? `${n} 项已自定义` : '全部默认';
+                    const parts: string[] = [];
+                    const names = COUNT_CustomEntries(this.plugin.settings.kindLabels);
+                    const colors = COUNT_CustomEntries(this.plugin.settings.kindColors);
+                    const inverted = Object.values(this.plugin.settings.kindTextInverted ?? {}).filter(Boolean).length;
+                    if (names > 0) parts.push(`名 ${names}`);
+                    if (colors > 0) parts.push(`色 ${colors}`);
+                    if (inverted > 0) parts.push(`黑字 ${inverted}`);
+                    return parts.length > 0 ? `${parts.join(' / ')} 项已自定义` : '全部默认';
                 },
                 items: [
                     {
-                        name: '类型名',
+                        name: '类型名与配色',
                         render: (setting) => {
                             // 同上：render 不自动保存、不自动重画
-                            this.renderKindLabels(setting.settingEl);
+                            this.renderKindAppearance(setting.settingEl);
                             return undefined;
                         },
                     },
@@ -379,24 +404,29 @@ export class SettingsTab extends PluginSettingTab {
     }
 
     // ============================================================
-    // 类型显示名（sub-page 的命令式部分）
+    // 类型外观：显示名 + 配色（sub-page 的命令式部分）
     // ============================================================
 
-    /** 页内摘要槽位：每次 renderKindLabels 时重建，供 renderKindSummary 就地更新 */
+    /** 页内摘要槽位：每次 renderKindAppearance 时重建，供 renderKindSummary 就地更新 */
     private kindSummaryEl: HTMLElement | null = null;
 
     /**
-     * 类型名编辑器：按大类分组列出全部类型，每项一个文本框 + 一个「恢复默认」按钮
+     * 类型外观编辑器：先「显示名」后「配色」，两段都是逐项一行
      *
      * 三点与规则页同源的讲究：
-     * - 落盘时机在**失焦 / 回车**，而不是 onChange：onChange 每敲一个字都会触发，
+     * - 名字的落盘时机在**失焦 / 回车**，而不是 onChange：onChange 每敲一个字都会触发，
      *   拿它写盘等于每敲一个字写一次磁盘。onChange 这里只做即时校验（重名标红）。
+     *   配色的落盘挂在取色器的原生 change（关闭取色器时触发），理由同上。
      * - 全程**不调 update()**：它会把整页重建一遍，正在编辑的输入框会被换掉、
-     *   焦点与滚动也会跑回面板开头。所有变化都就地更新（输入框值、页内摘要）。
+     *   焦点与滚动也会跑回面板开头。所有变化都就地更新（控件值、页内摘要）。
      * - 页内摘要自己维护一份（见 renderKindSummary）：页头的 displayValue 只在重画时才读。
+     *
+     * 生效时机不同，页面里也写明了：**配色与字色立即生效**（Save_Setting 会把颜色推进
+     * CSS 变量，徽章当场变色）；**名字要重开视图**才生效（已经渲染好的 DOM 不会自己重画）。
      */
-    private renderKindLabels(el: HTMLElement): void {
-        // 与规则页同理：setting-item 默认是横向 flex，这里要塞多块内容
+    private renderKindAppearance(el: HTMLElement): void {
+        // 与规则页同理：setting-item 默认是横向 flex，这里要塞多块内容。
+        // 类名沿用样式表里的钩子 .seqtk-settings-kind-labels（内容已从"名字"扩到"名字 + 配色"）
         el.addClass('seqtk-settings-kind-labels');
         // 框架在 update() 后会复用同一个 settingEl 再调一次本回调：不清空会追加第二份
         el.empty();
@@ -404,10 +434,10 @@ export class SettingsTab extends PluginSettingTab {
         el.createEl('p', {
             cls: 'setting-item-description',
             text:
-                '给各类型换个叫法：徽章、右键菜单、行内新建下拉、导入预览等处都会跟着变。\n' +
+                '给各类型换个叫法、调一调配色：徽章、右键菜单、行内新建下拉、导入预览等处都会跟着变。\n' +
                 '只影响界面显示 —— 节点文件里存的是类型值本身，既有数据不受影响、也不会被改写。\n' +
-                '留空即用回默认名。改完需要重开视图（或重载插件），已经打开的界面才会跟着变。\n' +
-                '框架类型不在此列：它们在界面上统一显示「框架」。',
+                '配色与「字体反色」改完立即生效；改名字需要重开视图（或重载插件）后才会在已打开的界面上生效。\n' +
+                '留空或点 ⟲ 即用回默认。框架类型不参与命名：它们在界面上统一显示「框架」。',
         });
 
         // 页内摘要：与页头的 displayValue 同义，但它是**即时**的 ——
@@ -415,18 +445,22 @@ export class SettingsTab extends PluginSettingTab {
         this.kindSummaryEl = el.createEl('p', { cls: 'setting-item-description' });
         this.renderKindSummary();
 
-        const overrides = this.plugin.settings.kindLabels;
+        el.createEl('h3', { text: '显示名' });
+        this.renderKindLabelRows(el);
 
-        for (const group of GET_KindLabelGroups()) {
-            el.createEl('h4', { text: group.title });
-            for (const item of group.kinds) {
-                this.renderKindLabelRow(el, item.kind, item.defaultLabel, overrides);
-            }
-        }
+        el.createEl('h3', { text: '配色' });
+        el.createEl('p', {
+            cls: 'setting-item-description',
+            text:
+                '配色按既有的分色体系分两层：大类基色（框架 / 事务 / 证据 / 运行 / 脚本 / 外部）' +
+                '与事务链路的角色色阶（构想 → 方向 → 目标 → 工序，清单 / 事项）。\n' +
+                '每项右侧的开关是「字体反色」：默认白字，打开后该项文字变黑。',
+        });
+        this.renderKindColorRows(el);
     }
 
     /**
-     * 页内摘要（"已自定义 N 项"）—— 就地更新，不重建设置面板
+     * 页内摘要（"已自定义：显示名 N 项 · 配色 M 项 · 黑字 K 项"）—— 就地更新，不重建设置面板
      *
      * 页头的 displayValue 只在框架重画设置页时被读一次；而本页的改动刻意不重画
      * （重建会把所有设置项换掉、焦点与滚动跟着跑掉），所以页内自己维护一份即时的。
@@ -435,11 +469,36 @@ export class SettingsTab extends PluginSettingTab {
     private renderKindSummary(): void {
         const slot = this.kindSummaryEl;
         if (!slot) return;
-        const overrides = this.plugin.settings.kindLabels ?? {};
-        const n = Object.values(overrides).filter(
-            (v) => typeof v === 'string' && v.trim() !== '',
-        ).length;
-        slot.setText(n > 0 ? `已自定义 ${n} 项。留空即用回默认名。` : '当前全部使用默认名。');
+        const parts: string[] = [];
+        const names = COUNT_CustomEntries(this.plugin.settings.kindLabels);
+        const colors = COUNT_CustomEntries(this.plugin.settings.kindColors);
+        const inverted = Object.values(this.plugin.settings.kindTextInverted ?? {}).filter(Boolean).length;
+        if (names > 0) parts.push(`显示名 ${names} 项`);
+        if (colors > 0) parts.push(`配色 ${colors} 项`);
+        if (inverted > 0) parts.push(`黑字 ${inverted} 项`);
+        slot.setText(parts.length > 0 ? `已自定义：${parts.join(' · ')}。` : '当前全部使用默认外观。');
+    }
+
+    /** 显示名：按大类分组列出全部类型，每项一个文本框 + 一个「恢复默认」按钮 */
+    private renderKindLabelRows(el: HTMLElement): void {
+        const overrides = this.plugin.settings.kindLabels;
+        for (const group of GET_KindLabelGroups()) {
+            el.createEl('h4', { text: group.title });
+            for (const item of group.kinds) {
+                this.renderKindLabelRow(el, item.kind, item.defaultLabel, overrides);
+            }
+        }
+    }
+
+    /** 配色：两组（大类基色 / 事务链路），每项一个颜色选择器 + 「字体反色」开关 + 「恢复默认」 */
+    private renderKindColorRows(el: HTMLElement): void {
+        const inverted = this.plugin.settings.kindTextInverted ?? {};
+        for (const group of GET_KindColorItems(inverted)) {
+            el.createEl('h4', { text: group.title });
+            for (const item of group.items) {
+                this.renderKindColorRow(el, item);
+            }
+        }
     }
 
     /** 一个类型名的编辑行 */
@@ -495,6 +554,73 @@ export class SettingsTab extends PluginSettingTab {
         );
     }
 
+    /**
+     * 一项配色的编辑行：颜色选择器 + 「字体反色」开关 + 「恢复默认」按钮
+     *
+     * 与名字一样全程不调 update()，所有要变的东西都就地改（取色器值、开关、页内摘要）。
+     * 差别在生效时机：配色**改完立即生效** —— Save_Setting 会把新色推进 CSS 变量，
+     * 徽章与附加行预览当场变色，不必重开视图。
+     */
+    private renderKindColorRow(el: HTMLElement, item: KindColorItem): void {
+        const row = new Setting(el).setName(item.label).setDesc(`出厂色 ${item.defaultColor} · 键 ${item.key}`);
+        const colors = this.plugin.settings.kindColors;
+        const inverted = this.plugin.settings.kindTextInverted;
+        // 「恢复默认」要就地复位这两样，所以把组件引用留到回调之外
+        let picker: ColorComponent | null = null;
+        let toggle: ToggleComponent | null = null;
+        // 取色器的落盘防抖（拖动期间 onChange 连续触发，逐次写盘太吵）
+        let saveTimer = 0;
+
+        row.addColorPicker((cp) => {
+            picker = cp;
+            cp.setValue(item.value || item.defaultColor);
+            //
+            // 落盘做 300ms 防抖：ColorComponent 只暴露 onChange，而它在拖动取色时连续触发，
+            // 逐次落盘等于一路敲磁盘（组件也没给出原生 input，拿不到"关闭取色器"那一次 change）。
+            // 内存里的覆盖值当场更新，所以真正的效果是即时的；防抖的只是写盘。
+            //
+            cp.onChange((value) => {
+                const next = (value ?? '').trim();
+                if (next && next !== item.defaultColor) colors[item.key] = next;
+                else delete colors[item.key];
+                if (saveTimer) window.clearTimeout(saveTimer);
+                saveTimer = window.setTimeout(() => {
+                    saveTimer = 0;
+                    void this.commitKindColor();
+                }, COLOR_SAVE_DEBOUNCE_MS);
+            });
+        });
+
+        row.addToggle((t) => {
+            toggle = t;
+            t.setValue(item.inverted).onChange(async (v) => {
+                if (v) inverted[item.key] = true;
+                else delete inverted[item.key];
+                await this.commitKindColor();
+            });
+        });
+
+        row.addExtraButton((b) =>
+            b
+                .setIcon('rotate-ccw')
+                .setTooltip('恢复默认（配色与字色）')
+                .onClick(async () => {
+                    // 取色器可能还有一次待落盘的防抖在排队：取消掉，免得刚复位又被写回
+                    if (saveTimer) {
+                        window.clearTimeout(saveTimer);
+                        saveTimer = 0;
+                    }
+                    delete colors[item.key];
+                    delete inverted[item.key];
+                    await Save_Setting(this.plugin);
+                    // 就地复位：取色器回出厂色、反色开关回白字（关）
+                    picker?.setValue(item.defaultColor);
+                    toggle?.setValue(false);
+                    this.renderKindSummary();
+                }),
+        );
+    }
+
     /** 名字是否已被别的类型占用（空名不算重名：那是"用回默认"） */
     private isDuplicateKindLabel(kind: NodeKindValue, raw: string): boolean {
         const name = raw.trim();
@@ -529,6 +655,17 @@ export class SettingsTab extends PluginSettingTab {
         // Save_Setting 内部会 APPLY_KindLabels：存下来的与生效的始终是同一份名字
         await Save_Setting(this.plugin);
         // 页内摘要即时跟上（页头的 displayValue 要等下次重画，见 renderKindSummary）
+        this.renderKindSummary();
+    }
+
+    /**
+     * 配色落盘
+     *
+     * Save_Setting 内部会 APPLY_KindColors 并把生效色推进 CSS 变量 ——
+     * 所以调用之后徽章立刻变色，不必重开视图。
+     */
+    private async commitKindColor(): Promise<void> {
+        await Save_Setting(this.plugin);
         this.renderKindSummary();
     }
 }
