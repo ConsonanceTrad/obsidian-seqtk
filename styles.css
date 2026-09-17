@@ -48,42 +48,45 @@
 
 /* 类型徽章：按大类分色。
    类名后缀 = NODE_CATEGORY_KIND 值的小写（framework / affair / evidence / runtime / script / unknown），
-   色值须与 P4_Nodes/NodeKind/KindColors.ts 的 CATEGORY_COLORS 完全一致 —— 两处改动必须同步。
+   与 P4_Nodes/NodeKind/KindColors 的 GET_CategoryColorVar 一一对应。
+   色值**不在这里**：本表只留「变量名 + 出厂回退值」，实际颜色由 KindColors 的生效表在插件启动
+   与设置落盘时注入（见 P3_Settings/Settings.ts 的 PUSH_KindColorVars）。
+   每项一对变量：底色 --seqtk-kind-*，文字色 --seqtk-kind-*-text（逐项的反色开关决定白/黑）。
    注意：此处不加 filter 之类会改变实际观感的修饰，否则徽章与白板节点颜色对不上。 */
 .seqtk-kind-badge.kind-framework {
-  background: #7c8cff;
-  color: #fff;
-  border-color: #7c8cff;
+  background: var(--seqtk-kind-framework, #7c8cff);
+  color: var(--seqtk-kind-framework-text, #fff);
+  border-color: var(--seqtk-kind-framework, #7c8cff);
 }
 
 .seqtk-kind-badge.kind-affair {
-  background: #4caf6d;
-  color: #fff;
-  border-color: #4caf6d;
+  background: var(--seqtk-kind-affair, #4caf6d);
+  color: var(--seqtk-kind-affair-text, #fff);
+  border-color: var(--seqtk-kind-affair, #4caf6d);
 }
 
 .seqtk-kind-badge.kind-evidence {
-  background: #e0913c;
-  color: #fff;
-  border-color: #e0913c;
+  background: var(--seqtk-kind-evidence, #e0913c);
+  color: var(--seqtk-kind-evidence-text, #fff);
+  border-color: var(--seqtk-kind-evidence, #e0913c);
 }
 
 .seqtk-kind-badge.kind-runtime {
-  background: #e06c6c;
-  color: #fff;
-  border-color: #e06c6c;
+  background: var(--seqtk-kind-runtime, #e06c6c);
+  color: var(--seqtk-kind-runtime-text, #fff);
+  border-color: var(--seqtk-kind-runtime, #e06c6c);
 }
 
 .seqtk-kind-badge.kind-script {
-  background: #8a8a8a;
-  color: #fff;
-  border-color: #8a8a8a;
+  background: var(--seqtk-kind-script, #8a8a8a);
+  color: var(--seqtk-kind-script-text, #fff);
+  border-color: var(--seqtk-kind-script, #8a8a8a);
 }
 
 .seqtk-kind-badge.kind-unknown {
-  background: #9a9a9a;
-  color: #fff;
-  border-color: #9a9a9a;
+  background: var(--seqtk-kind-unknown, #9a9a9a);
+  color: var(--seqtk-kind-unknown-text, #fff);
+  border-color: var(--seqtk-kind-unknown, #9a9a9a);
 }
 
 /* 树形引导线配色：浮层（.seqtk-guides）取此变量画线。定义在栏容器上而非行上 ——
@@ -399,86 +402,95 @@ button.seqtk-source-badge:hover {
   padding: 2px 8px;
   margin: 0 4px;
   border-radius: 4px;
-  background: #4caf6d;
-  color: #fff;
+  background: var(--seqtk-kind-affair, #4caf6d);
+  color: var(--seqtk-kind-affair-text, #fff);
 }
 
-/* 附加行的类型预览：与行徽章/白板同色（共用 KindColors 的类别色），故 6 类都要覆盖 */
+/* 附加行的类型预览：与行徽章/白板同色（共用 KindColors 的类别色），故 6 类都要覆盖。
+   色值同样只留「变量名 + 出厂回退值」，与上面的徽章规则读的是同一组变量；
+   每条都要写明 color —— 基础规则那条是 affair 的，不能当通用回退 */
 .seqtk-inline-kind-preview.kind-framework {
-  background: #7c8cff;
-  border-color: #7c8cff;
+  background: var(--seqtk-kind-framework, #7c8cff);
+  color: var(--seqtk-kind-framework-text, #fff);
+  border-color: var(--seqtk-kind-framework, #7c8cff);
 }
 
 .seqtk-inline-kind-preview.kind-affair {
-  background: #4caf6d;
-  border-color: #4caf6d;
+  background: var(--seqtk-kind-affair, #4caf6d);
+  color: var(--seqtk-kind-affair-text, #fff);
+  border-color: var(--seqtk-kind-affair, #4caf6d);
 }
 
 .seqtk-inline-kind-preview.kind-evidence {
-  background: #e0913c;
-  border-color: #e0913c;
+  background: var(--seqtk-kind-evidence, #e0913c);
+  color: var(--seqtk-kind-evidence-text, #fff);
+  border-color: var(--seqtk-kind-evidence, #e0913c);
 }
 
 .seqtk-inline-kind-preview.kind-runtime {
-  background: #e06c6c;
-  border-color: #e06c6c;
+  background: var(--seqtk-kind-runtime, #e06c6c);
+  color: var(--seqtk-kind-runtime-text, #fff);
+  border-color: var(--seqtk-kind-runtime, #e06c6c);
 }
 
 .seqtk-inline-kind-preview.kind-script {
-  background: #8a8a8a;
-  border-color: #8a8a8a;
+  background: var(--seqtk-kind-script, #8a8a8a);
+  color: var(--seqtk-kind-script-text, #fff);
+  border-color: var(--seqtk-kind-script, #8a8a8a);
 }
 
 .seqtk-inline-kind-preview.kind-unknown {
-  background: #9a9a9a;
-  border-color: #9a9a9a;
+  background: var(--seqtk-kind-unknown, #9a9a9a);
+  color: var(--seqtk-kind-unknown-text, #fff);
+  border-color: var(--seqtk-kind-unknown, #9a9a9a);
 }
 
 /* 事务链路的角色色阶：两条链路各一色相、按从属深度加深
    （主线 构想→方向→目标→工序；支线 清单→事项）。
-   色值须与 P4_Nodes/NodeKind/KindColors.ts 的 AFFAIR_ROLE_COLORS 完全同步。
-   位置有意放在大类色之后：徽章与附加行预览共用这几个类，且需压过同特异性的 `.kind-affair`；
-   浅色档改用深字以保证对比度 */
+   色值与文字色都走变量（见 P4_Nodes/NodeKind/KindColors 的 GET_RoleColorVar / GET_RoleTextVar）。
+   位置有意放在大类色之后：徽章与附加行预览共用这几个类，且需压过同特异性的 `.kind-affair`。
+   文字色与底色一样默认；早先这三档浅色（构想 / 方向 / 清单）写死深字，现在统一为白，
+   需要黑字就打开该项自己的「字体反色」开关 */
 .seqtk-kind-badge.role-concept,
 .seqtk-inline-kind-preview.role-concept {
-  background: #86cfa4;
-  border-color: #86cfa4;
-  color: #123a24;
+  background: var(--seqtk-role-concept, #86cfa4);
+  color: var(--seqtk-role-concept-text, #fff);
+  border-color: var(--seqtk-role-concept, #86cfa4);
 }
 
 .seqtk-kind-badge.role-direct,
 .seqtk-inline-kind-preview.role-direct {
-  background: #65bf8a;
-  border-color: #65bf8a;
-  color: #0d2f1c;
+  background: var(--seqtk-role-direct, #65bf8a);
+  color: var(--seqtk-role-direct-text, #fff);
+  border-color: var(--seqtk-role-direct, #65bf8a);
 }
 
 .seqtk-kind-badge.role-target,
 .seqtk-inline-kind-preview.role-target {
-  background: #4caf6d;
-  border-color: #4caf6d;
-  color: #fff;
+  background: var(--seqtk-role-target, #4caf6d);
+  color: var(--seqtk-role-target-text, #fff);
+  border-color: var(--seqtk-role-target, #4caf6d);
 }
 
 .seqtk-kind-badge.role-process,
 .seqtk-inline-kind-preview.role-process {
-  background: #2f8f56;
-  border-color: #2f8f56;
-  color: #fff;
+  background: var(--seqtk-role-process, #2f8f56);
+  color: var(--seqtk-role-process-text, #fff);
+  border-color: var(--seqtk-role-process, #2f8f56);
 }
 
 .seqtk-kind-badge.role-check,
 .seqtk-inline-kind-preview.role-check {
-  background: #6fb6d0;
-  border-color: #6fb6d0;
-  color: #0d2b36;
+  background: var(--seqtk-role-check, #6fb6d0);
+  color: var(--seqtk-role-check-text, #fff);
+  border-color: var(--seqtk-role-check, #6fb6d0);
 }
 
 .seqtk-kind-badge.role-item,
 .seqtk-inline-kind-preview.role-item {
-  background: #4794b3;
-  border-color: #4794b3;
-  color: #fff;
+  background: var(--seqtk-role-item, #4794b3);
+  color: var(--seqtk-role-item-text, #fff);
+  border-color: var(--seqtk-role-item, #4794b3);
 }
 
 .seqtk-inline-name {
