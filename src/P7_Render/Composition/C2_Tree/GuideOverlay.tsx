@@ -182,11 +182,13 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
             //
             // 卡片内的行：黑段如今画在浮层里，不再被卡片的 overflow 按圆角裁掉，
             // 上端于是会在卡片圆角处"探头"。让出一段即可绕开 —— 卡片圆角是 6px，
-            // 取 4px 留余量；下端照旧到行底。卡片外的行不受影响（仍从行顶起）。
+            // 取 4px 留余量。上端让了、下端也得让同样一段：只让上端会让黑段看着上短下长、
+            // 与卡片的关系不对称，所以两端各退 CARD_RADIUS_INSET。
+            // 卡片外的行不受影响（cardInset = 0，仍从行顶到行底）。
             //
             const CARD_RADIUS_INSET = 4;
             const cardInset = el.closest(".seqtk-fw-card") !== null ? CARD_RADIUS_INSET : 0;
-            const leadHeight = row.height - cardInset;
+            const leadHeight = row.height - cardInset * 2;
             if (leadHeight <= 0) return;
             nextLeads.push({
                 x: row.left + GUIDE_INSET - LEAD_HALF,
