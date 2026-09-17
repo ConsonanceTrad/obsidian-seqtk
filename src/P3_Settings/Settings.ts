@@ -8,6 +8,7 @@ import {
     type DeleteChildrenMode,
 } from "../P4_Nodes/NodeField/DeletionPolicy";
 import {APPLY_KindLabels} from "../P4_Nodes/NodeKind/NodeLabel";
+import {APPLY_KindColors, GET_KindColorVars} from "../P4_Nodes/NodeKind/KindColors";
 
 /** 插件配置 */
 /** 委托落点：借用中控台容器，或独立视图 */
@@ -58,6 +59,21 @@ export interface PluginSettings {
      */
     kindLabels: Record<string, string>;
 
+    /**
+     * 类型配色覆盖：key = `category.<大类>` / `role.<类型值>`，value = 十六进制色值
+     *
+     * 只存改过的项 —— 未列出的键用出厂色（见 P4_Nodes/NodeKind/KindColors 的 GET_KindColorItems）。
+     * 同样是显示层配置：白板与徽章都读它，但节点文件里没有任何颜色信息。
+     */
+    kindColors: Record<string, string>;
+
+    /**
+     * 逐项的「字体反色」开关：key 同 kindColors，value = true 表示该项文字用黑色
+     *
+     * 缺省（未列出 / false）= 白字 —— 出厂一律白字，哪一项想用黑字由用户逐项决定。
+     */
+    kindTextInverted: Record<string, boolean>;
+
     /** 左侧栏顶级框架顺序（nodeId 数组；未列入的按创建时间排尾部） */
     topFrameworkOrder: string[];
 
@@ -101,6 +117,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     ...DEFAULT_DESTRUCTIVE_POLICY,
     showAllOverview: false,
     kindLabels: {},
+    kindColors: {},
+    kindTextInverted: {},
     topFrameworkOrder: [],
     leftPaneWidth: 0,
     expandedFrameworkIds: [],
@@ -113,16 +131,34 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     treeScrollRight: 0,
 };
 
+/**
+ * 把当前生效的配色推进 CSS 变量
+ *
+ * 徽章与附加行预览靠这些变量上色（styles.css 里只剩「变量名 + 出厂回退值」）；
+ * 挂在 body 上是因为变量可继承 —— 改一次颜色只需重跑这一处，不必逐个元素设内联样式。
+ * 白板不走这条路，它直接读 KindColors 的生效表。
+ */
+function PUSH_KindColorVars(p: SeqtkPlugin): void {
+    const vars = GET_KindColorVars(p.settings.kindTextInverted ?? {});
+    const style = document.body.style;
+    for (const [name, value] of Object.entries(vars)) {
+        style.setProperty(name, value);
+    }
+}
 
 export async function Load_Setting(p: SeqtkPlugin) {
     p.settings = Object.assign({}, DEFAULT_SETTINGS, await p.loadData());
-    // 读盘后立刻把用户改过的类型名刷进全局标签表 —— 界面各处读的正是那张表
+    // 读盘后立刻把用户改过的类型名与配色刷进全局生效表 —— 界面各处读的正是那几张表
     APPLY_KindLabels(p.settings.kindLabels);
+    APPLY_KindColors(p.settings.kindColors);
+    PUSH_KindColorVars(p);
 }
 
 export async function Save_Setting(p: SeqtkPlugin) {
-    // 落盘前同样刷一次：保证"存下来的"与"界面上生效的"始终是同一份名字
+    // 落盘前同样刷一次：保证"存下来的"与"界面上生效的"始终是同一份
     APPLY_KindLabels(p.settings.kindLabels);
+    APPLY_KindColors(p.settings.kindColors);
+    PUSH_KindColorVars(p);
     await p.saveData(p.settings);
 }
 
