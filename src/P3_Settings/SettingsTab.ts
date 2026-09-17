@@ -10,7 +10,7 @@
  *
  * 两处仍需命令式渲染（都是"任意条数的编辑器"，声明式表达不了）：
  *   - **状态传播规则**：可增删的规则表，放在一个 sub-page 里用 Setting 渲染
- *   - **类型外观**：类型名与配色逐项可改，同样一个 sub-page，每项带「恢复默认」按钮
+ *   - **类型外观**：类型名与配色按大类聚合在一起，同样一个 sub-page，每项带「恢复默认」按钮
  * 两者的 render 回调都不会自动保存，改动要自己落盘（见各自的 render 方法）。
  *
  * update() 的代价：它是"重建整个设置面板"，所有设置项 DOM 会换一遍 —— 焦点与滚动位置
@@ -42,8 +42,8 @@ import {
     CONFIRM_LEVEL_LABELS,
     DELETE_CHILDREN_LABELS,
 } from "../P4_Nodes/NodeField/DeletionPolicy";
-import { GET_KindLabelGroups, NODE_KIND_LABELS } from "../P4_Nodes/NodeKind/NodeLabel";
-import { GET_KindColorItems, type KindColorItem } from "../P4_Nodes/NodeKind/KindColors";
+import { NODE_KIND_LABELS } from "../P4_Nodes/NodeKind/NodeLabel";
+import { GET_KindAppearanceGroups, type KindColorItem } from "../P4_Nodes/NodeKind/KindColors";
 import type { NodeKindValue } from "../P4_Nodes/NodeKind/NodeKind";
 
 /** 生成一个不会与现有规则撞车的 id */
@@ -404,59 +404,58 @@ export class SettingsTab extends PluginSettingTab {
     }
 
     // ============================================================
-    // 类型外观：显示名 + 配色（sub-page 的命令式部分）
+    // 类型外观：更名 + 配色（sub-page 的命令式部分）
     // ============================================================
 
     /** 页内摘要槽位：每次 renderKindAppearance 时重建，供 renderKindSummary 就地更新 */
     private kindSummaryEl: HTMLElement | null = null;
 
     /**
-     * 类型外观编辑器：先「显示名」后「配色」，两段都是逐项一行
+     * 类型外观编辑器：按大类分组，把「更名」与「配色」放在同一组里
+     *
+     * 结构（每组先给大类基色，随后是组内各类型）：
+     *   框架    大类基色 [色块] [字体反色] [⟲]
+     *   事务    大类基色 [色块] [字体反色] [⟲]
+     *           构想   [名称] [⟲]
+     *           角色色 [色块] [字体反色] [⟲]   ← 只有事务链路的角色类型（构想/方向/目标/工序/清单/事项）才有这行
+     *           …
+     * 名字与颜色因此总是挨着，不必在"一长串名字"和"一长串颜色"之间来回对照。
      *
      * 三点与规则页同源的讲究：
      * - 名字的落盘时机在**失焦 / 回车**，而不是 onChange：onChange 每敲一个字都会触发，
      *   拿它写盘等于每敲一个字写一次磁盘。onChange 这里只做即时校验（重名标红）。
-     *   配色的落盘挂在取色器的原生 change（关闭取色器时触发），理由同上。
+     *   取色器的落盘同样做了防抖（见 renderKindColorRow）。
      * - 全程**不调 update()**：它会把整页重建一遍，正在编辑的输入框会被换掉、
      *   焦点与滚动也会跑回面板开头。所有变化都就地更新（控件值、页内摘要）。
      * - 页内摘要自己维护一份（见 renderKindSummary）：页头的 displayValue 只在重画时才读。
      *
-     * 生效时机不同，页面里也写明了：**配色与字色立即生效**（Save_Setting 会把颜色推进
-     * CSS 变量，徽章当场变色）；**名字要重开视图**才生效（已经渲染好的 DOM 不会自己重画）。
+     * 生效时机不同：**配色与字色立即生效**（Save_Setting 会把颜色推进 CSS 变量，徽章当场变色）；
+     * **名字要重开视图**才生效（已经渲染好的 DOM 不会自己重画），这条写在各行描述里。
      */
     private renderKindAppearance(el: HTMLElement): void {
         // 与规则页同理：setting-item 默认是横向 flex，这里要塞多块内容。
-        // 类名沿用样式表里的钩子 .seqtk-settings-kind-labels（内容已从"名字"扩到"名字 + 配色"）
+        // 类名沿用样式表里的钩子 .seqtk-settings-kind-labels
         el.addClass('seqtk-settings-kind-labels');
         // 框架在 update() 后会复用同一个 settingEl 再调一次本回调：不清空会追加第二份
         el.empty();
 
-        el.createEl('p', {
-            cls: 'setting-item-description',
-            text:
-                '给各类型换个叫法、调一调配色：徽章、右键菜单、行内新建下拉、导入预览等处都会跟着变。\n' +
-                '只影响界面显示 —— 节点文件里存的是类型值本身，既有数据不受影响、也不会被改写。\n' +
-                '配色与「字体反色」改完立即生效；改名字需要重开视图（或重载插件）后才会在已打开的界面上生效。\n' +
-                '留空或点 ⟲ 即用回默认。框架类型不参与命名：它们在界面上统一显示「框架」。',
-        });
-
-        // 页内摘要：与页头的 displayValue 同义，但它是**即时**的 ——
-        // 本页刻意不重画设置面板，页头那个数字要等下次重画才会跟上
+        // 页内摘要：与页头的 displayValue 同义，但它是**即时**的（本页刻意不重画设置面板）
         this.kindSummaryEl = el.createEl('p', { cls: 'setting-item-description' });
         this.renderKindSummary();
 
-        el.createEl('h3', { text: '显示名' });
-        this.renderKindLabelRows(el);
+        const labelOverrides = this.plugin.settings.kindLabels;
+        const inverted = this.plugin.settings.kindTextInverted ?? {};
 
-        el.createEl('h3', { text: '配色' });
-        el.createEl('p', {
-            cls: 'setting-item-description',
-            text:
-                '配色按既有的分色体系分两层：大类基色（框架 / 事务 / 证据 / 运行 / 脚本 / 外部）' +
-                '与事务链路的角色色阶（构想 → 方向 → 目标 → 工序，清单 / 事项）。\n' +
-                '每项右侧的开关是「字体反色」：默认白字，打开后该项文字变黑。',
-        });
-        this.renderKindColorRows(el);
+        for (const group of GET_KindAppearanceGroups(inverted)) {
+            el.createEl('h4', { text: group.title });
+            // 每个大类先给它的基色：该大类下没有角色色的类型（如项目 / 事件）都吃这个色
+            this.renderKindColorRow(el, group.categoryItem, group.title);
+            for (const item of group.kinds) {
+                this.renderKindLabelRow(el, item.kind, item.defaultLabel, labelOverrides);
+                // 角色色紧跟在它所属类型之后 —— 同一类型的名字与颜色就此挨在一起
+                if (item.roleItem) this.renderKindColorRow(el, item.roleItem, item.label);
+            }
+        }
     }
 
     /**
@@ -479,28 +478,6 @@ export class SettingsTab extends PluginSettingTab {
         slot.setText(parts.length > 0 ? `已自定义：${parts.join(' · ')}。` : '当前全部使用默认外观。');
     }
 
-    /** 显示名：按大类分组列出全部类型，每项一个文本框 + 一个「恢复默认」按钮 */
-    private renderKindLabelRows(el: HTMLElement): void {
-        const overrides = this.plugin.settings.kindLabels;
-        for (const group of GET_KindLabelGroups()) {
-            el.createEl('h4', { text: group.title });
-            for (const item of group.kinds) {
-                this.renderKindLabelRow(el, item.kind, item.defaultLabel, overrides);
-            }
-        }
-    }
-
-    /** 配色：两组（大类基色 / 事务链路），每项一个颜色选择器 + 「字体反色」开关 + 「恢复默认」 */
-    private renderKindColorRows(el: HTMLElement): void {
-        const inverted = this.plugin.settings.kindTextInverted ?? {};
-        for (const group of GET_KindColorItems(inverted)) {
-            el.createEl('h4', { text: group.title });
-            for (const item of group.items) {
-                this.renderKindColorRow(el, item);
-            }
-        }
-    }
-
     /** 一个类型名的编辑行 */
     private renderKindLabelRow(
         el: HTMLElement,
@@ -508,7 +485,10 @@ export class SettingsTab extends PluginSettingTab {
         defaultLabel: string,
         overrides: Record<string, string>,
     ): void {
-        const row = new Setting(el).setName(defaultLabel).setDesc(`类型值 ${kind} · 留空即用回默认名。`);
+        // 生效时机写在这一行的描述里（而不是页面开头的大段说明）：配色是即时的，名字要重开视图
+        const row = new Setting(el)
+            .setName(defaultLabel)
+            .setDesc(`类型值 ${kind} · 留空即用回默认名；名字改完重开视图才生效。`);
         // 当前生效名（改过就是改后的名字）：既是输入框初值，也是"没动就失焦"时要提交的值
         const current = NODE_KIND_LABELS[kind] ?? defaultLabel;
         // 「恢复默认」按钮要就地复位这个输入框，所以把引用留到 addText 回调之外
@@ -560,9 +540,15 @@ export class SettingsTab extends PluginSettingTab {
      * 与名字一样全程不调 update()，所有要变的东西都就地改（取色器值、开关、页内摘要）。
      * 差别在生效时机：配色**改完立即生效** —— Save_Setting 会把新色推进 CSS 变量，
      * 徽章与附加行预览当场变色，不必重开视图。
+     *
+     * @param ownerLabel 这一行归属谁（大类名或类型名）：只用于把描述说清楚
      */
-    private renderKindColorRow(el: HTMLElement, item: KindColorItem): void {
-        const row = new Setting(el).setName(item.label).setDesc(`出厂色 ${item.defaultColor} · 键 ${item.key}`);
+    private renderKindColorRow(el: HTMLElement, item: KindColorItem, ownerLabel: string): void {
+        const desc =
+            item.label === '大类基色'
+                ? `${ownerLabel}类下所有类型共用的底色 · 出厂 ${item.defaultColor}`
+                : `仅 ${ownerLabel} 用这一档色阶 · 出厂 ${item.defaultColor}`;
+        const row = new Setting(el).setName(item.label).setDesc(desc);
         const colors = this.plugin.settings.kindColors;
         const inverted = this.plugin.settings.kindTextInverted;
         // 「恢复默认」要就地复位这两样，所以把组件引用留到回调之外
@@ -593,6 +579,11 @@ export class SettingsTab extends PluginSettingTab {
 
         row.addToggle((t) => {
             toggle = t;
+            // 开关组件本身没有 label：在它前面插一个小字说明，否则看不出这个开关管什么
+            t.toggleEl.insertAdjacentElement(
+                'beforebegin',
+                createSpan({ cls: 'seqtk-toggle-label', text: '字体反色' }),
+            );
             t.setValue(item.inverted).onChange(async (v) => {
                 if (v) inverted[item.key] = true;
                 else delete inverted[item.key];

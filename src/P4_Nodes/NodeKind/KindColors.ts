@@ -16,8 +16,10 @@
  */
 
 import { GET_CategoryOfNode, NODE_KIND, type NodeCategoryValue, type NodeKindValue } from './NodeKind';
-// 设置页清单要用的显示名：直接用那两张表（会跟随用户在「类型外观」里改过的名字）
+// 设置页清单要用的显示名：当前名取自 NODE_KIND_LABELS（会跟随用户改的名字），
+// 出厂名取自 DEFAULT_KIND_LABELS
 import {
+    DEFAULT_KIND_LABELS,
     NODE_CATEGORY_LABELS as CATEGORY_LABELS,
     NODE_KIND_LABELS as KIND_LABELS,
 } from './NodeLabel';
@@ -153,7 +155,7 @@ export const GET_KindClass = (kind: NodeKindValue): string => {
 // 覆盖 / 注入 / 设置页清单
 // ============================================================
 
-/** 设置项的两个键前缀（见 GET_KindColorItems） */
+/** 设置项的两个键前缀（见 GET_KindAppearanceGroups） */
 const KEY_CATEGORY = 'category.';
 const KEY_ROLE = 'role.';
 
@@ -165,7 +167,7 @@ const IS_ColorValue = (value: string): boolean => /^#([0-9a-f]{3}|[0-9a-f]{4}|[0
  *
  * 与 APPLY_KindLabels 同款做法：先整体还原出厂值、再套覆盖 ——
  * 否则"把某个颜色改回默认"会残留上一轮的旧色。
- * 键形如 `category.AFFAIR` / `role.AFFAIR_CONCEPT`（见 GET_KindColorItems）；
+ * 键形如 `category.AFFAIR` / `role.AFFAIR_CONCEPT`（见 GET_KindAppearanceGroups）；
  * 认不出的键、空值、不像色值的字符串一律忽略。
  *
  * 文字色不在这张表里：它是由「字体反色」开关逐项决定的（见 GET_KindColorVars）。
@@ -195,7 +197,7 @@ export function APPLY_KindColors(overrides?: Record<string, string> | null): voi
  * 调用方把结果写进 CSS 变量（一般挂在 body / documentElement 上），徽章与附加行预览
  * 就跟着变色了。白板不走这条路，它直接读上面的生效表。
  *
- * @param inverted 逐项的「字体反色」开关状态，键与 GET_KindColorItems 一致
+ * @param inverted 逐项的「字体反色」开关状态，键与 GET_KindAppearanceGroups 一致
  *                 （`category.AFFAIR` / `role.AFFAIR_CONCEPT`）；缺省即全白字
  */
 export function GET_KindColorVars(inverted: Record<string, boolean> = {}): Record<string, string> {
@@ -218,7 +220,11 @@ export function GET_KindColorVars(inverted: Record<string, boolean> = {}): Recor
     return vars;
 }
 
-/** 设置页的一项：覆盖键、显示名、当前底色、出厂底色、该项是否已开字体反色 */
+// ============================================================
+// 设置页清单：按大类聚合
+// ============================================================
+
+/** 设置页的一项配色：覆盖键、这一行的名字、当前底色、出厂底色、是否已开字体反色 */
 export interface KindColorItem {
     key: string;
     label: string;
@@ -227,46 +233,82 @@ export interface KindColorItem {
     inverted: boolean;
 }
 
+/** 设置页里的一个类型：当前名 / 出厂名 / 它自己的角色色（没有则为 null） */
+export interface KindAppearanceType {
+    kind: NodeKindValue;
+    /** 当前生效名（用户改过就是改后的） */
+    label: string;
+    /** 出厂名：输入框的初值与 placeholder 用 */
+    defaultLabel: string;
+    roleItem: KindColorItem | null;
+}
+
+/** 设置页的一组：一个大类 + 它的大类基色 + 该类下的类型（各自带可选的角色色） */
+export interface KindAppearanceGroup {
+    title: string;
+    categoryItem: KindColorItem;
+    kinds: KindAppearanceType[];
+}
+
+/** 设置页的分组顺序（UNKNOWN 排最后：它没有类型，只提供大类色） */
+const APPEARANCE_CATEGORY_ORDER: NodeCategoryValue[] = [
+    'FRAMEWORK',
+    'AFFAIR',
+    'EVIDENCE',
+    'RUNTIME',
+    'SCRIPT',
+    'UNKNOWN',
+];
+
 /**
- * 设置页用：可配置的颜色清单（两组）
+ * 设置页用：把「类型名」与「配色」按大类聚合到一处
  *
- * 粒度沿用既有的分色体系，不做更细的"每个类型一个色"：
+ * 设置页照着它就能一行行渲染：每组先一行大类基色，随后每个类型一行更名，
+ * 类型若还有自己的角色色，则紧跟一行角色色 —— 名字与颜色因此总是挨在一起，
+ * 不必在"一长串名字"和"一长串颜色"之间来回对照。
+ *
+ * 组的粒度沿用既有分色体系，不做更细的"每个类型一个色"：
  * - 大类基色 6 项（框架 / 事务 / 证据 / 运行 / 脚本 / 外部）
  * - 事务链路角色色 6 项（构想 → 方向 → 目标 → 工序，清单 / 事项）
  *
- * 每项的 `inverted` 来自设置里的逐项反色开关（见 GET_KindColorVars 的入参）。
+ * @param inverted 逐项的「字体反色」开关状态（键同上面的覆盖键）
  */
-export function GET_KindColorItems(
+export function GET_KindAppearanceGroups(
     inverted: Record<string, boolean> = {},
-): { title: string; items: KindColorItem[] }[] {
-    const categories: KindColorItem[] = (
-        Object.keys(BUILTIN_CATEGORY_COLORS) as NodeCategoryValue[]
-    ).map((category) => {
-        const key = `${KEY_CATEGORY}${category}`;
+): KindAppearanceGroup[] {
+    const allKinds = Object.keys(DEFAULT_KIND_LABELS) as NodeKindValue[];
+
+    return APPEARANCE_CATEGORY_ORDER.map((category) => {
+        const categoryKey = `${KEY_CATEGORY}${category}`;
         return {
-            key,
-            label: CATEGORY_LABELS[category],
-            value: CATEGORY_COLORS[category],
-            defaultColor: BUILTIN_CATEGORY_COLORS[category],
-            inverted: !!inverted[key],
+            title: CATEGORY_LABELS[category],
+            categoryItem: {
+                key: categoryKey,
+                label: '大类基色',
+                value: CATEGORY_COLORS[category],
+                defaultColor: BUILTIN_CATEGORY_COLORS[category],
+                inverted: !!inverted[categoryKey],
+            },
+            kinds: allKinds
+                .filter((kind) => GET_CategoryOfNode(kind) === category)
+                .map((kind) => {
+                    const roleKey = `${KEY_ROLE}${kind}`;
+                    const hasRole = kind in BUILTIN_ROLE_COLORS;
+                    return {
+                        kind,
+                        label: KIND_LABELS[kind] ?? kind,
+                        defaultLabel: DEFAULT_KIND_LABELS[kind] ?? kind,
+                        roleItem: hasRole
+                            ? {
+                                  key: roleKey,
+                                  label: '角色色',
+                                  value: AFFAIR_ROLE_COLORS[kind] ?? '',
+                                  defaultColor: BUILTIN_ROLE_COLORS[kind] ?? '',
+                                  inverted: !!inverted[roleKey],
+                              }
+                            : null,
+                    };
+                }),
         };
     });
-
-    const roles: KindColorItem[] = (
-        Object.keys(BUILTIN_ROLE_COLORS) as NodeKindValue[]
-    ).map((kind) => {
-        const key = `${KEY_ROLE}${kind}`;
-        return {
-            key,
-            label: KIND_LABELS[kind] ?? kind,
-            value: AFFAIR_ROLE_COLORS[kind] ?? '',
-            defaultColor: BUILTIN_ROLE_COLORS[kind] ?? '',
-            inverted: !!inverted[key],
-        };
-    });
-
-    return [
-        {title: '大类基色', items: categories},
-        {title: '事务链路（按从属深度）', items: roles},
-    ];
 }

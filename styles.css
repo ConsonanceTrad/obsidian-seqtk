@@ -2279,9 +2279,16 @@ button.seqtk-open-btn {
   display: block;
 }
 
-/* 分组标题（显示名 / 配色两段下的各组，如框架 / 事务 / 证据…）：与上一组拉开，与自己的首行贴近 */
+/* 分组标题（每个大类一组，如框架 / 事务 / 证据…）：与上一组拉开，与自己的首行贴近 */
 .seqtk-settings-kind-labels h4 {
   margin: 1.2em 0 0.2em;
+}
+
+/* 配色行里「字体反色」开关前的小字标签：开关组件本身没有 label，靠这行字说明它管什么 */
+.seqtk-toggle-label {
+  margin-right: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
 /* 类型名输入框：与右侧「恢复默认」按钮同处一行；固定宽度，免得随名字长短来回抖 */
