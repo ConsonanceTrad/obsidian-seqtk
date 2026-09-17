@@ -2260,6 +2260,28 @@ button.seqtk-open-btn {
   box-shadow: 0 0 0 1px var(--text-error);
 }
 
+/* 类型名表（设置子页的命令式部分）：同样整体竖向排布 ——
+   setting-item 默认是横向 flex，说明 / 分组标题 / 各行直接追加进去会被并排成一行 */
+.seqtk-settings-kind-labels {
+  display: block;
+}
+
+/* 分组标题（框架 / 事务 / 证据 / 运行 / 脚本）：与上一组拉开，与自己的首行贴近 */
+.seqtk-settings-kind-labels h4 {
+  margin: 1.2em 0 0.2em;
+}
+
+/* 类型名输入框：与右侧「恢复默认」按钮同处一行；固定宽度，免得随名字长短来回抖 */
+.seqtk-kind-label-input {
+  width: 12em;
+}
+
+/* 与另一个类型的显示名撞车：标红提示（此时该次输入不落盘） */
+.seqtk-kind-label-input.seqtk-input-invalid {
+  border-color: var(--text-error);
+  box-shadow: 0 0 0 1px var(--text-error);
+}
+
 /* 「仅当子节点处于」：设置项改为竖向堆叠，让复选行有整行宽度 */
 .seqtk-setting-stack {
   display: block;
