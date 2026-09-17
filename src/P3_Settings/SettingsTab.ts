@@ -13,6 +13,10 @@
  *   - **类型显示名**：全部类型名逐项可改，同样一个 sub-page，每项带「恢复默认」按钮
  * 两者的 render 回调都不会自动保存，改动要自己落盘（见各自的 render 方法）。
  *
+ * update() 的代价：它是"重建整个设置面板"，所有设置项 DOM 会换一遍 —— 焦点与滚动位置
+ * 随之回到面板开头。因此**只有会改变可见项结构**的改动才调它（规则增删、方向切换），
+ * 单纯改值一律就地更新（见 commit / commitKindLabel / renderKindSummary）。
+ *
  * manifest 的 minAppVersion 已提到 1.13.0 —— 该 API 的下限。
  */
 
@@ -175,7 +179,8 @@ export class SettingsTab extends PluginSettingTab {
                 type: 'page',
                 name: '类型显示名',
                 desc: '给各类型换个叫法；只影响界面显示，不改文件内容。',
-                // 页头摘要：数一数覆盖表里有几项是"真改过的"（空串等于没改，跟落盘口径一致）
+                // 页头摘要：数一数覆盖表里有几项是"真改过的"（空串等于没改，跟落盘口径一致）。
+                // 它只在本页被重画时才读一次，页内的即时摘要见 renderKindSummary。
                 displayValue: () => {
                     const overrides = this.plugin.settings.kindLabels ?? {};
                     const n = Object.values(overrides).filter(
@@ -377,14 +382,18 @@ export class SettingsTab extends PluginSettingTab {
     // 类型显示名（sub-page 的命令式部分）
     // ============================================================
 
+    /** 页内摘要槽位：每次 renderKindLabels 时重建，供 renderKindSummary 就地更新 */
+    private kindSummaryEl: HTMLElement | null = null;
+
     /**
      * 类型名编辑器：按大类分组列出全部类型，每项一个文本框 + 一个「恢复默认」按钮
      *
-     * 两点与规则页同源的讲究：
+     * 三点与规则页同源的讲究：
      * - 落盘时机在**失焦 / 回车**，而不是 onChange：onChange 每敲一个字都会触发，
      *   拿它写盘等于每敲一个字写一次磁盘。onChange 这里只做即时校验（重名标红）。
-     * - 编辑过程中不 update() 重建 —— 重建会把正在编辑的输入框换掉；
-     *   只有「恢复默认」按钮在点击完成后才重建（输入框要显示回默认名）。
+     * - 全程**不调 update()**：它会把整页重建一遍，正在编辑的输入框会被换掉、
+     *   焦点与滚动也会跑回面板开头。所有变化都就地更新（输入框值、页内摘要）。
+     * - 页内摘要自己维护一份（见 renderKindSummary）：页头的 displayValue 只在重画时才读。
      */
     private renderKindLabels(el: HTMLElement): void {
         // 与规则页同理：setting-item 默认是横向 flex，这里要塞多块内容
@@ -401,6 +410,11 @@ export class SettingsTab extends PluginSettingTab {
                 '框架类型不在此列：它们在界面上统一显示「框架」。',
         });
 
+        // 页内摘要：与页头的 displayValue 同义，但它是**即时**的 ——
+        // 本页刻意不重画设置面板，页头那个数字要等下次重画才会跟上
+        this.kindSummaryEl = el.createEl('p', { cls: 'setting-item-description' });
+        this.renderKindSummary();
+
         const overrides = this.plugin.settings.kindLabels;
 
         for (const group of GET_KindLabelGroups()) {
@@ -409,6 +423,23 @@ export class SettingsTab extends PluginSettingTab {
                 this.renderKindLabelRow(el, item.kind, item.defaultLabel, overrides);
             }
         }
+    }
+
+    /**
+     * 页内摘要（"已自定义 N 项"）—— 就地更新，不重建设置面板
+     *
+     * 页头的 displayValue 只在框架重画设置页时被读一次；而本页的改动刻意不重画
+     * （重建会把所有设置项换掉、焦点与滚动跟着跑掉），所以页内自己维护一份即时的。
+     * 口径与落盘一致：空串等于没改。
+     */
+    private renderKindSummary(): void {
+        const slot = this.kindSummaryEl;
+        if (!slot) return;
+        const overrides = this.plugin.settings.kindLabels ?? {};
+        const n = Object.values(overrides).filter(
+            (v) => typeof v === 'string' && v.trim() !== '',
+        ).length;
+        slot.setText(n > 0 ? `已自定义 ${n} 项。留空即用回默认名。` : '当前全部使用默认名。');
     }
 
     /** 一个类型名的编辑行 */
@@ -421,8 +452,11 @@ export class SettingsTab extends PluginSettingTab {
         const row = new Setting(el).setName(defaultLabel).setDesc(`类型值 ${kind} · 留空即用回默认名。`);
         // 当前生效名（改过就是改后的名字）：既是输入框初值，也是"没动就失焦"时要提交的值
         const current = NODE_KIND_LABELS[kind] ?? defaultLabel;
+        // 「恢复默认」按钮要就地复位这个输入框，所以把引用留到 addText 回调之外
+        let inputEl: HTMLInputElement | null = null;
 
         row.addText((t) => {
+            inputEl = t.inputEl;
             t.setPlaceholder(defaultLabel);
             t.setValue(current);
             t.inputEl.addClass('seqtk-kind-label-input');
@@ -432,7 +466,7 @@ export class SettingsTab extends PluginSettingTab {
             t.inputEl.addEventListener('blur', () => void this.commitKindLabel(kind, defaultLabel, t.inputEl));
             t.inputEl.addEventListener('keydown', (e) => {
                 if (e.key !== 'Enter') return;
-                // 回车等于"改完了"：走同一条提交路径，不额外写一份逻辑
+                // 回车等于"改完了"：走同一条提交路径，不另写一份逻辑
                 e.preventDefault();
                 t.inputEl.blur();
             });
@@ -445,9 +479,18 @@ export class SettingsTab extends PluginSettingTab {
                 .onClick(async () => {
                     delete overrides[kind];
                     await Save_Setting(this.plugin);
-                    // 这里可以重建：输入框要显示回默认名，页头的"N 项已自定义"也要跟上。
-                    // 重建发生在点击之后，不会出现"点按钮时被换掉"的情形。
-                    this.update();
+                    //
+                    // 就地复位，**不**调 update()：
+                    // update() 的语义是"重建整个设置面板"，所有设置项 DOM 会换一遍 ——
+                    // 刚被点的那个按钮连同整页一起消失，焦点与滚动回到面板开头，
+                    // 表现出来就是"不管点哪一行的按钮，焦点都跳去第一个输入框（构想）"。
+                    // 这里真正要变的只有两样：本行输入框的值、页内摘要。
+                    //
+                    if (inputEl) {
+                        inputEl.value = defaultLabel;
+                        inputEl.removeClass('seqtk-input-invalid');
+                    }
+                    this.renderKindSummary();
                 }),
         );
     }
@@ -485,6 +528,8 @@ export class SettingsTab extends PluginSettingTab {
         else overrides[kind] = name;
         // Save_Setting 内部会 APPLY_KindLabels：存下来的与生效的始终是同一份名字
         await Save_Setting(this.plugin);
+        // 页内摘要即时跟上（页头的 displayValue 要等下次重画，见 renderKindSummary）
+        this.renderKindSummary();
     }
 }
 
