@@ -3,6 +3,30 @@
 // 中文标签
 // ============================================================
 
+/**
+ * 类型与大类的显示名
+ *
+ * 这个模块要解决的就一件事：**同一批类型名要在三十多处界面上显示，还得允许用户改**。
+ * 因此拆成四样东西，各司其职：
+ *
+ *   BUILTIN_KIND_LABELS  出厂默认值（本文件私有 —— 默认值只写一遍的单一来源）
+ *   DEFAULT_KIND_LABELS  默认值的只读快照：设置页的 placeholder、「恢复默认」的依据
+ *   NODE_KIND_LABELS     **当前生效值**：界面各处读的就是这张表
+ *   APPLY_KindLabels()   按用户配置就地刷新上面那张生效表
+ *
+ * 为什么是"就地改写一张表"，而不是 `GET_KindLabel(kind)` 之类的取值函数：
+ * 读取点有三十多处（徽章 / 右键菜单 / 行内新建下拉 / Tag / 导入预览 / 回收站 …），
+ * 就地覆盖让它们一行都不用改，也不必各自去问设置。
+ *
+ * 什么时候刷新：插件启动读盘之后、以及设置页每次落盘前后 —— 调用点集中在一处，
+ * 见 P3_Settings/Settings.ts 的 Load_Setting 与 Save_Setting。改写不会主动重绘已经打开的
+ * 视图（那是 React 那侧的事），所以设置页明说"改完需要重开视图（或重载插件）"。
+ *
+ * 不在这里、也不可配置的东西：
+ *   - 类型的**短码**（KIND_TO_SHORT，如 K:Idea）—— 它是文件格式的一部分，改了会读不懂既有文件；
+ *   - 节点文件里存的**类型值**（ASCII 枚举）—— 所以改显示名是纯显示层行为，不触碰数据。
+ */
+
 import {GET_CategoryOfNode, IS_NodeKind, type NodeCategoryValue, type NodeKindValue} from "./NodeKind";
 
 /** 出厂默认的类型中文名：下面两张表都从它派生，避免同一个默认值写两遍 */
@@ -42,11 +66,7 @@ export const DEFAULT_KIND_LABELS: Readonly<Record<NodeKindValue, string>> = {...
  * 节点类型中文名 —— **当前生效值**
  *
  * 这是一张"活的"表：插件启动与设置页保存时，由 APPLY_KindLabels 按用户配置就地覆盖。
- * 界面各处（徽章 / 右键菜单 / 行内新建下拉 / Tag / 导入预览 / 回收站 …）直接读它即可，
- * 不必各自去问设置 —— 这也正是选"就地改写一张表"而不是 `GET_KindLabel(kind)` 取值函数的原因：
- * 三十多处读取点因此一行都不用改。
- *
- * 类型的**短码**（KIND_TO_SHORT，如 K:Idea）是文件格式的一部分，不在这里、也不可配置。
+ * 界面各处直接读它即可，不必各自去问设置（理由见文件头）。
  */
 export const NODE_KIND_LABELS: Record<NodeKindValue, string> = {...BUILTIN_KIND_LABELS};
 
@@ -62,6 +82,9 @@ export const NODE_CATEGORY_LABELS: Record<NodeCategoryValue, string> = {
 
 /**
  * 用用户配置刷新 NODE_KIND_LABELS
+ *
+ * 调用点只有两处，都在 P3_Settings/Settings.ts：读盘后的 Load_Setting、落盘前的 Save_Setting
+ * （落盘前也刷一次，是为了让"存下来的"与"界面上生效的"始终是同一份名字）。
  *
  * 必须先整体还原为默认、再套用覆盖：这样"把某个类型改回默认（或把输入框清空）"才真的生效，
  * 否则上一轮运行的旧值会残留在这张全局表里。
@@ -97,7 +120,8 @@ export interface KindLabelGroup {
 /**
  * 设置页用：按大类分组的类型清单
  *
- * 大类名本身不可配置，但正好用来分组 —— 21 个类型平铺成一列太难找。
+ * 大类名本身不可配置，但正好用来分组 —— 十几个类型平铺成一列太难找。
+ * 只列 KIND_LABEL_GROUP_ORDER 里的大类（即不含框架，理由见上）。
  */
 export function GET_KindLabelGroups(): KindLabelGroup[] {
     const all = Object.keys(BUILTIN_KIND_LABELS) as NodeKindValue[];
