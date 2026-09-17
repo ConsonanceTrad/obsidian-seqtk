@@ -41,7 +41,7 @@ export function openTextTreeImport(plugin: SeqtkPlugin, text: string): void {
     const pipe = plugin.allDeps.dataPipe;
     new TextTreeImportModal(plugin.app, {
         title: '提取为节点组',
-        desc: '类型按层级推断（构想 → 方向 → 目标 → 工序；清单 → 事项）；越出链条的行需写 K:<短名>。确认无误后选择放置位置。',
+        desc: '类型按层级推断（构想 → 方向 → 目标 → 工序；清单 → 行动）；越出链条的行需写 K:<短名>。确认无误后选择放置位置。',
         initialText: text,
         onConfirm: (roots) => {
             new NodePickModal(plugin.app, pipe, {

@@ -357,7 +357,7 @@ export class FlowView extends ReactViewBase {
             { type: 'not', label: 'NOT 条件', cls: 'seqtk-lad-not' },
             { type: 'do', label: 'DO 动作', cls: 'seqtk-lad-do' },
             { type: 'lst', label: '清单内容', cls: 'seqtk-lad-content-kind' },
-            { type: 'task', label: '事项内容', cls: 'seqtk-lad-content-kind' },
+            { type: 'task', label: '行动内容', cls: 'seqtk-lad-content-kind' },
             { type: 'at', label: '时间点 at', cls: 'seqtk-lad-tn-time' },
             { type: 'span', label: '时间段 span', cls: 'seqtk-lad-tn-time' },
             { type: 'repeat', label: '周期 repeat', cls: 'seqtk-lad-tn-time' },

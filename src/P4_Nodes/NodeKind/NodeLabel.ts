@@ -40,7 +40,8 @@ const BUILTIN_KIND_LABELS: Record<NodeKindValue, string> = {
     AFFAIR_TARGET: '目标',
     AFFAIR_PROCESS: '工序',
     AFFAIR_CHECK: '清单',
-    AFFAIR_ITEM: '事项',
+    // 「行动」而非「事项」：与「事件」读音太近，列表里一眼分不清
+    AFFAIR_ITEM: '行动',
     AFFAIR_EVENT: '事件',
     EVIDENCE_FACTOR: '对象',
     EVIDENCE_REQUEST: '条件',
