@@ -113,7 +113,7 @@ const EMPTY_VIEW_STATE: DesignViewState = {
 export class DesignView extends ReactViewBase {
     /** 面板目录条目 */
     static metas: PanelEntry[] = [
-        {viewType: VIEW_TYPE_DESIGN, title: '事务设计', icon: 'layout-grid', description: '设计模式：框架-子框架总览，统一编辑框架内的事务与证据；含全部事务总览。', category: '事务设计'},
+        {viewType: VIEW_TYPE_DESIGN, title: '事务设计', icon: 'layout-grid', description: '设计模式：框架-子框架总览，统一编辑框架内的事务与证据。', category: '事务设计'},
     ];
 
     /** 视图工厂：由 Register_View 以 (leaf) 调用 */
@@ -183,7 +183,7 @@ export class DesignView extends ReactViewBase {
     public expandedLeft = FRAMEWORK_TREE.expandedLeft;
     /** 右栏展开状态（nodeId 集合，与左栏独立；右栏不参与委托） */
     public expandedRight = new Set<string>();
-    /** 当前选中的框架 nodeId；null 表示「全部事务总览」（与委托面板共享） */
+    /** 当前选中的框架 nodeId；null = 未选中（与委托面板共享） */
     public get selectedFrameworkId(): string | null {
         return FRAMEWORK_TREE.selectedId;
     }

@@ -123,6 +123,8 @@ export interface NodeLineData {
     desc: string;
     /** 描述行的悬浮提示（目标时间 / 重复规则等） */
     descTooltip?: string;
+    /** 标签（紧跟在节点名之后逐个显示为 `#标签` 徽章；只展示，不接管点击） */
+    tags?: string[];
     /** 正文预览（节点名后，超长省略） */
     bodyPreview?: string;
     /** 正文预览的悬浮提示（由调用方按 tooltipBodyText 之类的规则算好） */

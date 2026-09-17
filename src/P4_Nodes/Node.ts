@@ -1,13 +1,21 @@
 import type {NodeKindValue} from "./NodeKind/NodeKind";
 import type {ExternalFields} from "./NodeField/AttriGroup/External";
+import type {MeaningFields} from "./NodeField/AttriGroup/Meaning";
 import type {AffairNode} from "./NodePack/AffairNode";
 import type {FrameworkNode} from "./NodePack/FrameworkNode";
 import type {RuntimeNode} from "./NodePack/RuntimeNode";
 import type {EvidenceNode} from "./NodePack/EvidenceNode";
 import type {ScriptNode} from "./NodePack/ScriptNode";
 
-/** 所有节点共有的基础字段（含外部信息源字段，见 NodeField/AttriGroup/External） */
-export interface NodeBase extends ExternalFields {
+/**
+ * 所有节点共有的基础字段
+ *
+ * 并入两簇「各类型都可能带」的**可选**字段：
+ * - ExternalFields：外部信息源（见 NodeField/AttriGroup/External）
+ * - MeaningFields：表意标注 —— clear / tags / indicators / pmarks（见 NodeField/AttriGroup/Meaning）
+ * 全都是可选字段，因此并入基类不替任何类型做「必填」决定，各类型仍可自行收窄。
+ */
+export interface NodeBase extends ExternalFields, MeaningFields {
     /** 节点类型 */
     kind: NodeKindValue;
     /** 节点展示名（用户自行输入） */

@@ -16,15 +16,15 @@
 
 import type { ReactNode } from "react";
 import type { WorkspaceLeaf } from "obsidian";
-import { AutoView } from "../../P1_Register/View";
-import { AutoRegister } from "../../P1_Register/Comd";
-import { ReactViewBase } from "../../P0_UI/ViewBase";
+import { AutoView } from "../../../P1_Register/View";
+import { AutoRegister } from "../../../P1_Register/Comd";
+import { ReactViewBase } from "../../../P0_UI/ViewBase";
 import { DelegateTreeController } from "./DelegateTreeController";
-import { FRAMEWORK_TREE } from "./Design/Slice/FrameworkTreeShared";
-import type SeqtkPlugin from "../../main";
-import type { PanelEntry } from "../panelRegistry";
-import type { DataPipe } from "../../P5_Data/CoPipe/DataPipe";
-import type { PluginSettings } from "../../P3_Settings/Settings";
+import { FRAMEWORK_TREE } from "../../V1_Affair/Design/Slice/FrameworkTreeShared";
+import type SeqtkPlugin from "../../../main";
+import type { PanelEntry } from "../../panelRegistry";
+import type { DataPipe } from "../../../P5_Data/CoPipe/DataPipe";
+import type { PluginSettings } from "../../../P3_Settings/Settings";
 
 export const VIEW_TYPE_DELEGATED_TREE = 'seqtk-delegated-tree';
 

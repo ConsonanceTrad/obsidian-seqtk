@@ -6,7 +6,7 @@
  * 保持 Obsidian 原生 Modal（与 S2_Modal 下其它弹窗一致，见 dec-db13741643639699）。
  */
 
-import { App, Modal, Setting, TextAreaComponent, TextComponent } from 'obsidian';
+import { App, Modal, Setting, TextComponent } from 'obsidian';
 import { FileInputSuggest } from './FileInputSuggest';
 
 export interface TextPromptField {
@@ -25,7 +25,8 @@ export interface TextPromptField {
 }
 
 export interface TextPromptOptions {
-    title: string;
+    /** 省略则不显示标题（如「修改描述」那种整片文本框，标题只占地方） */
+    title?: string;
     desc?: string;
     fields: TextPromptField[];
     confirmText?: string;
@@ -44,21 +45,23 @@ export class TextPromptModal extends Modal {
         const { contentEl } = this;
         contentEl.empty();
         contentEl.addClass('seqtk-modal');
-        this.setTitle(this.opts.title);
+        if (this.opts.title) this.setTitle(this.opts.title);
         if (this.opts.desc) contentEl.createEl('p', { text: this.opts.desc });
 
         for (const f of this.opts.fields) {
-            const setting = new Setting(contentEl).setName(f.label);
-            // 多行：正文这类整段文本，弹窗里改比行内浮层从容
+            // 多行：正文这类整段文本。**不套 Setting** —— Setting 是「左名称 + 右控件」两列布局，
+            // 文本框会被挤成半宽；直接挂到 contentEl 上才能占满弹窗宽度。
             if (f.type === 'textarea') {
-                setting.addTextArea((t: TextAreaComponent) => {
-                    t.setPlaceholder(f.placeholder ?? '').setValue(f.value ?? '');
-                    t.inputEl.rows = 8;
-                    t.inputEl.addClass('seqtk-prompt-textarea');
-                    this.areas[f.key] = t.inputEl;
+                const area = contentEl.createEl('textarea', {
+                    cls: 'seqtk-prompt-textarea',
+                    attr: { rows: '16', placeholder: f.placeholder ?? '', 'aria-label': f.label },
                 });
+                area.value = f.value ?? '';
+                this.areas[f.key] = area;
                 continue;
             }
+
+            const setting = new Setting(contentEl).setName(f.label);
             let inputEl: HTMLInputElement | null = null;
             setting.addText((t: TextComponent) => {
                 t.setPlaceholder(f.placeholder ?? '').setValue(f.value ?? '');

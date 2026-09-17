@@ -6,9 +6,9 @@
  */
 
 import { Button, Empty, List, Tag, Typography } from "antd";
-import { useStore } from "../../P0_UI/useStore";
-import { CanvasBoardHost } from "../../P7_Render/Structure/S3_Board/CanvasBoardHost";
-import type { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
+import { useStore } from "../../../../P0_UI/useStore";
+import { CanvasBoardHost } from "../../../../P7_Render/Structure/S3_Board/CanvasBoardHost";
+import type { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
 
 const { Title, Text } = Typography;
 

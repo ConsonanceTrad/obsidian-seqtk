@@ -77,6 +77,76 @@
   border-color: var(--seqtk-kind-runtime, #e06c6c);
 }
 
+/* ============================================================
+   标签：#标签 徽章（行上）+ 管理弹窗
+   ============================================================ */
+
+/* 行上：紧跟节点名之后逐个展示。只展示不接管点击，故用 span 而非 button；
+   标签多时整体收缩（min-width: 0 让 flex 允许压缩），由 tooltip 兜底看全 */
+.seqtk-tag-list {
+  display: inline-flex;
+  flex-shrink: 1;
+  min-width: 0;
+  gap: 4px;
+  overflow: hidden;
+}
+
+/* 浅绿底 + 深绿字：明暗主题下都读得清；行高与内边距收紧，不把行撑高 */
+.seqtk-tag-badge {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid #a9d8b6;
+  border-radius: var(--radius-s);
+  background: #e7f5ec;
+  color: #2f6b41;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.35;
+}
+
+/* 管理标签弹窗：一行一个标签，右侧是上移 / 下移 / 删除 */
+.seqtk-tag-manage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.seqtk-tag-manage-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.seqtk-tag-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+/* 把按钮组顶到右侧；标签自己按内容宽度 */
+.seqtk-tag-manage-spacer {
+  flex: 1;
+}
+
+.seqtk-tag-manage-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.seqtk-tag-manage-add {
+  display: flex;
+  gap: 6px;
+}
+
+.seqtk-tag-manage-input {
+  flex: 1;
+}
+
 .seqtk-kind-badge.kind-script {
   background: var(--seqtk-kind-script, #8a8a8a);
   color: var(--seqtk-kind-script-text, #fff);
@@ -491,6 +561,14 @@ button.seqtk-source-badge:hover {
   background: var(--seqtk-role-item, #4794b3);
   color: var(--seqtk-role-item-text, #fff);
   border-color: var(--seqtk-role-item, #4794b3);
+}
+
+/* 事件：不属两条链路，单给一色（fallback 与 KindColors 的 BUILTIN_ROLE_COLORS 一致） */
+.seqtk-kind-badge.role-event,
+.seqtk-inline-kind-preview.role-event {
+  background: var(--seqtk-role-event, #c98f5a);
+  color: var(--seqtk-role-event-text, #fff);
+  border-color: var(--seqtk-role-event, #c98f5a);
 }
 
 .seqtk-inline-name {
@@ -2261,6 +2339,22 @@ button.seqtk-open-btn {
   display: block;
 }
 
+/* 一条规则 = 一块：块内的 setting-item 去掉框架自动画的分隔线并收紧行距，
+   免得一条规则被切成好几段；块与块之间才留一条线，两条规则不会糊成一片 */
+.seqtk-rule-block {
+  padding: 4px 0;
+}
+
+.seqtk-rule-block + .seqtk-rule-block {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.seqtk-rule-block .setting-item {
+  padding: 2px 0;
+  border-top: none;
+  border-bottom: none;
+}
+
 /* 规则名输入框：与开关、删除按钮并排在同一行 */
 .seqtk-rule-name {
   width: 12em;
@@ -2279,21 +2373,39 @@ button.seqtk-open-btn {
   display: block;
 }
 
+/* 「中控台显示」子页（同样是设置里的命令式部分）：整体竖向排布，理由同上 */
+.seqtk-settings-hub {
+  display: block;
+}
+
+/* 该页的分栏标题（事务设计 / 规则设计 / 节点通用）：与上一组分栏拉开，与自己的首行贴近 */
+.seqtk-settings-hub h4 {
+  margin: 1.2em 0 0.2em;
+}
+
 /* 分组标题（每个大类一组，如框架 / 事务 / 证据…）：与上一组拉开，与自己的首行贴近 */
 .seqtk-settings-kind-labels h4 {
   margin: 1.2em 0 0.2em;
 }
 
-/* 配色行里「字体反色」开关前的小字标签：开关组件本身没有 label，靠这行字说明它管什么 */
-.seqtk-toggle-label {
+/* 控件前的小字标签（取色器 / 开关都没有原生 label）：靠这行字说明它管什么 */
+.seqtk-control-label {
   margin-right: 6px;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
 
-/* 类型名输入框：与右侧「恢复默认」按钮同处一行；固定宽度，免得随名字长短来回抖 */
+/* 类型外观的一行：名称 + 色块 + 字体反色开关 + 恢复默认，控件比别处密 ——
+   给控制区一个稳定间距；窄屏放不下时允许换行，免得把输入框压没 */
+.seqtk-settings-kind-labels .setting-item-control {
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* 类型名输入框：与色块、开关、恢复默认按钮同处一行；固定宽度，免得随名字长短来回抖 */
 .seqtk-kind-label-input {
-  width: 12em;
+  width: 10em;
 }
 
 /* 与另一个类型的显示名撞车：标红提示（此时该次输入不落盘） */
@@ -2582,4 +2694,104 @@ button.seqtk-icon-btn.is-active {
   color: var(--text-muted);
   background: var(--background-secondary);
   border-radius: var(--radius-s);
+}
+
+/* ============================================================
+   模板模式（左栏模板框架树 / 右栏框架内容文本）
+   ============================================================ */
+
+/*
+ * 左栏：与设计视图左栏同一套外观（seqtk-split-left），但没有宽度把手
+ * （模板树的层级有限），因此宽度取定值 —— 与设计视图的默认宽度一致，
+ * 两个视图间切换时栏宽不跳。
+ */
+.seqtk-template-left {
+  width: 280px;
+  flex-basis: 280px;
+}
+
+/*
+ * 右栏 = 选中框架的内容，直接用文本表示（文本框 + 问题列表 + 预览 + 回写）。
+ * 它是右栏唯一的内容区，因此占满整个高度；内部三段各自 min-height:0 ——
+ * flex 子项默认 min-height:auto，会拒绝收缩到内容之下，于是谁也不滚、整栏一起被撑高。
+ */
+.seqtk-template-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.seqtk-template-text-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+/* 这一行的标题只是文本区的小标题，不需要 .seqtk-section-title 的分隔线 */
+.seqtk-template-text-head .seqtk-section-title {
+  padding: 0;
+  margin: 0;
+  border-bottom: none;
+  flex: 0 0 auto;
+}
+
+/* 文本框：占满余下的高度并自己滚；宽度拖拽交还给整栏（故 resize 关闭） */
+.seqtk-template-text-input {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.seqtk-template-text-issues {
+  flex: 0 0 auto;
+  margin-top: 6px;
+}
+
+/* 预览：只作兜底高度 —— 文本框是主体，预览再撑高会把它压没 */
+.seqtk-template-text-preview {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 30%;
+  margin-top: 6px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+}
+
+/* 栏标题行里的按钮：比常规 .seqtk-btn 紧凑，免得抢标题的视线 */
+.seqtk-title-btn {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: var(--font-ui-smaller);
+}
+
+.seqtk-title-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 行内提示文案（如文本区标题旁的口径说明）：可收缩，过长省略 */
+.seqtk-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+/* 差异预告：与校验问题同一形态，用强调色而非错误色区分 */
+.seqtk-texttree-notice {
+  border-left-color: var(--text-accent);
 }

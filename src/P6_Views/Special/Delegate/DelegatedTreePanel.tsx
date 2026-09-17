@@ -10,13 +10,13 @@
  * 只接 props、只发回调；不 import "obsidian"、不碰数据层。
  */
 
-import { useStore } from "../../P0_UI/useStore";
-import type { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
-import { LINE_METRICS_LEFT, type NodeLineCtx, type NodeLineHost } from "../../P7_Render/Composition/C1_NodeLine/NodeLine";
-import { NodeTreePanel } from "../../P7_Render/Composition/C2_Tree/NodeTreePanel";
-import { IconButton } from "../../P7_Render/Composition/C1_NodeLine/IconButton";
-import type { NodeKindValue } from "../../P4_Nodes/NodeKind/NodeKind";
-import type { NodeInlineCreating, TreeNodeItem } from "../../P7_Render/Composition/C2_Tree/NodeTree";
+import { useStore } from "../../../P0_UI/useStore";
+import type { SimpleStore } from "../../../P5_Data/Svelte/SimpleStore";
+import { LINE_METRICS_LEFT, type NodeLineCtx, type NodeLineHost } from "../../../P7_Render/Composition/C1_NodeLine/NodeLine";
+import { NodeTreePane } from "../../../P7_Render/Composition/C2_Tree/NodeTreePane";
+import { IconButton } from "../../../P7_Render/Composition/C1_NodeLine/IconButton";
+import type { NodeKindValue } from "../../../P4_Nodes/NodeKind/NodeKind";
+import type { NodeInlineCreating, TreeNodeItem } from "../../../P7_Render/Composition/C2_Tree/NodeTree";
 
 export interface DelegatedTreeState {
     items: TreeNodeItem[];
@@ -58,10 +58,11 @@ export function DelegatedTreePanel({ store, actions, host }: DelegatedTreePanelP
     const state = useStore(store);
 
     return (
-        <div className="seqtk-delegated-tree">
-            <div className="seqtk-split-title">
-                <span className="seqtk-split-title-text">框架</span>
-                {/* 与设计视图左栏的委托开关同款：收在标题末尾的图标按钮，方向相反 */}
+        <NodeTreePane
+            className="seqtk-delegated-tree"
+            title="框架"
+            titleExtra={
+                /* 与设计视图左栏的委托开关同款：收在标题末尾的图标按钮，方向相反 */
                 <IconButton
                     className="seqtk-icon-btn seqtk-delegate-btn is-active"
                     icon="chevrons-right"
@@ -69,28 +70,25 @@ export function DelegatedTreePanel({ store, actions, host }: DelegatedTreePanelP
                     host={host}
                     onClick={() => actions.onCancelDelegate()}
                 />
-            </div>
-
-            <NodeTreePanel
-                items={state.items}
-                metrics={LINE_METRICS_LEFT}
-                host={host}
-                rowClass="seqtk-frame-item"
-                emptyText={state.emptyText}
-                guides
-                creating={state.creating ?? null}
-                actions={{
-                    onToggle: (ctx) => actions.onToggle(ctx),
-                    onSelect: (ctx) => actions.onSelect(ctx),
-                    onContextMenu: (ctx, e) => actions.onContextMenu(ctx, e),
-                    onCreateCommit: (parentId: string, kind: NodeKindValue, name: string) =>
-                        actions.onCreateCommit(parentId, kind, name),
-                    onCreateCancel: (parentId: string) => actions.onCreateCancel(parentId),
-                    onCreateRepeatChange: (_parentId: string, repeat: boolean) => actions.onRepeatChange(repeat),
-                    onInlineCommit: (ctx, value) => actions.onInlineCommit(ctx, value),
-                    onInlineCancel: (ctx) => actions.onInlineCancel(ctx),
-                }}
-            />
-        </div>
+            }
+            items={state.items}
+            metrics={LINE_METRICS_LEFT}
+            host={host}
+            rowClass="seqtk-frame-item"
+            emptyText={state.emptyText}
+            guides
+            creating={state.creating ?? null}
+            actions={{
+                onToggle: (ctx) => actions.onToggle(ctx),
+                onSelect: (ctx) => actions.onSelect(ctx),
+                onContextMenu: (ctx, e) => actions.onContextMenu(ctx, e),
+                onCreateCommit: (parentId: string, kind: NodeKindValue, name: string) =>
+                    actions.onCreateCommit(parentId, kind, name),
+                onCreateCancel: (parentId: string) => actions.onCreateCancel(parentId),
+                onCreateRepeatChange: (_parentId: string, repeat: boolean) => actions.onRepeatChange(repeat),
+                onInlineCommit: (ctx, value) => actions.onInlineCommit(ctx, value),
+                onInlineCancel: (ctx) => actions.onInlineCancel(ctx),
+            }}
+        />
     );
 }

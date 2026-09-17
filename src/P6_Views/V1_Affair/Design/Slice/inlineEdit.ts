@@ -19,6 +19,7 @@ import { TextPromptModal } from '../../../../P7_Render/Structure/S2_Modal/TextPr
 import { getAllowedChildKinds } from '../../../../P4_Nodes/NodeFacade';
 import { buildNode } from '../Tool/tree';
 import { createNode, saveNodeBody, saveNodeDesc } from './actions';
+import { PARSE_NameTags, saveTags } from './tags';
 import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import type { NodeLineCtx } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
 import type { TreeSide } from '../Core/DesignPanel';
@@ -32,11 +33,29 @@ export function startRename(view: DesignView, nodeId: string, side: TreeSide): v
     view.refresh();
 }
 
+/**
+ * 提交行内重命名
+ *
+ * 以输入框内容为准（全量）：`名称 #甲 #乙` 里的标签段就是该节点的全部标签，
+ * 删掉那一段就等于删除该标签；初始值由 Tool/viewModel 用 FORMAT_NameTags 拼好，
+ * 所以进编辑时就能看见现有标签。
+ * 名称为空（整行只剩标签）时保留原名 —— 免得手滑把名字删没。
+ */
 export function commitRename(view: DesignView, nodeId: string, value: string): void {
     const data = view.pipe.GET_Node(nodeId);
     view.rename = null;
-    if (data && value && value !== data.desc) {
-        saveNodeDesc(view, buildNode(view.pipe, nodeId, data), value);
+    if (!data || !value) {
+        view.refresh();
+        return;
+    }
+
+    const { desc, tags } = PARSE_NameTags(value);
+    const name = desc ?? data.desc;
+    if (name !== data.desc) {
+        saveNodeDesc(view, buildNode(view.pipe, nodeId, data), name);
+    }
+    if ((data.tags ?? []).join('\u0000') !== tags.join('\u0000')) {
+        saveTags(view, nodeId, tags);
     }
     view.refresh();
 }
@@ -121,7 +140,7 @@ export async function commitCreate(
 }
 
 /**
- * 编辑描述：走模态框（菜单「编辑描述」的入口）
+ * 修改描述：走模态框（菜单「修改描述」的入口）
  *
  * 描述是整段 Markdown，弹窗里改比行内浮层从容；行内浮层那条链（startBodyEdit）
  * 留给行上的直接编辑入口。
@@ -130,12 +149,12 @@ export function openBodyEdit(view: DesignView, nodeId: string): void {
     const data = view.pipe.GET_Node(nodeId);
     if (!data) return;
     new TextPromptModal(view.app, {
-        title: `编辑描述 · ${data.desc}`,
-        desc: '节点的正文（Markdown）。留空即清空。',
+        title: `修改描述 · ${data.desc}`,
+        // 不设说明：整片区域留给正文
         fields: [
             {
                 key: 'body',
-                label: '描述',
+                label: '',
                 type: 'textarea',
                 value: view.pipe.GET_NodeBody(nodeId) ?? '',
             },

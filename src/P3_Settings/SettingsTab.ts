@@ -43,8 +43,9 @@ import {
     DELETE_CHILDREN_LABELS,
 } from "../P4_Nodes/NodeField/DeletionPolicy";
 import { NODE_KIND_LABELS } from "../P4_Nodes/NodeKind/NodeLabel";
-import { GET_KindAppearanceGroups, type KindColorItem } from "../P4_Nodes/NodeKind/KindColors";
+import { GET_KindAppearanceGroups, type KindAppearanceType, type KindColorItem } from "../P4_Nodes/NodeKind/KindColors";
 import type { NodeKindValue } from "../P4_Nodes/NodeKind/NodeKind";
+import { HUB_CATEGORIES, type HubCategory } from "../P6_Views/panelRegistry";
 
 /** 生成一个不会与现有规则撞车的 id */
 function nextRuleId(rules: StatePropagationRule[]): string {
@@ -58,6 +59,11 @@ function COUNT_CustomEntries(table: Record<string, string> | undefined): number 
     return Object.values(table ?? {}).filter((v) => typeof v === 'string' && v.trim() !== '').length;
 }
 
+/** 中控台里一共隐藏了多少项（口径与落盘一致：空列表等于没配过） */
+function COUNT_HiddenEntries(hub: Record<string, { hidden: string[] }> | undefined): number {
+    return Object.values(hub ?? {}).reduce((n, cfg) => n + (cfg?.hidden?.length ?? 0), 0);
+}
+
 /**
  * 取色器落盘的防抖窗口（ms）
  *
@@ -65,13 +71,6 @@ function COUNT_CustomEntries(table: Record<string, string> | undefined): number 
  * 内存里的覆盖值当场更新，所以效果是即时的，防的只是写盘频率。
  */
 const COLOR_SAVE_DEBOUNCE_MS = 300;
-
-const SORT_LABELS: Record<string, string> = {
-    create: '创建时间',
-    modify: '修改时间',
-    desc: '名称',
-    state: '状态',
-};
 
 export class SettingsTab extends PluginSettingTab {
     plugin: SeqtkPlugin;
@@ -91,11 +90,11 @@ export class SettingsTab extends PluginSettingTab {
         return [
             {
                 type: 'group',
-                heading: '数据与写入',
+                heading: '基础配置',
                 items: [
                     {
                         name: '数据根文件夹',
-                        desc: '节点 Markdown 文件与插件数据文件（布局缓存等）所在的文件夹，相对于库根目录。',
+                        desc: '相对路径，插件文件存储位置。',
                         aliases: ['root', 'folder', '路径'],
                         control: {
                             type: 'text',
@@ -105,37 +104,9 @@ export class SettingsTab extends PluginSettingTab {
                         },
                     },
                     {
-                        name: '默认排序方式',
-                        control: {
-                            type: 'dropdown',
-                            key: 'defaultSort',
-                            options: SORT_LABELS,
-                        },
-                    },
-                    {
-                        name: '默认排序方向',
-                        control: {
-                            type: 'dropdown',
-                            key: 'defaultSortDirection',
-                            options: { asc: '升序', desc: '降序' },
-                        },
-                    },
-                ],
-            },
-            {
-                type: 'group',
-                heading: '显示',
-                items: [
-                    {
-                        name: '在左栏显示「全部事务」入口',
-                        desc: '开启后，事务设计在未选中框架时展示全部事务总览。',
-                        control: { type: 'toggle', key: 'showAllOverview' },
-                    },
-                    {
-                        name: '委托落点',
+                        name: '渲染委托',
                         desc:
-                            '框架树被委托出去时渲染在哪里。借用中控台容器是默认：不额外占一个侧栏视图，' +
-                            '而中控台本就常驻；独立视图便于把框架树与中控台分开摆放。',
+                            '双栏视图，左栏框架树被委托拆分到其他位置渲染的目标位置，默认借用中控台容器。',
                         aliases: ['委托', '中控台', '侧栏'],
                         control: {
                             type: 'dropdown',
@@ -143,7 +114,7 @@ export class SettingsTab extends PluginSettingTab {
                             defaultValue: 'hub',
                             options: DELEGATE_TARGET_LABELS,
                         },
-                    },
+                    }
                 ],
             },
             {
@@ -152,8 +123,8 @@ export class SettingsTab extends PluginSettingTab {
                 items: [
                     // 与「状态传播」分开：这条管子树怎么被带走、要不要拦一道
                     {
-                        name: '归档时，后代节点',
-                        desc: '破坏性操作对后代节点的处理方式。删除的文件会移入系统回收站。',
+                        name: '连带归档',
+                        desc: '归档时，后代是否跟随着一起归档。',
                         control: {
                             type: 'dropdown',
                             key: 'archiveChildren',
@@ -161,7 +132,13 @@ export class SettingsTab extends PluginSettingTab {
                         },
                     },
                     {
-                        name: '删除时，后代节点',
+                        name: '归档提示',
+                        desc: '归档时如何进行提示。',
+                        control: { type: 'dropdown', key: 'archiveConfirm', options: CONFIRM_LEVEL_LABELS },
+                    },
+                    {
+                        name: '连带删除',
+                        desc: '删除时，后代是否跟随着一起归档。',
                         control: {
                             type: 'dropdown',
                             key: 'deleteChildren',
@@ -169,61 +146,87 @@ export class SettingsTab extends PluginSettingTab {
                         },
                     },
                     {
-                        name: '归档时的提示',
-                        control: { type: 'dropdown', key: 'archiveConfirm', options: CONFIRM_LEVEL_LABELS },
-                    },
-                    {
-                        name: '删除时的提示',
+                        name: '删除提示',
+                        desc: '删除时如何进行提示。',
                         control: { type: 'dropdown', key: 'deleteConfirm', options: CONFIRM_LEVEL_LABELS },
                     },
                 ],
             },
             {
-                // 子页：规则表是「任意条数的编辑器」，声明式表达不了，交给命令式渲染
-                type: 'page',
-                name: '状态传播规则',
-                desc: '按状态类型配置父子传播。',
-                displayValue: () => `${(this.plugin.settings.stateRules ?? []).length} 条规则`,
+                type: 'group',
+                heading: '其他配置',
                 items: [
                     {
-                        name: '规则列表',
-                        render: (setting) => {
-                            // render 不自动保存，也不会自动重画 —— 改完自己存、自己 update()
-                            this.renderRules(setting.settingEl);
-                            return undefined;
+                        // 子页：规则表是「任意条数的编辑器」，声明式表达不了，交给命令式渲染
+                        type: 'page',
+                        name: '状态传播规则',
+                        desc: '配置父子状态传播的自动规则。',
+                        displayValue: () => `${(this.plugin.settings.stateRules ?? []).length} 条规则`,
+                        items: [
+                            {
+                                name: '规则列表',
+                                render: (setting) => {
+                                    // render 不自动保存，也不会自动重画 —— 改完自己存、自己 update()
+                                    this.renderRules(setting.settingEl);
+                                    return undefined;
+                                },
+                            },
+                        ],
+                    },
+                    {
+                        // 子页：类型名与配色逐项可改，同样是声明式表达不了的"任意条数的编辑器"
+                        // （框架类型不参与命名，理由见 P4_Nodes/NodeKind/NodeLabel 的分组顺序说明）
+                        type: 'page',
+                        name: '类型外观',
+                        desc: '更改类型命名与标签调色。',
+                        // 页头摘要：统计"真改过的"项数（口径与落盘一致）。
+                        // 它只在本页被重画时才读一次，页内的即时摘要见 renderKindSummary。
+                        displayValue: () => {
+                            const parts: string[] = [];
+                            const names = COUNT_CustomEntries(this.plugin.settings.kindLabels);
+                            const colors = COUNT_CustomEntries(this.plugin.settings.kindColors);
+                            const inverted = Object.values(this.plugin.settings.kindTextInverted ?? {}).filter(Boolean).length;
+                            if (names > 0) parts.push(`名 ${names}`);
+                            if (colors > 0) parts.push(`色 ${colors}`);
+                            if (inverted > 0) parts.push(`黑字 ${inverted}`);
+                            return parts.length > 0 ? `${parts.join(' / ')} 项已自定义` : '全部默认';
                         },
+                        items: [
+                            {
+                                name: '类型名与配色',
+                                render: (setting) => {
+                                    // 同上：render 不自动保存、不自动重画
+                                    this.renderKindAppearance(setting.settingEl);
+                                    return undefined;
+                                },
+                            },
+                        ],
+                    },
+                    {
+                        // 子页：条目数由 plugin.panelRegistry 决定（谁注册了带 category 的 metas，
+                        // 谁就在这一页上），声明式表达不了，同样交给命令式渲染
+                        type: 'page',
+                        name: '中控台显示',
+                        desc: '控制中控台目录里显示哪些面板。',
+                        // 页头摘要：只在本页被重画时读一次；页内的即时摘要见 renderHubSummary
+                        displayValue: () => {
+                            const n = COUNT_HiddenEntries(this.plugin.settings.hub);
+                            return n > 0 ? `已隐藏 ${n} 项` : '全部显示';
+                        },
+                        items: [
+                            {
+                                name: '按视图开关',
+                                render: (setting) => {
+                                    // 同上：render 不自动保存、不自动重画
+                                    this.renderHubVisibility(setting.settingEl);
+                                    return undefined;
+                                },
+                            },
+                        ],
                     },
                 ],
             },
-            {
-                // 子页：类型名与配色逐项可改，同样是声明式表达不了的"任意条数的编辑器"
-                // （框架类型不参与命名，理由见 P4_Nodes/NodeKind/NodeLabel 的分组顺序说明）
-                type: 'page',
-                name: '类型外观',
-                desc: '给各类型换个叫法、调一调配色；只影响界面显示，不改文件内容。',
-                // 页头摘要：统计"真改过的"项数（口径与落盘一致）。
-                // 它只在本页被重画时才读一次，页内的即时摘要见 renderKindSummary。
-                displayValue: () => {
-                    const parts: string[] = [];
-                    const names = COUNT_CustomEntries(this.plugin.settings.kindLabels);
-                    const colors = COUNT_CustomEntries(this.plugin.settings.kindColors);
-                    const inverted = Object.values(this.plugin.settings.kindTextInverted ?? {}).filter(Boolean).length;
-                    if (names > 0) parts.push(`名 ${names}`);
-                    if (colors > 0) parts.push(`色 ${colors}`);
-                    if (inverted > 0) parts.push(`黑字 ${inverted}`);
-                    return parts.length > 0 ? `${parts.join(' / ')} 项已自定义` : '全部默认';
-                },
-                items: [
-                    {
-                        name: '类型名与配色',
-                        render: (setting) => {
-                            // 同上：render 不自动保存、不自动重画
-                            this.renderKindAppearance(setting.settingEl);
-                            return undefined;
-                        },
-                    },
-                ],
-            },
+
         ];
     }
 
@@ -303,11 +306,18 @@ export class SettingsTab extends PluginSettingTab {
         this.renderConflicts(this.plugin.settings.stateRules ?? []);
     }
 
-    /** 一条规则的编辑行 */
+    /**
+     * 一条规则的编辑块
+     *
+     * 一条规则有 4~5 行内容（名字 / 方向 / 触发 / 改写为 / 可选的状态集合），它们同属一件事，
+     * 所以全部挂进**同一个 `.seqtk-rule-block`**，由样式表把块内的分隔线去掉 ——
+     * 否则框架会在每两行之间画一条线，一条规则看着像五条互不相干的设置。
+     */
     private renderRule(el: HTMLElement, rule: StatePropagationRule, index: number): void {
         const rules = this.plugin.settings.stateRules;
+        const block = el.createDiv({ cls: 'seqtk-rule-block' });
 
-        const head = new Setting(el).setName(`规则 ${index + 1}`);
+        const head = new Setting(block).setName(`规则 ${index + 1}`);
         // 规则名（即 rule.id）：只用于界面显示与冲突报告，改名不影响传播逻辑。
         // 走 commit() 而不是 save() —— 后者会重建设置面板，输入框会当场失焦；
         // 冲突提示里显示的名字由 commit() 原地重画跟上。
@@ -343,7 +353,7 @@ export class SettingsTab extends PluginSettingTab {
         );
 
         // 方向：只有 down 才有「仅当子节点处于」那一行，切换会改变可见项 → 整体重建
-        new Setting(el)
+        new Setting(block)
             .setName('方向')
             .setDesc(rule.direction === 'down' ? '父状态变化时向下传播' : '子节点全部达标时向上聚合')
             .addDropdown((d) =>
@@ -356,7 +366,7 @@ export class SettingsTab extends PluginSettingTab {
                     }),
             );
 
-        new Setting(el)
+        new Setting(block)
             .setName(rule.direction === 'down' ? '父进入此状态时触发' : '子全部达到此状态时触发')
             .addDropdown((d) => {
                 for (const s of STATE_VALUES) d.addOption(s, NODE_STATE_LABELS[s]);
@@ -366,7 +376,7 @@ export class SettingsTab extends PluginSettingTab {
                 });
             });
 
-        new Setting(el)
+        new Setting(block)
             .setName('改写为')
             .addDropdown((d) => {
                 for (const s of STATE_VALUES) d.addOption(s, NODE_STATE_LABELS[s]);
@@ -378,7 +388,7 @@ export class SettingsTab extends PluginSettingTab {
 
         // 「从」集合：仅 down 方向有意义（状态只有四种，用复选比多选框更直观）
         if (rule.direction === 'down') {
-            const box = new Setting(el).setName('仅当子节点处于').setDesc('全不勾选 = 任意状态都改写');
+            const box = new Setting(block).setName('仅当子节点处于').setDesc('全不勾选 = 任意状态都改写');
             box.settingEl.addClass('seqtk-setting-stack');
             const chips = box.settingEl.createDiv({ cls: 'seqtk-state-checks' });
             for (const s of STATE_VALUES) {
@@ -411,20 +421,21 @@ export class SettingsTab extends PluginSettingTab {
     private kindSummaryEl: HTMLElement | null = null;
 
     /**
-     * 类型外观编辑器：按大类分组，把「更名」与「配色」放在同一组里
+     * 类型外观编辑器：按大类分组，每个类型一行装完
      *
-     * 结构（每组先给大类基色，随后是组内各类型）：
+     * 结构（每组先给大类基色，随后是组内各类型，一个类型一行）：
      *   框架    大类基色 [色块] [字体反色] [⟲]
-     *   事务    大类基色 [色块] [字体反色] [⟲]
-     *           构想   [名称] [⟲]
-     *           角色色 [色块] [字体反色] [⟲]   ← 只有事务链路的角色类型（构想/方向/目标/工序/清单/行动）才有这行
+     *   事务    构想   [名称] [色块] [字体反色] [⟲]
+     *           项目   [名称] [色块] [字体反色] [⟲]
      *           …
-     * 名字与颜色因此总是挨着，不必在"一长串名字"和"一长串颜色"之间来回对照。
+     * 名字、颜色、字色同处一行 —— 拆成「名字一行、颜色一行」的话，框架会在两行之间自动画
+     * 一条分隔线，同一个类型的信息看着像两件不相干的事。
+     * 大类基色仍单独一行：它不是"某个类型的颜色"，而是该大类下的共用底色。
      *
      * 三点与规则页同源的讲究：
      * - 名字的落盘时机在**失焦 / 回车**，而不是 onChange：onChange 每敲一个字都会触发，
      *   拿它写盘等于每敲一个字写一次磁盘。onChange 这里只做即时校验（重名标红）。
-     *   取色器的落盘同样做了防抖（见 renderKindColorRow）。
+     *   取色器的落盘同样做了防抖（见 renderKindTypeRow）。
      * - 全程**不调 update()**：它会把整页重建一遍，正在编辑的输入框会被换掉、
      *   焦点与滚动也会跑回面板开头。所有变化都就地更新（控件值、页内摘要）。
      * - 页内摘要自己维护一份（见 renderKindSummary）：页头的 displayValue 只在重画时才读。
@@ -455,13 +466,10 @@ export class SettingsTab extends PluginSettingTab {
 
         for (const group of GET_KindAppearanceGroups(inverted)) {
             el.createEl('h4', { text: group.title });
-            // 大类基色：事务组没有这一行（它的类型各自有角色色，见 KindColors 的 NO_CATEGORY_COLOR）
+            // 大类基色：事务组没有这一行（它的类型全部各有角色色，见 KindColors 的 NO_CATEGORY_COLOR）
             if (group.categoryItem) this.renderKindColorRow(el, group.categoryItem, group.title);
-            for (const item of group.kinds) {
-                this.renderKindLabelRow(el, item.kind, item.defaultLabel, labelOverrides);
-                // 角色色紧跟在它所属类型之后 —— 同一类型的名字与颜色就此挨在一起
-                if (item.roleItem) this.renderKindColorRow(el, item.roleItem, item.label);
-            }
+            // 每个类型一行装完：名称 + 配色 + 字体反色 + 恢复默认
+            for (const item of group.kinds) this.renderKindTypeRow(el, item, labelOverrides);
         }
     }
 
@@ -485,21 +493,38 @@ export class SettingsTab extends PluginSettingTab {
         slot.setText(parts.length > 0 ? `已自定义：${parts.join(' · ')}。` : '当前全部使用默认外观。');
     }
 
-    /** 一个类型名的编辑行 */
-    private renderKindLabelRow(
+    /**
+     * 一个类型的外观行：名称 + 配色 + 字体反色 + 恢复默认，全部挂**同一个 `Setting`**
+     *
+     * 不再拆成「名字一行、颜色一行」—— Obsidian 的设置在相邻 `setting-item` 之间自动画分隔线，
+     * 那样会把同一个类型的信息切成两半，看着像两个不相干的东西。
+     *
+     * 三类改动的落盘时机各不相同，理由写在各自回调旁：
+     * 名称走**失焦 / 回车**、配色走 **300ms 防抖**、字体反色立即落盘。
+     * 全程**不调 `update()`**：它会把整页重建，刚点的按钮连同整页消失、焦点与滚动回到开头。
+     *
+     * 没有自己配色的类型（非事务大类的类型走大类基色，`roleItem` 为 null）只渲染名字那半。
+     */
+    private renderKindTypeRow(
         el: HTMLElement,
-        kind: NodeKindValue,
-        defaultLabel: string,
+        item: KindAppearanceType,
         overrides: Record<string, string>,
     ): void {
-        // 生效时机统一写在页面顶部，这里不重复
-        const row = new Setting(el)
-            .setName(defaultLabel)
-            .setDesc(`类型值 ${kind} · 留空即用回默认名。`);
+        const kind = item.kind;
+        const defaultLabel = item.defaultLabel;
+        const role = item.roleItem;
+        const row = new Setting(el).setName(defaultLabel).setDesc(`${kind}`);
         // 当前生效名（改过就是改后的名字）：既是输入框初值，也是"没动就失焦"时要提交的值
         const current = NODE_KIND_LABELS[kind] ?? defaultLabel;
-        // 「恢复默认」按钮要就地复位这个输入框，所以把引用留到 addText 回调之外
+
+        const colors = this.plugin.settings.kindColors;
+        const invertedTable = this.plugin.settings.kindTextInverted;
+        // 「恢复默认」要就地复位这几个控件，所以把引用留到各自回调之外
         let inputEl: HTMLInputElement | null = null;
+        let picker: ColorComponent | null = null;
+        let toggle: ToggleComponent | null = null;
+        // 取色器的落盘防抖（拖动期间 onChange 连续触发，逐次写盘太吵）
+        let saveTimer = 0;
 
         row.addText((t) => {
             inputEl = t.inputEl;
@@ -518,23 +543,81 @@ export class SettingsTab extends PluginSettingTab {
             });
         });
 
+        if (role) {
+            row.addColorPicker((cp) => {
+                picker = cp;
+                cp.setValue(role.value || role.defaultColor);
+                // 取色器没有原生 label，而 ColorComponent 也不像 ToggleComponent 那样暴露
+                // 自己的元素（只有 setValue / onChange），所以按类型找到那个 input，插在它**前面** ——
+                // 控制区里第一个是名称输入框，插到最前面会让这行字落在输入框旁、指错对象
+                row.settingEl
+                    .querySelector<HTMLElement>('.setting-item-control input[type="color"]')
+                    ?.insertAdjacentElement(
+                        'beforebegin',
+                        createSpan({ cls: 'seqtk-control-label', text: '标签底色' }),
+                    );
+                //
+                // 落盘做 300ms 防抖：ColorComponent 只暴露 onChange，而它在拖动取色时连续触发，
+                // 逐次落盘等于一路敲磁盘（组件也没给出原生 input，拿不到"关闭取色器"那一次 change）。
+                // 内存里的覆盖值当场更新，所以真正的效果是即时的；防抖的只是写盘。
+                //
+                cp.onChange((value) => {
+                    const next = (value ?? '').trim();
+                    if (next && next !== role.defaultColor) colors[role.key] = next;
+                    else delete colors[role.key];
+                    if (saveTimer) window.clearTimeout(saveTimer);
+                    saveTimer = window.setTimeout(() => {
+                        saveTimer = 0;
+                        void this.commitKindColor();
+                    }, COLOR_SAVE_DEBOUNCE_MS);
+                });
+            });
+
+            row.addToggle((t) => {
+                toggle = t;
+                // 同样没有原生 label：插一行小字说明它管什么
+                t.toggleEl.insertAdjacentElement(
+                    'beforebegin',
+                    createSpan({ cls: 'seqtk-control-label', text: '字体反色' }),
+                );
+                t.setValue(role.inverted).onChange(async (v) => {
+                    if (v) invertedTable[role.key] = true;
+                    else delete invertedTable[role.key];
+                    await this.commitKindColor();
+                });
+            });
+        }
+
         row.addExtraButton((b) =>
             b
                 .setIcon('rotate-ccw')
-                .setTooltip('恢复默认名')
+                .setTooltip(role ? '恢复默认名与配色' : '恢复默认名')
                 .onClick(async () => {
+                    // 取色器可能还有一次待落盘的防抖在排队：取消掉，免得刚复位又被写回
+                    if (saveTimer) {
+                        window.clearTimeout(saveTimer);
+                        saveTimer = 0;
+                    }
                     delete overrides[kind];
+                    if (role) {
+                        delete colors[role.key];
+                        delete invertedTable[role.key];
+                    }
                     await Save_Setting(this.plugin);
                     //
                     // 就地复位，**不**调 update()：
                     // update() 的语义是"重建整个设置面板"，所有设置项 DOM 会换一遍 ——
                     // 刚被点的那个按钮连同整页一起消失，焦点与滚动回到面板开头，
                     // 表现出来就是"不管点哪一行的按钮，焦点都跳去第一个输入框（构想）"。
-                    // 这里真正要变的只有两样：本行输入框的值、页内摘要。
+                    // 这里真正要变的只有这几样：输入框的值、取色器、反色开关、页内摘要。
                     //
                     if (inputEl) {
                         inputEl.value = defaultLabel;
                         inputEl.removeClass('seqtk-input-invalid');
+                    }
+                    if (role) {
+                        picker?.setValue(role.defaultColor);
+                        toggle?.setValue(false);
                     }
                     this.renderKindSummary();
                 }),
@@ -542,19 +625,22 @@ export class SettingsTab extends PluginSettingTab {
     }
 
     /**
-     * 一项配色的编辑行：颜色选择器 + 「字体反色」开关 + 「恢复默认」按钮
+     * 一条「配色 + 字体反色 + 恢复默认」的行
+     *
+     * 现在只有**大类基色**走这条路 —— 类型自己的颜色已经并进 renderKindTypeRow 的那一行；
+     * 函数本身仍按通用写法，将来若要单独摆一行配色可直接复用。
      *
      * 与名字一样全程不调 update()，所有要变的东西都就地改（取色器值、开关、页内摘要）。
      * 差别在生效时机：配色**改完立即生效** —— Save_Setting 会把新色推进 CSS 变量，
      * 徽章与附加行预览当场变色，不必重开视图。
      *
-     * @param ownerLabel 这一行归属谁（大类名或类型名）：只用于把描述说清楚
+     * @param ownerLabel 这一行归属谁（当前是大类名）：只用于把描述说清楚
      */
     private renderKindColorRow(el: HTMLElement, item: KindColorItem, ownerLabel: string): void {
         const desc =
             item.label === '大类基色'
-                ? `${ownerLabel}类下所有类型共用的底色 · 出厂 ${item.defaultColor}`
-                : `仅 ${ownerLabel} 用这一档色阶 · 出厂 ${item.defaultColor}`;
+                ? `${ownerLabel}下的共用底色 · 默认为 ${item.defaultColor}`
+                : `默认为 ${item.defaultColor}`;
         const row = new Setting(el).setName(item.label).setDesc(desc);
         const colors = this.plugin.settings.kindColors;
         const inverted = this.plugin.settings.kindTextInverted;
@@ -586,10 +672,10 @@ export class SettingsTab extends PluginSettingTab {
 
         row.addToggle((t) => {
             toggle = t;
-            // 开关组件本身没有 label：在它前面插一个小字说明，否则看不出这个开关管什么
+            // 同样没有原生 label：插一行小字说明它管什么
             t.toggleEl.insertAdjacentElement(
                 'beforebegin',
-                createSpan({ cls: 'seqtk-toggle-label', text: '字体反色' }),
+                createSpan({ cls: 'seqtk-control-label', text: '字体反色' }),
             );
             t.setValue(item.inverted).onChange(async (v) => {
                 if (v) inverted[item.key] = true;
@@ -601,7 +687,7 @@ export class SettingsTab extends PluginSettingTab {
         row.addExtraButton((b) =>
             b
                 .setIcon('rotate-ccw')
-                .setTooltip('恢复默认（配色与字色）')
+                .setTooltip('恢复默认')
                 .onClick(async () => {
                     // 取色器可能还有一次待落盘的防抖在排队：取消掉，免得刚复位又被写回
                     if (saveTimer) {
@@ -611,7 +697,7 @@ export class SettingsTab extends PluginSettingTab {
                     delete colors[item.key];
                     delete inverted[item.key];
                     await Save_Setting(this.plugin);
-                    // 就地复位：取色器回出厂色、反色开关回白字（关）
+                    // 就地复位：取色器回默认为色、反色开关回白字（关）
                     picker?.setValue(item.defaultColor);
                     toggle?.setValue(false);
                     this.renderKindSummary();
@@ -666,6 +752,84 @@ export class SettingsTab extends PluginSettingTab {
         await Save_Setting(this.plugin);
         this.renderKindSummary();
     }
+
+    // ============================================================
+    // 中控台显示（sub-page 的命令式部分）
+    // ============================================================
+
+    /** 页内摘要槽位：每次 renderHubVisibility 时重建，供 renderHubSummary 就地更新 */
+    private hubSummaryEl: HTMLElement | null = null;
+
+    /**
+     * 中控台显隐：按分栏列出注册进来的视图，逐条一个开关
+     *
+     * 条目来自 plugin.panelRegistry（谁注册了带 category 的 metas，谁就在这一页上）——
+     * 条目数是运行时定的，声明式表达不了，所以与规则页、类型外观页一样走命令式。
+     * **顺序不归这一页管**：中控台的排列由代码里的 HUB_DEFAULT_ORDER 决定。
+     *
+     * 与另两个子页同源的讲究：开关改完立即落盘，且**不调 update()** ——
+     * update() 会把整页重建，焦点与滚动位置跟着跑掉。
+     */
+    private renderHubVisibility(el: HTMLElement): void {
+        // setting-item 默认横向 flex，这里要塞多块内容（见 styles.css 的 .seqtk-settings-hub）
+        el.addClass('seqtk-settings-hub');
+        // 框架在 update() 后会复用同一个 settingEl 再调一次本回调：不清空会追加第二份
+        el.empty();
+
+        // 页内摘要：与页头的 displayValue 同义，但它是**即时**的（本页刻意不重画设置面板）
+        this.hubSummaryEl = el.createEl('p', { cls: 'setting-item-description' });
+        this.renderHubSummary();
+
+        el.createEl('p', {
+            cls: 'setting-item-description',
+            text: '关掉的视图不再出现在中控台目录里。排列顺序不在这里调 —— 它由代码中的 HUB_DEFAULT_ORDER 决定。',
+        });
+
+        const entries = this.plugin.panelRegistry.filter((e) => e.category);
+        for (const cat of HUB_CATEGORIES) {
+            const inCat = entries.filter((e) => e.category === cat);
+            if (inCat.length === 0) continue;
+            el.createEl('h4', { text: cat });
+            const hidden = new Set(this.plugin.settings.hub[cat]?.hidden ?? []);
+            for (const entry of inCat) {
+                const row = new Setting(el)
+                    .setName(entry.title)
+                    .setDesc(`${entry.viewType}${entry.placeholder ? ' · 规划中' : ''}`);
+                row.addToggle((t) =>
+                    // 开关「开」= 显示：初值取反，改动时把 hidden 写回去
+                    t.setValue(!hidden.has(entry.viewType)).onChange(async (v) => {
+                        this.SET_HubHidden(cat, entry.viewType, !v);
+                        await Save_Setting(this.plugin);
+                        this.renderHubSummary();
+                    }),
+                );
+            }
+        }
+    }
+
+    /**
+     * 就地改 hidden 列表：隐藏时加入、显示时移除
+     *
+     * 空列表就把该分栏的键整个删掉 —— 与落盘口径一致（"没配过"与"配了个空数组"
+     * 不该在设置文件里长得不一样）。
+     */
+    private SET_HubHidden(cat: HubCategory, viewType: string, hide: boolean): void {
+        const hub = this.plugin.settings.hub;
+        const set = new Set(hub[cat]?.hidden ?? []);
+        if (hide) set.add(viewType);
+        else set.delete(viewType);
+        if (set.size === 0) delete hub[cat];
+        else hub[cat] = { hidden: [...set] };
+    }
+
+    /** 页内摘要（"已隐藏 N 项"）—— 就地更新，不重建设置面板 */
+    private renderHubSummary(): void {
+        const slot = this.hubSummaryEl;
+        if (!slot) return;
+        const n = COUNT_HiddenEntries(this.plugin.settings.hub);
+        slot.setText(n > 0 ? `已隐藏 ${n} 项。` : '中控台当前显示全部面板。');
+    }
 }
 
-export const Register_SettingsTab = (p: SeqtkPlugin) => p.addSettingTab(new SettingsTab(p.app, p));
+export const Register_SettingsTab = (p: SeqtkPlugin) =>
+    p.addSettingTab(new SettingsTab(p.app, p));

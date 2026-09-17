@@ -7,7 +7,7 @@
  * 布局约定：rootFolder / 大类 / 细分类 两级 ——
  *   folder: GET_KindToPath(kind, settings)           → ${rootFolder}/${大类}/${kind}
  *   file:   GET_FileByPath(kind, nodeId, settings) → ${folder}/${nodeId}.md
- * （大类 = GET_CategoryOfNode(kind)，如 AFFAIR；细分类 kind 如 AFFAIR_PROJECT；反查见 KindJudge.ts）
+ * （大类 = GET_CategoryOfNode(kind)，如 AFFAIR；细分类 kind 如 AFFAIR_CONCEPT；反查见 KindJudge.ts）
  */
 
 import {GET_CategoryOfNode, type NodeKindValue} from "../../../P4_Nodes/NodeKind/NodeKind";
@@ -20,7 +20,7 @@ function joinPath(prefix: string, suffix: string): string {
     return `${p}/${s}`;
 }
 
-/** kind 文件夹完整路径（rootFolder/大类/kind），如 `${rootFolder}/AFFAIR/AFFAIR_PROJECT` */
+/** kind 文件夹完整路径（rootFolder/大类/kind），如 `${rootFolder}/AFFAIR/AFFAIR_CONCEPT` */
 export const GET_KindToPath = (kind: NodeKindValue, setting: PluginSettings): string =>
     joinPath(joinPath(setting.rootFolder, GET_CategoryOfNode(kind)), kind);
 

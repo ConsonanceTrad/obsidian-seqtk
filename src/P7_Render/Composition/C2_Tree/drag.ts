@@ -16,10 +16,10 @@ import type { NodeKindValue } from "../../../P4_Nodes/NodeKind/NodeKind";
 
 /** 证据类型（对象 / 条件 / 信息 / 状态）：可跨父拖拽随意更改从属 */
 export const EVIDENCE_KINDS: NodeKindValue[] = [
+    NODE_KIND.SNAPSHOT,
+    NODE_KIND.CLUE,
     NODE_KIND.FACTOR,
     NODE_KIND.REQUEST,
-    NODE_KIND.CLUE,
-    NODE_KIND.SNAPSHOT,
 ];
 
 /** 拖拽源（由调用方在 dragstart 时记录） */

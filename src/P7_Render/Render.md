@@ -26,6 +26,6 @@
 - 样式作用域限定在 `.seqtk-antd-root` 内（见 `styles.css`），
   **不得引入 `antd/dist/reset.css`**（会重置 Obsidian 宿主界面）；
 - 目录与组件对应关系：
-  - `Composition/` —— `C1_NodeLine`（节点行）、`C2_Tree`（节点树 + 引导线浮层）、
+  - `Composition/` —— `C1_NodeLine`（节点行）、`C2_Tree`（节点树 / 树栏 + 引导线浮层）、
     `C3_RightClickMenu`、`C4_Tooltip`、`C5_Icon`
   - `Structure/` —— `S1_Container`、`S2_Modal`、`S3_Board`

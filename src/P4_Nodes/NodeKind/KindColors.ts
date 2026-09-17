@@ -44,7 +44,9 @@ const BUILTIN_CATEGORY_COLORS: Record<NodeCategoryValue, string> = {
  * 两条链路各用一个色相，按从属深度逐级加深 —— 行上一眼能看出「处在第几层」：
  *   主线 构想 → 方向 → 目标 → 工序（绿，与大类基色同族，目标居中）
  *   支线 清单 → 行动（青）
- * 未列入的事务类型（项目 / 事件）沿用大类色；白板仍按大类取色（GET_KindColor）。
+ * 事件不属任何一条链路，单给一色：事务大类不摆「大类基色」（见 NO_CATEGORY_COLOR），
+ * 它若也不在表里就一色都改不了。
+ * 白板仍按大类取色（GET_KindColor）。
  */
 const BUILTIN_ROLE_COLORS: Partial<Record<NodeKindValue, string>> = {
     [NODE_KIND.CONCEPT]: '#86cfa4',
@@ -53,6 +55,7 @@ const BUILTIN_ROLE_COLORS: Partial<Record<NodeKindValue, string>> = {
     [NODE_KIND.PROCESS]: '#2f8f56',
     [NODE_KIND.CHECK]: '#6fb6d0',
     [NODE_KIND.ITEM]: '#4794b3',
+    [NODE_KIND.EVENT]: '#c98f5a',
 };
 
 /** 角色 class 后缀（`.role-*`）：键与角色色表一致，样式表按同名规则配色 */
@@ -63,6 +66,7 @@ const AFFAIR_ROLE_CLASSES: Partial<Record<NodeKindValue, string>> = {
     [NODE_KIND.PROCESS]: 'role-process',
     [NODE_KIND.CHECK]: 'role-check',
     [NODE_KIND.ITEM]: 'role-item',
+    [NODE_KIND.EVENT]: 'role-event',
 };
 
 // ============================================================
@@ -264,9 +268,9 @@ const APPEARANCE_CATEGORY_ORDER: NodeCategoryValue[] = [
 /**
  * 不提供「大类基色」配置的大类
  *
- * 事务：它的类型几乎都有自己的角色色（构想 → 方向 → 目标 → 工序，清单 / 行动），
- * 基色只剩项目 / 事件在用 —— 单为它们摆一行"事务用什么色"，反而让人以为事务整体另有一色。
- * 出厂值照旧生效（白板与徽章仍按大类取色），只是不摆到设置页上。
+ * 事务：它的类型**全部**都有自己的角色色（主线 构想 → 方向 → 目标 → 工序，支线 清单 / 行动，
+ * 外加事件），大类色已无类型在用 —— 单摆一行"事务用什么色"，反而让人以为事务整体另有一色。
+ * 出厂值照旧生效（白板仍按大类取色），只是不摆到设置页上。
  */
 const NO_CATEGORY_COLOR: NodeCategoryValue[] = ['AFFAIR'];
 

@@ -10,15 +10,15 @@ import type SeqtkPlugin from "../main"; // 类型引用，防止环依赖访问�
 // 使其声明在打包时被收集 —— 新接入 / 重新接入的视图文件在此追加（或取消注释）一行即可。
 // 注：以下视图尚处内部依赖迁移（import 未收敛，指向 old/core/types/components 等），
 //     暂不登记以免阻塞构建；待视图内部迁移完成后取消注释即重新启用其注册与打开指令。
-import "../P6_Views/V0_Common/Blank";
-import "../P6_Views/V0_Common/Hub";
+import "../P6_Views/Special/Blank/Blank";
+import "../P6_Views/Special/Hub/Hub";
 import "../P6_Views/V0_Common/Log";
 import "../P6_Views/V0_Common/Recycle";
-import "../P6_Views/V1_Affair/DelegatedTree";
+import "../P6_Views/Special/Delegate/DelegatedTree";
 import "../P6_Views/V1_Affair/Design/Core/Design";
-import "../P6_Views/V1_Affair/Overview";
-import "../P6_Views/V1_Affair/Route";
-import "../P6_Views/V1_Affair/Template";
+import "../P6_Views/V1_Affair/Overview/Core/Overview";
+import "../P6_Views/V1_Affair/Route/Core/Route";
+import "../P6_Views/V1_Affair/Template/Core/Template";
 import "../P6_Views/V2_Rule/ExecBind";
 import "../P6_Views/V2_Rule/FlowDraft";
 import "../P6_Views/V2_Rule/FlowPush";

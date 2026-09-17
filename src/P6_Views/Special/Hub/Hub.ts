@@ -20,16 +20,16 @@
  */
 
 import {ItemView, setIcon, type WorkspaceLeaf} from 'obsidian';
-import {AutoRegister} from "../../P1_Register/Comd";
-import {AutoView} from "../../P1_Register/View";
-import type SeqtkPlugin from "../../main";
-import type {PluginSettings} from "../../P3_Settings/Settings";
-import {HUB_CATEGORIES, type PanelEntry} from "../panelRegistry";
-import {DelegateTreeController} from '../V1_Affair/DelegateTreeController';
-import {FRAMEWORK_TREE} from '../V1_Affair/Design/Slice/FrameworkTreeShared';
-import {mountReact} from '../../P0_UI/ReactHost';
+import {AutoRegister} from "../../../P1_Register/Comd";
+import {AutoView} from "../../../P1_Register/View";
+import type SeqtkPlugin from "../../../main";
+import type {PluginSettings} from "../../../P3_Settings/Settings";
+import {HUB_CATEGORIES, HUB_DEFAULT_ORDER, type PanelEntry} from "../../panelRegistry";
+import {DelegateTreeController} from '../Delegate/DelegateTreeController';
+import {FRAMEWORK_TREE} from '../../V1_Affair/Design/Slice/FrameworkTreeShared';
+import {mountReact} from '../../../P0_UI/ReactHost';
 import type {Root} from 'react-dom/client';
-import type {DataPipe} from '../../P5_Data/CoPipe/DataPipe';
+import type {DataPipe} from '../../../P5_Data/CoPipe/DataPipe';
 
 /** 侧边栏中控台 */
 export const VIEW_TYPE_HUB_SIDE = 'seqtk-hub-side';
@@ -119,9 +119,13 @@ export class HubView extends ItemView {
         for (const cat of HUB_CATEGORIES) {
             const entries = this.entries.filter((e) => e.category === cat);
             if (entries.length === 0) continue;
-            const cfg = this.hubSettings?.[cat] ?? {hidden: [], order: []};
+            // 顺序看代码里的 HUB_DEFAULT_ORDER，显隐看设置里的 hidden —— 两者分工明确
+            const cfg = this.hubSettings?.[cat] ?? {hidden: []};
             const hiddenSet = new Set(cfg.hidden);
-            const ordered = this.orderedEntries(entries, cfg.order).filter((e) => !hiddenSet.has(e.viewType));
+            const ordered =
+                this.orderedEntries(entries, HUB_DEFAULT_ORDER[cat])
+                .filter((e) =>
+                    !hiddenSet.has(e.viewType));
             if (ordered.length === 0) continue; // 该分栏全部隐藏 → 不显示分栏
             const catTitle = list.createDiv('seqtk-hub-category-title');
             catTitle.setText(cat);

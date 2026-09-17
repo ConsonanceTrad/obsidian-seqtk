@@ -18,23 +18,23 @@
 
 import { createElement, type ReactNode } from "react";
 import { Menu, Notice, type WorkspaceLeaf } from "obsidian";
-import { AutoView } from "../../P1_Register/View";
-import { AutoRegister } from "../../P1_Register/Comd";
-import { ReactViewBase } from "../../P0_UI/ViewBase";
-import { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
-import { NODE_KIND } from "../../P4_Nodes/NodeKind/NodeKind";
-import { NODE_KIND_LABELS } from "../../P4_Nodes/NodeKind/NodeLabel";
-import { CanvasBoard, type BoardLayout, type BoardPositions } from "../../P7_Render/Structure/S3_Board/CanvasBoard";
-import { TransactionCreateModal } from "../../P7_Render/Structure/S2_Modal/TransactionModals";
-import { TextPromptModal } from "../../P7_Render/Structure/S2_Modal/TextPromptModal";
-import { GET_FileByPath } from "../../P5_Data/MdFile/PathTools/PathParse";
+import { AutoView } from "../../../../P1_Register/View";
+import { AutoRegister } from "../../../../P1_Register/Comd";
+import { ReactViewBase } from "../../../../P0_UI/ViewBase";
+import { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
+import { NODE_KIND } from "../../../../P4_Nodes/NodeKind/NodeKind";
+import { NODE_KIND_LABELS } from "../../../../P4_Nodes/NodeKind/NodeLabel";
+import { CanvasBoard, type BoardLayout, type BoardPositions } from "../../../../P7_Render/Structure/S3_Board/CanvasBoard";
+import { TransactionCreateModal } from "../../../../P7_Render/Structure/S2_Modal/TransactionModals";
+import { TextPromptModal } from "../../../../P7_Render/Structure/S2_Modal/TextPromptModal";
+import { GET_FileByPath } from "../../../../P5_Data/MdFile/PathTools/PathParse";
 import { OverviewPanel, type OverviewState } from "./OverviewPanel";
-import type SeqtkPlugin from "../../main";
-import type { PanelEntry } from "../panelRegistry";
-import type { DataPipe } from "../../P5_Data/CoPipe/DataPipe";
-import type { PluginSettings } from "../../P3_Settings/Settings";
-import type { NodeKindValue } from "../../P4_Nodes/NodeKind/NodeKind";
-import type { SeqtkNode } from "../../P4_Nodes/Node";
+import type SeqtkPlugin from "../../../../main";
+import type { PanelEntry } from "../../../panelRegistry";
+import type { DataPipe } from "../../../../P5_Data/CoPipe/DataPipe";
+import type { PluginSettings } from "../../../../P3_Settings/Settings";
+import type { NodeKindValue } from "../../../../P4_Nodes/NodeKind/NodeKind";
+import type { SeqtkNode } from "../../../../P4_Nodes/Node";
 
 export const VIEW_TYPE_OVERVIEW = 'seqtk-overview';
 

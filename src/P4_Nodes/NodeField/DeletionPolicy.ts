@@ -48,16 +48,17 @@ export interface DestructivePolicy {
 /**
  * 默认策略
  *
- * 归档：只动自身（归档语义是「从快速缓存移除」，子孙不该被牵连）
+ * 归档：连带后代 —— 子树整体进退。归档的语义是「从快速缓存里移除」，只归档父节点会
+ *   留下一批父已不在、自己还挂在缓存里的后代，看树时平白多出几个孤儿
  * 删除：级联删子树（原先就是级联；改成可配后默认仍是它，行为不变）
- * 提示：归档可逆且是日常动作 → 只在动到子树时问一句（`children`）；
- *       删除级联且进系统回收站、风险更高 → 默认总是问一次（`simple`）
+ * 提示：两处都用 `children` —— 只在动到子树时问一句，对叶子节点的日常操作不打断
+ *   （删除更重，但「有没有子孙」已兜住大部分误触；要更严还有 `strict` 档可换）
  */
 export const DEFAULT_DESTRUCTIVE_POLICY: DestructivePolicy = {
-    archiveChildren: 'keep',
+    archiveChildren: 'archive',
     deleteChildren: 'delete',
     archiveConfirm: 'children',
-    deleteConfirm: 'simple',
+    deleteConfirm: 'children',
 };
 
 /**
@@ -77,19 +78,19 @@ export const STRICT_CONFIRM_WORD = '删除';
 
 /** 策略可选值的显示名 */
 export const ARCHIVE_CHILDREN_LABELS: Record<ArchiveChildrenMode, string> = {
-    keep: '只归档自身',
-    archive: '后代一并归档',
+    keep: '归档自身',
+    archive: '连带后代',
 };
 
 export const DELETE_CHILDREN_LABELS: Record<DeleteChildrenMode, string> = {
-    keep: '只删除自身（后代脱离父级）',
-    archive: '后代一并归档',
-    delete: '后代一并删除（级联）',
+    keep: '删除自身',
+    archive: '连带后代',
+    delete: '连带后代子孙',
 };
 
 export const CONFIRM_LEVEL_LABELS: Record<ConfirmLevel, string> = {
-    none: '不提示，直接执行',
-    children: '仅当含子节点时提示',
-    simple: '提示一次（确认 / 取消）',
-    strict: `提示并要求输入「${STRICT_CONFIRM_WORD}」`,
+    none: '不要提示',
+    children: '含子项时提示',
+    simple: '总是提示',
+    strict: `要求输入「${STRICT_CONFIRM_WORD}」`,
 };

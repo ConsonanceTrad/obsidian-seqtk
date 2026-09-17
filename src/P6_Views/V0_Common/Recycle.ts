@@ -39,7 +39,7 @@ export const VIEW_TYPE_RECYCLE = 'seqtk-recycle';
 export class RecycleView extends ReactViewBase {
     /** 面板目录条目 */
     static metas: PanelEntry[] = [
-        {viewType: VIEW_TYPE_RECYCLE, title: '回收模式', icon: 'trash-2', description: '阅览归档节点，提供还原与彻底删除。', category: '节点通用'},
+        {viewType: VIEW_TYPE_RECYCLE, title: '回收模式', icon: 'trash-2', description: '还原与彻底删除归档节点。', category: '节点通用'},
     ];
 
     /** 视图工厂：由 Register_View 以 (leaf) 调用 */

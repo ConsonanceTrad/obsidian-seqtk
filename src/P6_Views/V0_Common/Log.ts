@@ -14,7 +14,7 @@ import { createElement, type ReactNode } from "react";
 import { AutoView } from "../../P1_Register/View";
 import { AutoRegister } from "../../P1_Register/Comd";
 import { ReactViewBase } from "../../P0_UI/ViewBase";
-import { VIEW_TYPE_LOG } from "./Blank";
+import { VIEW_TYPE_LOG } from "../Special/Blank/Blank";
 import { LogPanel } from "./LogPanel";
 import type SeqtkPlugin from "../../main";
 import type { PanelEntry } from "../panelRegistry";
@@ -25,7 +25,7 @@ import type { WorkspaceLeaf } from "obsidian";
 export class LogView extends ReactViewBase {
     /** 面板目录条目（规划中占位） */
     static metas: PanelEntry[] = [
-        {viewType: VIEW_TYPE_LOG, title: '日志阅览', icon: 'scroll-text', description: '条目化的阅览和搜索日志；定义日志是否缓存及如何被脚本或自动化获取调用。', category: '节点通用', placeholder: true},
+        {viewType: VIEW_TYPE_LOG, title: '日志阅览', icon: 'scroll-text', description: '阅览和搜索日志，管理日志可见权限。', category: '节点通用', placeholder: true},
     ];
 
     /** 视图工厂：由 Register_View 以 (leaf) 调用 */

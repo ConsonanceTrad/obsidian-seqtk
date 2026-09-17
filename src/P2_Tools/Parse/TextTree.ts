@@ -24,6 +24,7 @@
  */
 
 import { NODE_KIND, type NodeKindValue } from '../../P4_Nodes/NodeKind/NodeKind';
+import { GET_AllowedChildKinds } from '../../P4_Nodes/NodeKind/NodeChildAllow';
 import type { SeqtkState } from '../../P4_Nodes/NodeField/StateKeys';
 import { NODE_KIND_LABELS } from '../../P4_Nodes/NodeKind/NodeLabel';
 
@@ -274,6 +275,51 @@ export function PREVIEW_TextTree(
         kindLabel: NODE_KIND_LABELS[l.kind],
         state: l.state,
     }));
+}
+
+// ============================================================
+// 类型链校验（模板专用）
+// ============================================================
+
+/**
+ * 校验一棵文本树的「类型链」是否成立（逐层检查父类型允许的子类型）
+ *
+ * 与 PARSE_TextTree 的分工：解析只管**语法**（缩进 / 状态标记 / K: 短名），类型链规则
+ * （NodeChildAllow）在这里单独校验 —— 模板要跨框架搬运，「语法对但链不成立」的结构
+ * 一旦进了库只能靠人工收拾，所以要在插入前拦住。
+ *
+ * parentKind 的两种用法：
+ * - 省略 / null → **不校验顶层**（编辑模板框架内容：模板框架下可放任意类型的模板单元）
+ * - 传目标父类型 → 顶层必须能被该类型接纳（应用模板到某框架前的预检）
+ *
+ * @returns 问题列表（空 = 链成立）；`line` 为 1 起行号，与 PARSE 的 issues 同形态
+ */
+export function VALIDATE_TemplateTree(
+    roots: TextTreeNode[],
+    parentKind: NodeKindValue | null = null,
+): TextTreeIssue[] {
+    const issues: TextTreeIssue[] = [];
+
+    const visit = (node: TextTreeNode, parent: NodeKindValue | null, isRoot: boolean): void => {
+        if (parent !== null) {
+            const allowed = GET_AllowedChildKinds(parent);
+            if (!allowed.includes(node.kind)) {
+                const allowText = allowed.length > 0
+                    ? allowed.map((k) => NODE_KIND_LABELS[k]).join('、')
+                    : '（不允许任何子节点）';
+                issues.push({
+                    line: node.line,
+                    message: isRoot
+                        ? `顶层类型「${NODE_KIND_LABELS[node.kind]}」不能插入此处：${NODE_KIND_LABELS[parent]} 下只允许 ${allowText}`
+                        : `「${NODE_KIND_LABELS[node.kind]}」不能挂在「${NODE_KIND_LABELS[parent]}」下（该父级只允许 ${allowText}）`,
+                });
+            }
+        }
+        for (const child of node.children) visit(child, node.kind, false);
+    };
+
+    for (const root of roots) visit(root, parentKind, true);
+    return issues;
 }
 
 /** 缩进 / 续行的文本变换结果 */

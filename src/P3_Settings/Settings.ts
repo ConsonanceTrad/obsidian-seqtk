@@ -15,7 +15,7 @@ import {APPLY_KindColors, GET_KindColorVars} from "../P4_Nodes/NodeKind/KindColo
 export type DelegateTarget = 'hub' | 'view';
 
 export const DELEGATE_TARGET_LABELS: Record<DelegateTarget, string> = {
-    hub: '中控台侧栏（默认）',
+    hub: '借用中控台',
     view: '独立视图',
 };
 
@@ -23,12 +23,6 @@ export interface PluginSettings {
 
     /** 数据根文件夹路径（相对于 vault 根目录） */
     rootFolder: string;
-
-    /** 默认排序方式 */
-    defaultSort: 'create' | 'modify' | 'desc' | 'state';
-
-    /** 默认排序方向 */
-    defaultSortDirection: 'asc' | 'desc';
 
     /**
      * 状态传播规则：按状态类型配置的父子传播
@@ -47,9 +41,6 @@ export interface PluginSettings {
 
     /** 删除节点时的提示级别 */
     deleteConfirm: ConfirmLevel;
-
-    /** 是否在事务设计左侧栏显示「全部事务」入口（默认隐藏） */
-    showAllOverview: boolean;
 
     /**
      * 类型显示名覆盖：key = 类型值（NodeKindValue），value = 用户改的名字
@@ -86,8 +77,14 @@ export interface PluginSettings {
     /** 事务设计：右栏展开的 nodeId（与左栏各记各的 —— 两栏本就是独立的展开集合） */
     expandedRightIds: string[];
 
-    /** 中控台管理：各章节的显隐与组内顺序（key=章节名；空 = 默认全部显示/registry 顺序） */
-    hub: Record<string, { hidden: string[]; order: string[] }>;
+    /**
+     * 中控台管理：各章节下**要隐藏**的视图（key=章节名，value=viewType 列表；
+     * 空 = 该章节全部显示）。
+     *
+     * 顺序不在这里 —— 中控台的排列由代码里的 HUB_DEFAULT_ORDER 决定
+     * （见 P6_Views/panelRegistry.ts），这份配置只管显隐。
+     */
+    hub: Record<string, { hidden: string[] }>;
 
     /** 事务设计：是否处于委托（重开库时据此把框架树面板恢复到侧栏） */
     delegated: boolean;
@@ -111,11 +108,8 @@ export interface PluginSettings {
 /** 默认设置 */
 export const DEFAULT_SETTINGS: PluginSettings = {
     rootFolder: DEFAULT_ROOT_FOLDER,
-    defaultSort: 'create',
-    defaultSortDirection: 'desc',
     stateRules: DEFAULT_STATE_RULES.map((r) => ({ ...r, from: [...r.from] })),
     ...DEFAULT_DESTRUCTIVE_POLICY,
-    showAllOverview: false,
     kindLabels: {},
     kindColors: {},
     kindTextInverted: {},

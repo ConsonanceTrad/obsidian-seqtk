@@ -48,6 +48,7 @@ import { saveAsTemplate, useTemplate } from './templateActions';
 import { changeParent, toggleExpandAll } from './navigation';
 import { openBodyEdit, startCreateBlank, startCreateChild, startRename } from './inlineEdit';
 import { addExternalSource, createTimestampDoc, manageExternalSources } from './externalInfo';
+import { manageTags } from './tags';
 import { copySubtreeAsText, editFrameworkContentAsText, editSubtreeAsText } from './textEdit';
 import { buildFrameworkNode, buildNode, type TreeNode } from '../Tool/tree';
 import type { TreeSide } from '../Core/DesignPanel';
@@ -197,9 +198,17 @@ export function getLeftBlankMenuDefinitions(view: DesignView): MenuDefinitions {
     ];
 }
 
-/** 右栏空白右键：新建三类 + 追加信息 + 批量编辑 + 从磁盘刷新 */
+/** 右栏空白右键：新建三类 + 追加信息 + 批量编辑 + 模板功能 + 从磁盘刷新 */
 export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions {
     const parentId = view.selectedFrameworkId ?? undefined;
+    const parentData = parentId ? view.pipe.GET_Node(parentId) : undefined;
+    /**
+     * 空白处没有行可依附，模板动作以**打开的框架本身**为目标
+     * （与框架卡片右键的模板动作同一个对象）；未打开框架时整项不出。
+     */
+    const templateTarget = parentId && parentData
+        ? buildFrameworkNode(view.pipe, parentId, parentData)
+        : undefined;
     return [
         {
             name: '新建构思',
@@ -228,6 +237,16 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
                       icon: ICON.editFrameworkContent,
                       section: SECTION.framework,
                       action: () => editFrameworkContentAsText(view, parentId),
+                  },
+              ]
+            : []),
+        ...(templateTarget
+            ? [
+                  {
+                      name: '模板功能',
+                      icon: ICON.templateGroup,
+                      section: SECTION.tools,
+                      items: templateDefs(view, templateTarget),
                   },
               ]
             : []),
@@ -280,6 +299,12 @@ function getFrameMenuDefinitions(
             section: SECTION.main,
             action: () => editFrameworkContentAsText(view, node.nodeId),
         },
+        {
+            name: '管理标签',
+            icon: 'tags',
+            section: SECTION.main,
+            action: () => manageTags(view, node.nodeId),
+        },
         ...templateDefs(view, node),
         {
             name: '归档',
@@ -311,16 +336,22 @@ function getRowMenuDefinitions(
         ...evidenceSubmenuDefs(addEvidence),
         ...stateDefs(view, node),
         {
-            name: '编辑描述',
-            icon: ICON.editDesc,
+            name: '管理标签',
+            icon: 'tags',
             section: SECTION.main,
-            action: () => openBodyEdit(view, node.nodeId),
+            action: () => manageTags(view, node.nodeId),
         },
         {
             name: '时间规则',
             icon: ICON.editAttrs,
             section: SECTION.main,
             action: () => openEdit(view, node.nodeId),
+        },
+        {
+            name: '修改描述',
+            icon: ICON.editDesc,
+            section: SECTION.main,
+            action: () => openBodyEdit(view, node.nodeId),
         },
         {
             name: '批量编辑',
@@ -374,7 +405,7 @@ function getRowMenuDefinitions(
 function templateGroupDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
     return [
         {
-            name: '模板使用',
+            name: '模板功能',
             icon: ICON.templateGroup,
             section: SECTION.tools,
             items: templateDefs(view, node),

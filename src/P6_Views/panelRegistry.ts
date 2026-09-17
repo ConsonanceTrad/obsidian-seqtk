@@ -17,6 +17,34 @@ export const HUB_CATEGORIES = ['事务设计', '规则设计', '节点通用'] a
 
 export type HubCategory = typeof HUB_CATEGORIES[number];
 
+/**
+ * 中控台各分栏的默认先后 —— 中控台顺序的**唯一事实源**
+ *
+ * 为什么不沿用「视图模块的 import 顺序」（P1_Register/Zxport 那批副作用导入）：
+ * 那份顺序只说明「谁先被加载」，拿它当排序等于让一件无关的事顺手决定界面，
+ * 想调顺序时也看不出该改哪儿。表里没列到的条目接在该栏末尾，不会丢。
+ *
+ * 与 settings.hub[分类].hidden 的分工：这张表管**顺序**，hidden 只管**显隐**。
+ * 新增视图时记得往这里补一行，否则它会排到该栏最后。
+ */
+export const HUB_DEFAULT_ORDER: Record<HubCategory, string[]> = {
+    '事务设计': [
+        'seqtk-design',
+        'seqtk-template',
+        'seqtk-route',
+        'seqtk-overview'
+    ],
+    '规则设计': [
+        'seqtk-exec-bind',
+        'seqtk-flow-draft',
+        'seqtk-flow-push',
+        'seqtk-exec-design',
+        'seqtk-flow',
+        'seqtk-query-design',
+    ],
+    '节点通用': ['seqtk-collab', 'seqtk-log', 'seqtk-recycle'],
+};
+
 /** 操作面板条目 */
 export interface PanelEntry {
   /** 视图类型（与 registerView 的 viewType 一致） */

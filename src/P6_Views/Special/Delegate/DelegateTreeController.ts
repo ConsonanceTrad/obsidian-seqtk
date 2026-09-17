@@ -15,23 +15,24 @@
  */
 
 import { App, setIcon, setTooltip } from 'obsidian';
-import { SimpleStore } from '../../P5_Data/Svelte/SimpleStore';
-import { BUILD_Menu, type MenuDefinition } from '../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
-import { ICON, SECTION } from '../../P7_Render/Composition/C3_RightClickMenu/MenuAppearance';
+import { SimpleStore } from '../../../P5_Data/Svelte/SimpleStore';
+import { BUILD_Menu, type MenuDefinition } from '../../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
+import { ICON, SECTION } from '../../../P7_Render/Composition/C3_RightClickMenu/MenuAppearance';
 import {
     DelegatedTreePanel,
     type DelegatedTreeActions,
     type DelegatedTreeState,
 } from './DelegatedTreePanel';
-import { FRAMEWORK_TREE } from './Design/Slice/FrameworkTreeShared';
-import { buildFrameworkTree } from './Design/Tool/tree';
-import { buildFrameLine, buildTreeItems, type LineOverlay } from './Design/Tool/viewModel';
-import { archiveNode, createNode, saveNodeDesc, type NodeEditHost } from './Design/Slice/actions';
-import { NODE_KIND } from '../../P4_Nodes/NodeFacade';
-import type { DataPipe } from '../../P5_Data/CoPipe/DataPipe';
-import type { PluginSettings } from '../../P3_Settings/Settings';
-import type { NodeLineCtx } from '../../P7_Render/Composition/C1_NodeLine/NodeLine';
-import type { NodeInlineCreating } from '../../P7_Render/Composition/C2_Tree/NodeTree';
+import { FRAMEWORK_TREE } from '../../V1_Affair/Design/Slice/FrameworkTreeShared';
+import { buildFrameworkTree } from '../../V1_Affair/Design/Tool/tree';
+import { buildFrameLine, buildTreeItems, type LineOverlay } from '../../V1_Affair/Design/Tool/viewModel';
+import { archiveNode, createNode, saveNodeDesc, type NodeEditHost } from '../../V1_Affair/Design/Slice/actions';
+import { PARSE_NameTags, saveTags } from '../../V1_Affair/Design/Slice/tags';
+import { NODE_KIND } from '../../../P4_Nodes/NodeFacade';
+import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
+import type { PluginSettings } from '../../../P3_Settings/Settings';
+import type { NodeLineCtx } from '../../../P7_Render/Composition/C1_NodeLine/NodeLine';
+import type { NodeInlineCreating } from '../../../P7_Render/Composition/C2_Tree/NodeTree';
 import { createElement, type ReactElement } from 'react';
 
 export class DelegateTreeController implements NodeEditHost {
@@ -202,8 +203,18 @@ export class DelegateTreeController implements NodeEditHost {
     private commitRename(ctx: NodeLineCtx, value: string): void {
         const data = this.pipe.GET_Node(ctx.nodeId);
         this.editingNodeId = null;
-        if (data && value && value !== data.desc) {
-            saveNodeDesc(this, { nodeId: ctx.nodeId, data, children: [] }, value);
+        if (!data || !value) {
+            this.recompute();
+            return;
+        }
+        // 与设计视图同一套规则：`名称 #甲 #乙` 里的标签段就是该节点的全部标签
+        const { desc, tags } = PARSE_NameTags(value);
+        const name = desc ?? data.desc;
+        if (name !== data.desc) {
+            saveNodeDesc(this, { nodeId: ctx.nodeId, data, children: [] }, name);
+        }
+        if ((data.tags ?? []).join('\u0000') !== tags.join('\u0000')) {
+            saveTags(this, ctx.nodeId, tags);
         }
         this.recompute();
     }

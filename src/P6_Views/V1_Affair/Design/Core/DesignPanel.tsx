@@ -2,7 +2,7 @@
  * DesignPanel — 事务设计视图的渲染件（左右栏装配）
  *
  * 装配层职责（对应 Views.md「视图的职责边界（组件化后）」）：
- * - 把 P7_Render 的组件（NodeTreePanel）按左 / 右栏装配进视图容器，并渲染标题栏与空态
+ * - 把 P7_Render 的组件（左栏 NodeTreePane / 右栏 NodeTreePanel）按栏装配进视图容器
  * - 把视图状态以 props 注入（状态来自 SimpleStore，经 useStore 订阅）
  * - 把「栏」的信息捆到组件回调上：组件只给 `NodeLineCtx`，由本层补 `side` 后转交 DesignView
  * - 空白区交互（右键菜单、右侧空白落点）在本层接住并转交
@@ -23,6 +23,7 @@ import {
     type NodeLineCtx,
     type NodeLineHost,
 } from "../../../../P7_Render/Composition/C1_NodeLine/NodeLine";
+import { NodeTreePane, type TreeSide } from "../../../../P7_Render/Composition/C2_Tree/NodeTreePane";
 import { NodeTreePanel } from "../../../../P7_Render/Composition/C2_Tree/NodeTreePanel";
 import { IconButton } from "../../../../P7_Render/Composition/C1_NodeLine/IconButton";
 import type {
@@ -33,8 +34,13 @@ import type {
 } from "../../../../P7_Render/Composition/C2_Tree/NodeTree";
 import type { NodeKindValue } from "../../../../P4_Nodes/NodeKind/NodeKind";
 
-/** 栏标识（左栏框架树 / 右栏节点树） */
-export type TreeSide = "left" | "right";
+/**
+ * 栏标识（左栏框架树 / 右栏节点树）
+ *
+ * 定义随树栏组件（NodeTreePane）走，这里 re-export —— 既有 `from "./DesignPanel"` 的引用
+ * 无需改动，模板模式亦从同一处取。
+ */
+export type { TreeSide };
 
 /** 行内新建态（附加栏信息：由哪一栏发起） */
 export interface DesignInlineCreating extends NodeInlineCreating {
@@ -47,7 +53,7 @@ export interface DesignViewState {
     leftItems: TreeNodeItem[];
     leftEmpty?: string;
     /** 右栏形态 */
-    rightMode: "framework" | "overview" | "empty";
+    rightMode: "framework" | "empty";
     /** 右栏标题（选中框架的「类型 · 名称」） */
     rightTitle?: string;
     /** 选中框架的框架父节点（存在时右栏提供「返回父框架」） */
@@ -56,12 +62,10 @@ export interface DesignViewState {
     rightItems: TreeNodeItem[];
     rightEmpty?: string;
     /**
-     * 右栏根级行的父 id（framework 形态 = 当前框架 id；总览 / 空态缺省为空串）。
+     * 右栏根级行的父 id（framework 形态 = 当前框架 id；空态缺省为空串）。
      * 行内新建据此判断附加行是否落在这一层 —— 右栏的根级行挂在框架下，不是空串。
      */
     rightRootParentId?: string;
-    /** 总览形态的两棵树 */
-    overview?: { concept: TreeNodeItem[]; checklist: TreeNodeItem[] };
     /** 瞬时交互态 */
     creating: DesignInlineCreating | null;
     bodyEditing: NodeInlineBody | null;
@@ -215,17 +219,16 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
             {/* 委托期间左栏与把手不渲染：委托的目的正是把空间让给右栏 */}
             {/* （若只是隐藏仍会占位，那等于没让） */}
             {!state.delegated && (
-            <div
-                ref={leftPaneRef}
+            <NodeTreePane
                 className="seqtk-split-left"
+                paneRef={leftPaneRef}
                 /* 宽度取 ref 而不是 state：拖动期间宽度是命令式改的，
                    重渲时若按旧 state 写回，宽度会跳回去（见 onHandleMove 的说明） */
-                style={{ width: widthRef.current, flexBasis: widthRef.current }}
-                onContextMenu={onPaneContextMenu("left", ".seqtk-frame-item")}
-            >
-                <div className="seqtk-split-title">
-                    <span className="seqtk-split-title-text">框架</span>
-                    {/* 委托开关收在标题末尾：它是这一栏的全局动作，放句末不抢标题的视线 */}
+                paneStyle={{ width: widthRef.current, flexBasis: widthRef.current }}
+                onPaneContextMenu={onPaneContextMenu("left", ".seqtk-frame-item")}
+                title="框架"
+                titleExtra={
+                    /* 委托开关收在标题末尾：它是这一栏的全局动作，放句末不抢标题的视线 */
                     <IconButton
                         className={"seqtk-icon-btn seqtk-delegate-btn" + (state.delegated ? " is-active" : "")}
                         // chevrons-left = 把树送到左侧栏；chevrons-right = 收回本栏
@@ -234,17 +237,15 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
                         host={host}
                         onClick={() => actions.toggleDelegate()}
                     />
-                </div>
-                <NodeTreePanel
-                    items={state.leftItems}
-                    metrics={LINE_METRICS_LEFT}
-                    actions={leftActions}
-                    host={host}
-                    rowClass="seqtk-frame-item"
-                    emptyText={state.leftEmpty}
-                    creating={creating && creating.side === "left" ? creating : null}
-                />
-            </div>
+                }
+                items={state.leftItems}
+                metrics={LINE_METRICS_LEFT}
+                actions={leftActions}
+                host={host}
+                rowClass="seqtk-frame-item"
+                emptyText={state.leftEmpty}
+                creating={creating && creating.side === "left" ? creating : null}
+            />
 
             )}
 
@@ -314,41 +315,6 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
                     </>
                 )}
 
-                {state.rightMode === "overview" && state.overview && (
-                    <>
-                        <div className="seqtk-split-title">全部事务</div>
-                        {state.overview.concept.length > 0 && (
-                            <>
-                                <div className="seqtk-section-title">
-                                    项目（{state.overview.concept.length}）
-                                </div>
-                                <NodeTreePanel
-                                    items={state.overview.concept}
-                                    metrics={LINE_METRICS_RIGHT}
-                                    actions={rightActions}
-                                    host={host}
-                                    creating={creating && creating.side === "right" ? creating : null}
-                                    bodyEditing={state.bodyEditing}
-                                />
-                            </>
-                        )}
-                        {state.overview.checklist.length > 0 && (
-                            <>
-                                <div className="seqtk-section-title">
-                                    清单（{state.overview.checklist.length}）
-                                </div>
-                                <NodeTreePanel
-                                    items={state.overview.checklist}
-                                    metrics={LINE_METRICS_RIGHT}
-                                    actions={rightActions}
-                                    host={host}
-                                    creating={creating && creating.side === "right" ? creating : null}
-                                    bodyEditing={state.bodyEditing}
-                                />
-                            </>
-                        )}
-                    </>
-                )}
             </div>
         </div>
     );

@@ -31,6 +31,7 @@ import type {
 } from "../../../../P7_Render/Composition/C1_NodeLine/NodeLine";
 import type { TreeNodeItem } from "../../../../P7_Render/Composition/C2_Tree/NodeTree";
 import { kindUsesState } from "../../../../P7_Render/Structure/S2_Modal/TransactionModals";
+import { FORMAT_NameTags } from "../Slice/tags";
 import type { DataPipe } from "../../../../P5_Data/CoPipe/DataPipe";
 import type { TreeNode } from "./tree";
 
@@ -106,6 +107,7 @@ export function buildFrameLine(
         // 出现位置与用途，不体现在名字上（也正因如此它们不进设置页的类型名清单）。
         label: isFrameworkKind(kind) ? "框架" : NODE_KIND_LABELS[kind],
         desc: data.desc,
+        tags: data.tags,
         bodyPreview: body || undefined,
         bodyPreviewTooltip: body ? tooltipBodyText(body) : undefined,
         badges: isFrameworkKind(kind) ? buildSpanBadge(data) : [],
@@ -118,7 +120,8 @@ export function buildFrameLine(
         isLast: f.isLast,
         draggable: true,
         dragging: overlay.dragging,
-        editing: overlay.editing ? { mode: "rename", value: data.desc } : null,
+        // 重命名以输入框为准（全量），初始值必须带上现有标签，否则一改就把标签清空
+        editing: overlay.editing ? { mode: "rename", value: FORMAT_NameTags(data.desc, data.tags ?? []) } : null,
     };
 }
 
@@ -163,6 +166,7 @@ export function buildNodeLine(
         label,
         desc: data.desc,
         descTooltip: hints.length > 0 ? hints.join(" · ") : undefined,
+        tags: data.tags,
         bodyPreview: body || undefined,
         bodyPreviewTooltip: body ? tooltipBodyText(body) : undefined,
         badges: isTransactionKind(kind)
@@ -189,7 +193,8 @@ export function buildNodeLine(
         draggable: !!f.parentId,
         carded: isFramework,
         dragging: overlay.dragging,
-        editing: overlay.editing ? { mode: "rename", value: data.desc } : null,
+        // 同 buildFrameLine：全量语义下初始值要带上现有标签
+        editing: overlay.editing ? { mode: "rename", value: FORMAT_NameTags(data.desc, data.tags ?? []) } : null,
     };
 }
 

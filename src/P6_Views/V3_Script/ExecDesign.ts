@@ -14,7 +14,7 @@ import { createElement, type ReactNode } from "react";
 import { AutoView } from "../../P1_Register/View";
 import { AutoRegister } from "../../P1_Register/Comd";
 import { ReactViewBase } from "../../P0_UI/ViewBase";
-import { VIEW_TYPE_EXEC_DESIGN } from "../V0_Common/Blank";
+import { VIEW_TYPE_EXEC_DESIGN } from "../Special/Blank/Blank";
 import { ExecDesignPanel } from "./ExecDesignPanel";
 import type SeqtkPlugin from "../../main";
 import type { PanelEntry } from "../panelRegistry";

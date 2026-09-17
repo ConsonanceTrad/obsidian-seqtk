@@ -138,6 +138,15 @@ export function NodeLinePanel({
                 {data.desc}
             </span>
 
+            {/* 标签：紧跟节点名之后，只展示不接管点击（悬浮列出全部标签名） */}
+            {(data.tags?.length ?? 0) > 0 && (
+                <span className="seqtk-tag-list" data-tip={data.tags!.join(" ")}>
+                    {data.tags!.map((tag, i) => (
+                        <span key={i} className="seqtk-tag-badge">{tag}</span>
+                    ))}
+                </span>
+            )}
+
             {data.bodyPreview && (
                 <span className="seqtk-body-preview" data-tip={data.bodyPreviewTooltip}>
                     {data.bodyPreview}

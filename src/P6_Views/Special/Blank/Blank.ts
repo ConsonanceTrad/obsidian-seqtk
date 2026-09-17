@@ -5,10 +5,10 @@
  * 展示标题、描述与规划要点（内容摘录自操作口目录）。
  */
 
-import {AutoView} from "../../P1_Register/View";
-import {AutoRegister} from "../../P1_Register/Comd";
-import type SeqtkPlugin from "../../main";
-import type {PanelEntry} from "../panelRegistry";
+import {AutoView} from "../../../P1_Register/View";
+import {AutoRegister} from "../../../P1_Register/Comd";
+import type SeqtkPlugin from "../../../main";
+import type {PanelEntry} from "../../panelRegistry";
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 
 export const VIEW_TYPE_EXEC_DESIGN = 'seqtk-exec-design';
@@ -29,7 +29,7 @@ interface PlaceholderOptions {
 export class PlaceholderView extends ItemView {
     /** 面板目录条目（占位：智能协作尚无独立视图文件） */
     static metas: PanelEntry[] = [
-        {viewType: VIEW_TYPE_COLLAB, title: '智能协作', icon: 'bot', description: '智能体身份与工作流记录：工作控制、记忆审查、术语管理。', category: '节点通用', placeholder: true},
+        {viewType: VIEW_TYPE_COLLAB, title: '智能协作', icon: 'bot', description: '智能体工作控制。', category: '节点通用', placeholder: true},
     ];
 
     /** 视图工厂：由 Register_View 以 (leaf) 调用；按 viewType 提供占位内容 */

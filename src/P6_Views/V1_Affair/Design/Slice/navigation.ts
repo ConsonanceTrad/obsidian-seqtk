@@ -23,8 +23,8 @@
 import { NodePickModal } from '../../../../P7_Render/Structure/S2_Modal/NodePickModal';
 import { canBeChildOf } from '../../../../P7_Render/Composition/C2_Tree/drag';
 import { NODE_KIND_LABELS, isFrameworkKind } from '../../../../P4_Nodes/NodeFacade';
-import { VIEW_TYPE_DELEGATED_TREE } from '../../DelegatedTree';
-import { VIEW_TYPE_HUB_SIDE } from '../../../V0_Common/Hub';
+import { VIEW_TYPE_DELEGATED_TREE } from '../../../Special/Delegate/DelegatedTree';
+import { VIEW_TYPE_HUB_SIDE } from '../../../Special/Hub/Hub';
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
 import { moveChildAcrossParents } from './drag';
 import { setNodeState } from './actions';

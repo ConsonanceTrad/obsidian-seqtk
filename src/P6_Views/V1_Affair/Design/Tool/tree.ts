@@ -48,6 +48,24 @@ export function buildFrameworkTree(pipe: DataPipe, topOrder: string[]): TreeNode
   });
 }
 
+/**
+ * 模板框架树：顶级 = 无框架父节点的模板框架，递归子框架
+ *
+ * 与 buildFrameworkTree 只差取哪些 kind（设计视图左栏要事务框架，模板模式要模板框架）；
+ * 层级与子级排序口径一致（子级按父 follows，顶级按创建时间 —— 模板库不参与
+ * settings.topFrameworkOrder 那套顶级排序）。
+ */
+export function buildTemplateTree(pipe: DataPipe): TreeNode[] {
+  const roots: TreeNode[] = [];
+  for (const { nodeId, data } of pipe.GET_ByKind(NODE_KIND.TEMP)) {
+    const parent = pipe.GET_Parent(nodeId);
+    const parentData = parent ? pipe.GET_Node(parent.nodeId) : undefined;
+    if (parentData && isFrameworkKind(parentData.kind)) continue;
+    roots.push(buildFrameworkNode(pipe, nodeId, data));
+  }
+  return roots.sort((a, b) => (a.data.create ?? '').localeCompare(b.data.create ?? ''));
+}
+
 /** 递归构建框架子树（仅框架类型子节点，排除信息框架；按 nodeId 去重防重复渲染） */
 export function buildFrameworkNode(pipe: DataPipe, nodeId: string, data: SeqtkNode): TreeNode {
   const seen = new Set<string>();
@@ -57,24 +75,6 @@ export function buildFrameworkNode(pipe: DataPipe, nodeId: string, data: SeqtkNo
       !!c.data && isFrameworkKind(c.data.kind) && c.data.kind !== NODE_KIND.INFO && !seen.has(c.nodeId) && (seen.add(c.nodeId), true))
     .map((c) => buildFrameworkNode(pipe, c.nodeId, c.data));
   return { nodeId, data, children: sortByFollows(data, children) };
-}
-
-/** 构想树（顶级 = 所有 concept） */
-export function buildConceptTree(pipe: DataPipe): TreeNode[] {
-  const roots: TreeNode[] = [];
-  for (const { nodeId, data } of pipe.GET_ByKind(NODE_KIND.CONCEPT)) {
-    roots.push(buildNode(pipe, nodeId, data));
-  }
-  return roots.sort((a, b) => (a.data.create ?? '').localeCompare(b.data.create ?? ''));
-}
-
-/** 清单树（顶级 = 所有 checklist） */
-export function buildChecklistTree(pipe: DataPipe): TreeNode[] {
-  const roots: TreeNode[] = [];
-  for (const { nodeId, data } of pipe.GET_ByKind(NODE_KIND.CHECK)) {
-    roots.push(buildNode(pipe, nodeId, data));
-  }
-  return roots.sort((a, b) => (a.data.create ?? '').localeCompare(b.data.create ?? ''));
 }
 
 /** 递归构建树节点（所有类型子节点，按父节点 follows 顺序排序；按 nodeId 去重防重复渲染） */

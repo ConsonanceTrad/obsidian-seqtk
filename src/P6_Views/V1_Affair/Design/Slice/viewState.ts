@@ -1,7 +1,7 @@
 /**
  * design/viewState — 设计视图状态构建切片
  *
- * 从 DesignView 拆出的「节点 → 视图状态」计算：左栏框架树、右栏框架内容 / 全部事务总览，
+ * 从 DesignView 拆出的「节点 → 视图状态」计算：左栏框架树、右栏框架内容，
  * 以及行覆盖信息（重命名 / 拖拽中 / 落点提示）。纯读，不写任何数据面。
  *
  * 约定:
@@ -17,8 +17,6 @@
 
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
 import {
-    buildChecklistTree,
-    buildConceptTree,
     buildFrameworkTree,
     buildNode,
     sortByFollows,
@@ -55,14 +53,14 @@ export function buildState(view: DesignView): DesignViewState {
     base.leftEmpty = roots.length === 0 ? '暂无框架，右键空白处新建' : undefined;
     base.leftItems = buildItems(view, roots, 'left');
 
-    // 右栏：选中框架的节点树 / 全部事务总览
+    // 右栏：选中框架的节点树；没选中（或选中框架已消失）就只给一句提示
     if (view.selectedFrameworkId === null) {
-        return buildOverviewOrPlaceholder(view, base);
+        return buildPlaceholder(base);
     }
     const framework = view.pipe.GET_Node(view.selectedFrameworkId);
     if (!framework) {
         view.selectedFrameworkId = null;
-        return buildOverviewOrPlaceholder(view, base);
+        return buildPlaceholder(base);
     }
 
     base.rightMode = 'framework';
@@ -91,30 +89,16 @@ export function buildState(view: DesignView): DesignViewState {
     return base;
 }
 
-/** 未选中框架：总览（入口开启时）或占位提示 */
-function buildOverviewOrPlaceholder(view: DesignView, base: DesignViewState): DesignViewState {
-    if (!view.settings.showAllOverview) {
-        base.rightEmpty = '在左侧选择框架以查看内容';
-        return base;
-    }
-    const concept = buildConceptTree(view.pipe);
-    const checklist = buildChecklistTree(view.pipe);
-    if (concept.length === 0 && checklist.length === 0) {
-        base.rightEmpty = '暂无事务节点\n在右栏空白处右键新建';
-        return base;
-    }
-    base.rightMode = 'overview';
-    base.overview = {
-        concept: buildItems(view, concept, 'right'),
-        checklist: buildItems(view, checklist, 'right'),
-    };
+/** 未选中框架：只看提示语，右栏没有别的内容可展示 */
+function buildPlaceholder(base: DesignViewState): DesignViewState {
+    base.rightEmpty = '在左侧选择框架以查看内容';
     return base;
 }
 
 /**
  * 把（已展开状态过滤后的）树转成组件视图模型
  *
- * `rootParentId`：根级行的父 id —— 左栏与总览传空串（顶级无父），
+ * `rootParentId`：根级行的父 id —— 左栏传空串（顶级无父），
  * 右栏选中框架的树必须传该框架 id，否则根级行被当成无父节点（不可拖、落点判定失效）。
  */
 function buildItems(view: DesignView, roots: TreeNode[], side: TreeSide, rootParentId = ''): TreeNodeItem[] {

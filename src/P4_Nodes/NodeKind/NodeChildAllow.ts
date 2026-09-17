@@ -31,10 +31,6 @@ const CHILD_KINDS_BY_PARENT: Partial<Record<NodeKindValue, NodeKindValue[]>> = {
     AFFAIR_PROCESS: [
         'AFFAIR_PROCESS'
     ],
-    AFFAIR_PROJECT: [
-        'AFFAIR_PROJECT',
-        'AFFAIR_EVENT'
-    ],
     AFFAIR_CHECK: [
         'AFFAIR_ITEM'
     ],
