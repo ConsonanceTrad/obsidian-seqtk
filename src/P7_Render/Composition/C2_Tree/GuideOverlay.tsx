@@ -8,8 +8,11 @@
  * 挂在容器末尾：线绘制在行之上，但列位置落在缩进空白处，不会压到行内容；这样行
  * hover 的背景也不会把线切断。`pointer-events: none` 保证不挡交互。
  *
- * 除了画线，它还负责把「父列相对本行的偏移」写回行的 CSS 变量（--seqtk-parent-x），
- * 供转角方块定位 —— 同一个几何量不重复计算，也就不会两处各说各话。
+ * 除了线，本层还负责两样东西（都用同一套实测几何，不另算一遍）：
+ * - 转角方块
+ * - 顶级展开行的「粗黑段」：它原先是行的 ::before，但浮层绘制在行之上（有意：线要盖住行的
+ *   hover 背景），那条 1px 细线正好压在黑段中段把它冲淡，看上去只剩半条宽。
+ *   移进本层后与细线同一坐标系，且画在细线之后，粗细过渡才是真正的"粗接细"。
  *
  * 重绘时机：
  * - 每次组件提交后同步重绘（useLayoutEffect 无依赖）——行增删/展开折叠后必定已经提交
@@ -18,7 +21,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { NodeLineMetrics } from "../C1_NodeLine/NodeLine";
-import { COLLAPSE_ATTR, DEPTH_ATTR, LAST_ATTR, TREE_ROW_ATTR } from "../C1_NodeLine/NodeLine";
+import { COLLAPSE_ATTR, DEPTH_ATTR, GUIDE_INSET, LAST_ATTR, TREE_ROW_ATTR } from "../C1_NodeLine/NodeLine";
 import { GET_GuideGeometry, GET_GuidePath, type GuideRowInput } from "./TreeGuides";
 
 export interface GuideOverlayProps {
@@ -33,6 +36,17 @@ const COLLAPSE_BOX = 4;
 const BOX_INSET = 2;
 /** 方块半径，用于把中心对准竖线 */
 const BOX_HALF = COLLAPSE_BOX / 2;
+
+/** 粗黑段宽度（px）；它比 1px 细线粗一档，左端 = GUIDE_INSET − LEAD_HALF 才能与细线同心 */
+const LEAD_WIDTH = 2;
+const LEAD_HALF = LEAD_WIDTH / 2;
+
+/** 顶级展开行的粗黑段（容器坐标系：左端 x、顶边 y、高度） */
+interface GuideLead {
+    x: number;
+    y: number;
+    h: number;
+}
 
 /**
  * 自反馈闸门：时间窗口与窗口内允许的重绘次数
@@ -59,19 +73,30 @@ export function SAME_Boxes(a: { x: number; y: number }[], b: { x: number; y: num
     return true;
 }
 
+/** 两次黑段列表是否等价（比位置与高度）—— 同 SAME_Boxes 的理由：redraw 每次都会新建数组 */
+function SAME_Leads(a: GuideLead[], b: GuideLead[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].x !== b[i].x || a[i].y !== b[i].y || a[i].h !== b[i].h) return false;
+    }
+    return true;
+}
+
 export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
     const [d, setD] = useState("");
     /** 转角方块（容器坐标系左上角） */
     const [boxes, setBoxes] = useState<{ x: number; y: number }[]>([]);
+    /** 顶级展开行的粗黑段 */
+    const [leads, setLeads] = useState<GuideLead[]>([]);
     const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
     const rafRef = useRef(0);
     /** 重绘闸门的窗口计数（见 redraw 入口） */
     const guardRef = useRef({ windowStart: 0, count: 0, warned: false });
 
     /**
-     * 量行 → 算 path / 方块 → 写状态
+     * 量行 → 算 path / 方块 / 黑段 → 写状态
      *
-     * 三类状态写入都必须做到「值不变就不触发重渲」：本函数由无依赖的 useLayoutEffect
+     * 各类状态写入都必须做到「值不变就不触发重渲」：本函数由无依赖的 useLayoutEffect
      * 驱动，每次提交后都跑，一旦某类状态每次都判为「变了」，就会重渲 → 再 redraw 的死循环。
      * 字符串（path）由 React 自己按值比较；对象与数组须自行比较后复用旧引用。
      */
@@ -103,10 +128,11 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
 
         const rows = Array.from(container.querySelectorAll<HTMLElement>(`[${TREE_ROW_ATTR}]`));
         if (rows.length === 0) {
-            // 空树：线和方块都要收干净 —— 只清 path 会留下上一个框架的转角方块
-            // （渲染条件看的是 d 与 boxes 两者，boxes 非空就还会画出那一层 SVG）
+            // 空树：线、方块、黑段都要收干净 —— 只清 path 会留下上一个框架的方块与黑段
+            // （渲染条件看的是三者，任一非空就还会画出那一层 SVG）
             setD("");
             setBoxes((prev) => (prev.length === 0 ? prev : []));
+            setLeads((prev) => (prev.length === 0 ? prev : []));
             return;
         }
 
@@ -131,25 +157,29 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
 
         const geo = GET_GuideGeometry(input, metrics);
         const nextBoxes: { x: number; y: number }[] = [];
+        const nextLeads: GuideLead[] = [];
         input.forEach((row, i) => {
             const g = geo[i];
             const el = rows[i];
 
-            // 注：此处曾把「父列竖线相对本行的水平偏移」写成行上的 CSS 变量 --seqtk-parent-x。
-            // 该变量在样式表里已无任何读取方，留着等于「在重绘里改布局」——布局一变又要重绘，
-            // 正是 React #205/#185 那类无限更新的燃料（表现为拖拽分栏把手时整块视图闪退）。故移除。
-
             // 转角方块：位置本就是这个几何量的一部分，由浮层统一画，
             // 免得行自己再算一遍出现两个答案。
             const kind = el.getAttribute(COLLAPSE_ATTR);
-            if (!kind) return;
             if (kind === "top") {
                 // 顶级行：方块在行左上角
                 nextBoxes.push({ x: row.left + BOX_INSET, y: row.top + BOX_INSET });
-            } else if (g && g.parentX !== null) {
+            } else if (kind === "mid" && g && g.parentX !== null) {
                 // 展开祖先链内的行：方块坐在父列竖线上（行中心高度）
                 nextBoxes.push({ x: g.parentX - BOX_HALF, y: g.midY - BOX_HALF });
             }
+
+            // 粗黑段：只给顶级（depth 0）里"展开且不在展开祖先链内"的行 ——
+            // 判据与原先那条 CSS 选择器完全一致（.seqtk-row-expanded:not(.seqtk-row-in-expanded)）。
+            // 中心对齐细线（GUIDE_INSET），所以左端要退半个自宽。
+            if (row.depth !== 0) return;
+            if (!el.classList.contains("seqtk-row-expanded")) return;
+            if (el.classList.contains("seqtk-row-in-expanded")) return;
+            nextLeads.push({ x: row.left + GUIDE_INSET - LEAD_HALF, y: row.top, h: row.height });
         });
         //
         // 内容没变就复用旧数组。
@@ -160,6 +190,7 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
         // React 的「Maximum update depth exceeded」（错误 #185）。
         //
         setBoxes((prev) => (SAME_Boxes(prev, nextBoxes) ? prev : nextBoxes));
+        setLeads((prev) => (SAME_Leads(prev, nextLeads) ? prev : nextLeads));
         const w = container.clientWidth;
         const h = Math.max(container.scrollHeight, container.clientHeight);
         setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
@@ -194,11 +225,23 @@ export function GuideOverlay({ containerRef, metrics }: GuideOverlayProps) {
         };
     }, [containerRef, redraw]);
 
-    if (!d && boxes.length === 0) return null;
+    if (!d && boxes.length === 0 && leads.length === 0) return null;
 
     return (
         <svg className="seqtk-guides" aria-hidden="true" width={size.w} height={size.h}>
             <path d={d} />
+            {/* 粗黑段画在细线**之后**：由粗段盖住细线，交替处才是「粗接细」；
+                反过来的话细线会把黑段中段冲淡（它在 DOM 层时就是这样"只剩半条"的） */}
+            {leads.map((l, i) => (
+                <rect
+                    key={`lead-${i}`}
+                    className="seqtk-guide-lead"
+                    x={l.x}
+                    y={l.y}
+                    width={LEAD_WIDTH}
+                    height={l.h}
+                />
+            ))}
             {boxes.map((b, i) => (
                 <rect
                     key={i}
