@@ -3,7 +3,7 @@
 >[!CAUTION] 
 >The interface language of this plugin is Chinese. There are plans for multi-language adaptation, but it has not been implemented yet.
 
-An Obsidian project management plugin designed for long-term and complex tasks. **
+**An Obsidian project management plugin designed for long-term and complex tasks.**
 Write "one thing" as an independent node document, organize and connect different nodes through subordination, status and basis to form a combined project, and then let the process and script push the next task to be done to you according to the rules you set without immediate decision-making.
 
 This is suitable for the needs of "long-term, multi-parallel projects": papers, long-term development, event planning, research tracking, and decision-making processes that require traceability.
