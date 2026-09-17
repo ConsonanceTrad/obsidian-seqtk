@@ -16,19 +16,21 @@
 }
 
 /* 展开态：仅顶级（depth 0）展开行保留加粗指示——画一段竖向粗黑段，
-   位置与引导线竖线同一基准（x = 2px，见 P7_Render/.../NodeLine.ts 的 GUIDE_INSET，
-   两处改动须同步），作为子树第 1 列竖线的起点，粗段接细线自然过渡；
+   位置与引导线竖线同一基准（见 P7_Render/.../NodeLine.ts 的 GUIDE_INSET，两处改动须同步），
+   作为子树第 1 列竖线的起点，粗段接细线自然过渡；
    子节点行的「有子」信息已由转角方块与可见子树表达，
    故以 :not(.seqtk-row-in-expanded) 排除（非顶级行均带该类）。
-   卡片内外基准一致：竖线对所有层级一视同仁，黑段因此只需要这一个值。 */
+   粗细与对中：细线为 1px、以路径为中心（覆盖 x±0.5，中心 = 行左缘 + GUIDE_INSET）；
+   黑段粗一档（3px），左端因此取 GUIDE_INSET − 1.5px = 0.5px，中心才与细线重合 ——
+   若按 GUIDE_INSET 直接写 left: 2px，黑段会整体偏右、粗接细处看着接不上。 */
 .seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before,
 .seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before {
   content: "";
   position: absolute;
-  left: 2px;
+  left: 0.5px;
   top: 0;
   bottom: 0;
-  width: 2px;
+  width: 3px;
   background: rgb(0 0 0 / 0.67);
   pointer-events: none;
 }
