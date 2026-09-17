@@ -7,6 +7,7 @@ import {
     type ConfirmLevel,
     type DeleteChildrenMode,
 } from "../P4_Nodes/NodeField/DeletionPolicy";
+import {APPLY_KindLabels} from "../P4_Nodes/NodeKind/NodeLabel";
 
 /** 插件配置 */
 /** 委托落点：借用中控台容器，或独立视图 */
@@ -48,6 +49,14 @@ export interface PluginSettings {
 
     /** 是否在事务设计左侧栏显示「全部事务」入口（默认隐藏） */
     showAllOverview: boolean;
+
+    /**
+     * 类型显示名覆盖：key = 类型值（NodeKindValue），value = 用户改的名字
+     *
+     * 只存被改过的项 —— 未列出的键、空串都表示"用默认名"（见 P4_Nodes/NodeKind/NodeLabel）。
+     * 这是**显示层**配置：节点文件里存的是 ASCII 类型值、文本树用类型短码，都不受影响。
+     */
+    kindLabels: Record<string, string>;
 
     /** 左侧栏顶级框架顺序（nodeId 数组；未列入的按创建时间排尾部） */
     topFrameworkOrder: string[];
@@ -91,6 +100,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     stateRules: DEFAULT_STATE_RULES.map((r) => ({ ...r, from: [...r.from] })),
     ...DEFAULT_DESTRUCTIVE_POLICY,
     showAllOverview: false,
+    kindLabels: {},
     topFrameworkOrder: [],
     leftPaneWidth: 0,
     expandedFrameworkIds: [],
@@ -106,9 +116,13 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 
 export async function Load_Setting(p: SeqtkPlugin) {
     p.settings = Object.assign({}, DEFAULT_SETTINGS, await p.loadData());
+    // 读盘后立刻把用户改过的类型名刷进全局标签表 —— 界面各处读的正是那张表
+    APPLY_KindLabels(p.settings.kindLabels);
 }
 
 export async function Save_Setting(p: SeqtkPlugin) {
+    // 落盘前同样刷一次：保证"存下来的"与"界面上生效的"始终是同一份名字
+    APPLY_KindLabels(p.settings.kindLabels);
     await p.saveData(p.settings);
 }
 
