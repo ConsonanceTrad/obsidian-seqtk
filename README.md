@@ -1,4 +1,6 @@
-# SeqTK English README (Translated by Google)
+# README
+
+## SeqTK English README (Translated by Google)
 
 >[!CAUTION] 
 >The interface language of this plugin is Chinese. There are plans for multi-language adaptation, but it has not been implemented yet.
@@ -15,7 +17,7 @@ This is suitable for the needs of "long-term, multi-parallel projects": papers, 
 
 ---
 
-## What Problems Does It Solve
+### What Problems Does It Solve
 
 Other personal task management tools often struggle to maintain long-term tasks:
 
@@ -35,7 +37,7 @@ All three are within the same node system and can be referenced, re-arranged as 
 
 ---
 
-## Design Orientation
+### Design Orientation
 
 - **Nodes are Documents.** Each node represents a Markdown document in the repository. You can leave the plugin at any time and read, search, synchronize, and perform version control using the native methods of Obsidian - the plugin is not the gatekeeper of the data.
 - **Relationships are Written in the Document.** Dependencies, sequence, status, evidence are all recorded within the node document itself. The plugin maintains only a **query cache that can be rebuilt at any time**.
@@ -45,9 +47,9 @@ All three are within the same node system and can be referenced, re-arranged as 
 
 ---
 
-## Core Concepts
+### Core Concepts
 
-### Nodes and Categories
+#### Nodes and Categories
 
 Nodes are classified into five categories based on their functions, and each category further includes specific types (these specific types are what you are given when creating a node):
 
@@ -59,7 +61,7 @@ Nodes are classified into five categories based on their functions, and each cat
 | Operation | Edit log, Behavior log, Process status | Automatic recording: what changes occurred when, where the process reached |
 | Script | Process script, Execution script, Query script | Write rules as executable things, let the process advance automatically according to time or events |
 
-### Hierarchy and Dependency
+#### Hierarchy and Dependency
 
 There are clear dependencies and sequences between nodes, so "which stage an event belongs to and where it ranks" is part of the structure itself and does not need to be hinted at through labels or naming conventions:
 
@@ -67,17 +69,17 @@ There are clear dependencies and sequences between nodes, so "which stage an eve
 - Transactions are decomposed layer by layer along the chain (concept → direction → goal → process; list → item), each layer only accommodating the type it should, and moving to the wrong position will be blocked;
 - There is a sequence between peers, and dragging directly can re-arrange; dragging will automatically maintain the order and the records of dependency on both sides, and there will be no "it seems moved but actually didn't change" misalignment.
 
-### Status
+#### Status
 
 Transaction nodes have statuses: **planning / in progress / completed / abandoned**. There are also **normal / suspended / blocked** as additional statuses to express "in progress but temporarily unable to move forward".
 
 Status can be propagated between parent and child nodes according to the rules you configure: when the parent node enters a certain state, it changes the child nodes accordingly, or when all descendants meet the requirements, the result is aggregated upwards. Rules are configured in the settings, and you can also leave them unconfigured. This is the solution for the "invisible status" side - **progress grows automatically from the structure, without the need to maintain a separate progress table manually**.
 
-### Evidence
+#### Evidence
 
 Evidence is an independent node attached to transaction nodes (object, condition, information, state), not a paragraph of text in the main body. The advantage is that it can be retrieved separately, can be reused by multiple transactions, can be connected across transactions, and can be viewed as a network of relationships in the "Evidence Overview". External materials (web links, library files, timestamp documents) are hung on nodes separately, and do not interfere with the internal relationships.
 
-### Templates, Archiving, and Recycling
+#### Templates, Archiving, and Recycling
 
 - **Templates**: Any subtree can be "saved as a template", and then applied to other frameworks; template libraries are uniformly managed in the "Template Mode".
 - **Archiving**: Things that are no longer active but still want to keep can be archived, and they will no longer disturb you in the default view; the handling method for descendants can be configured during archiving.
@@ -85,11 +87,11 @@ Evidence is an independent node attached to transaction nodes (object, condition
 
 ---
 
-## Function Overview
+### Function Overview
 
 All panels of the plugin are listed by chapters in the "Control Console", and they can also be opened directly using commands.
 
-### Transaction Design
+#### Transaction Design
 
 | Panel | Function | Status |
 | --- | --- | --- |
@@ -105,7 +107,7 @@ Several capabilities in the transaction design are worth mentioning separately:
 - **Copying Subtrees** - Copy to the same format of indented text, and it can be re-imported by pasting elsewhere.
 - **Delegating Framework Tree** - Delegate the left column framework tree to the sidebar (using the side bar of the central control panel or an independent view), and the expansion and selection of both sides remain synchronized.
 
-### Rule Design
+#### Rule Design
 
 | Panel | Function | Status |
 | --- | --- | --- |
@@ -118,7 +120,7 @@ Several capabilities in the transaction design are worth mentioning separately:
 
 The process draft does not have dedicated grammar or reminders; it only focuses on setting the time, and the actual advancement is handled by the scripts in the process design.
 
-### General Nodes
+#### General Nodes
 
 | Panel | Function | State |
 | --- | --- | --- |
@@ -129,7 +131,7 @@ The process draft does not have dedicated grammar or reminders; it only focuses 
 
 ---
 
-## Typical Usage
+### Typical Usage
 
 **Start with a draft.** Write down your thoughts in a bulleted list with indentation in your mind, select it, use the command or right-click menu to extract it into a node group, and then continue adjusting the structure in the transaction design: remove what should be removed, attach evidence where necessary, set the status as required.
 
@@ -143,7 +145,7 @@ The process draft does not have dedicated grammar or reminders; it only focuses 
 
 ---
 
-## Data and Security
+### Data and Security
 
 - **Your nodes are the Markdown documents in your library.** Uninstalling plugins, changing devices, or using Git for version control do not affect them.
 - **Plugins only read and write within their own directories.** The default data root directory is `_Root/_Plugin/SeqTK`, and it can be changed to any location in the settings; plugins will not access notes outside this directory.
@@ -153,7 +155,7 @@ The process draft does not have dedicated grammar or reminders; it only focuses 
 
 ---
 
-## Installation
+### Installation
 
 1. Prepare three files: `main.js`, `manifest.json`, and `styles.css` (these are directly usable in the `output/` directory of the repository).
 2. Place them in the `<your-library>/.obsidian/plugins/seqtk/` directory within your library.
@@ -163,7 +165,7 @@ Requirements: Obsidian 1.13.0 or higher. Both desktop and mobile versions are co
 
 ---
 
-## Quick Start
+### Quick Start
 
 1. Open "Settings → SeqTK" and change the **data root folder** to the desired location (default is `_Root/_Plugin/SeqTK`).
 2. Open the **command panel** and go to the **control panel**. It will list all the panels.
@@ -176,7 +178,7 @@ When you need to reuse the structure, use "Save as template". For batch processi
 
 ---
 
-## Boundaries and Current State
+### Boundaries and Current State
 
 - This is a specialized management tool designed for **long-term complex tasks**, not a general to-do list tool. Short tasks without hierarchy, evidence, or traceability are not suitable for it; instead, it becomes cumbersome.
 - The panels of "Intelligent Collaboration", "Log Review", "Execution Binding", "Execution Design", and "Query Design" are still under planning and will be marked in the control panel.
@@ -185,11 +187,11 @@ When you need to reuse the structure, use "Save as template". For batch processi
 
 ---
 
-## Delving into the Source Code
+### Delving into the Source Code
 
 This README only covers usage and design orientation. To understand the layered structure, the boundaries of each layer's responsibilities, and development conventions, refer to `src/README.md` and the documentation for each layer; the slicing organization rules for the design view can be found in `src/P6_Views/Views.md`.
 
-# SeqTK 中文 README
+## SeqTK 中文 README
 
 **为长期复杂任务而做的 Obsidian 项目管理插件。** 
 把「一件事」写成独立节点文档，通过从属、状态和依据组织与串联不同节点，形成组合项目，再让流程与脚本按你定下的规则不需要即时决策的向你推送下一件要做的事。
@@ -203,7 +205,7 @@ This README only covers usage and design orientation. To understand the layered 
 
 ---
 
-## 它解决什么问题
+### 它解决什么问题
 
 其他个人任务管理工具，长线任务通常会难以维护：
 
@@ -223,7 +225,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 设计取向
+### 设计取向
 
 - **节点即文档。** 每个节点就是库里的一篇 Markdown 文档。你随时可以离开插件，用 Obsidian 原生方式阅读、搜索、同步、做版本控制——插件不是数据的看门人。
 - **关系写进文档，不另立私库。** 从属、顺序、状态、证据都记录在节点文档自身，插件另外维护的只是一份**可随时重建**的查询缓存。
@@ -233,9 +235,9 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 核心概念
+### 核心概念
 
-### 节点与分类
+#### 节点与分类
 
 节点按用途分五类，每一类下面再分具体类型（新建时给你的就是这些具体类型）：
 
@@ -247,7 +249,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 | 运行 | 编辑日志、行为日志、流程状态 | 自动留痕：什么时候发生了什么改动、流程跑到哪一步 |
 | 脚本 | 流程脚本、执行脚本、查询脚本 | 把规则写成可执行的东西，让流程按时间或事件自动推进 |
 
-### 层级与从属
+#### 层级与从属
 
 节点之间有明确的从属与顺序，所以「一件事属于哪个阶段、排在第几位」是结构本身，不需要靠标签或命名约定去暗示：
 
@@ -255,17 +257,17 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 - 事务沿链条层层拆解（构想 → 方向 → 目标 → 工序；清单 → 事项），每一层只容纳它该容纳的类型，落错位置会被拦住；
 - 同级之间有先后顺序，直接拖动即可重排；拖动会自动维护顺序与从属两边的记录，不会出现「看着移了、实际没变」的错位。
 
-### 状态
+#### 状态
 
 事务类节点带状态：**规划 / 进行 / 完成 / 放弃**。另有**正常 / 搁置 / 阻塞**这组附加状态，用来表达「在做、但暂时推不动」。
 
 状态可以按你配置的规则在父子之间传播：父节点进入某状态时把子节点一起改写，或子节点全部达标时向上聚合结果。规则在设置里配置，也可以完全不配。这就是「状态不可见」那一侧的解法——**进度从结构里自动长出来，不用手工维护一份进度表**。
 
-### 证据
+#### 证据
 
 证据是挂在事务节点上的独立节点（对象、条件、信息、状态），不是正文里的一段文字。好处是它可以被单独检索、可以被多个事务复用、可以跨事务连接，也可以在「证据总览」里作为一张关系网整体浏览。外部材料（网页链接、库内文件、时间戳文档）作为「外部信息源」单独挂在节点上，与内部关系互不干扰。
 
-### 模板、归档与回收
+#### 模板、归档与回收
 
 - **模板**：任何一棵子树都可以「存为模板」，之后套用到别的框架上；模板库在「模板模式」里统一管理。
 - **归档**：不再活跃但还想留着的东西归档掉，默认视图里不再打扰你；归档时后代的处理方式可以配置。
@@ -273,11 +275,11 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 功能一览
+### 功能一览
 
 插件所有面板都在「中控台」里按章节列出，也可以直接用命令打开。
 
-### 事务设计
+#### 事务设计
 
 | 面板 | 作用 | 状态 |
 | --- | --- | --- |
@@ -293,7 +295,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 - **复制子树** —— 复制成同样格式的缩进文本，粘到别处就能再导入。
 - **委托框架树** —— 把左栏框架树委托到侧栏（借用中控台侧栏，或独立视图），两侧的展开与选中保持同步。
 
-### 规则设计
+#### 规则设计
 
 | 面板 | 作用 | 状态 |
 | --- | --- | --- |
@@ -306,7 +308,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 流程草稿刻意不做专属语法、不涉及提醒：它只负责把时间敲定，真正的推进交给流程设计里的脚本。
 
-### 节点通用
+#### 节点通用
 
 | 面板 | 作用 | 状态 |
 | --- | --- | --- |
@@ -317,7 +319,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 典型用法
+### 典型用法
 
 **从一段草稿开始。** 把脑子里的想法按缩进写成列表，选中它，用命令或右键菜单提取成节点组，然后在事务设计里继续调整结构：该拆的拆、该挂证据的挂证据、该定状态的定状态。
 
@@ -331,7 +333,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 数据与安全
+### 数据与安全
 
 - **你的节点就是你库里的 Markdown 文档。** 卸载插件、换设备、用 Git 做版本控制都不影响它们。
 - **插件只在自己管的目录内读写。** 数据根目录默认在 `_Root/_Plugin/SeqTK`，可以在设置里改成任意位置；插件不会碰这个目录之外的笔记。
@@ -341,7 +343,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 安装
+### 安装
 
 1. 准备三个文件：`main.js`、`manifest.json`、`styles.css`（仓库的 `output/` 目录里就是可直接使用的这一套）。
 2. 在你的库中把它们放进 `<你的库>/.obsidian/plugins/seqtk/` 目录。
@@ -351,7 +353,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 快速上手
+### 快速上手
 
 1. 打开「设置 → SeqTK」，把**数据根文件夹**改成你希望的位置（默认 `_Root/_Plugin/SeqTK`）。
 2. 用命令面板打开**中控台**，它会列出全部面板。
@@ -363,7 +365,7 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 边界与现状
+### 边界与现状
 
 - 这是一套特化的针对**面向长期复杂任务**设计管理工具，不是通用的待办清单工具。用不上层级、证据、留痕的短任务，用它反而繁琐。
 - 「智能协作」「日志阅览」「执行绑定」「执行设计」「查询设计」几个面板还在规划中，中控台里会标出来。
@@ -372,6 +374,6 @@ SeqTK 的做法是把这三件事各归其位，彻底以节点文件形式进�
 
 ---
 
-## 深入源码
+### 深入源码
 
 本 README 只讲用法与设计取向。要了解分层结构、各层职责边界与开发约定，见 `src/README.md` 与各层说明文档；设计视图的切片组织规则见 `src/P6_Views/Views.md`。
