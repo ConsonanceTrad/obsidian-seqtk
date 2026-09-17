@@ -2272,13 +2272,14 @@ button.seqtk-open-btn {
   box-shadow: 0 0 0 1px var(--text-error);
 }
 
-/* 类型名表（设置子页的命令式部分）：同样整体竖向排布 ——
-   setting-item 默认是横向 flex，说明 / 分组标题 / 各行直接追加进去会被并排成一行 */
+/* 「类型外观」子页（设置里的命令式部分）：整体竖向排布 ——
+   setting-item 默认是横向 flex，说明 / 分组标题 / 各行直接追加进去会被并排成一行。
+   类名沿用 kind-labels（历史名），内容已从"类型名"扩到"类型名 + 配色" */
 .seqtk-settings-kind-labels {
   display: block;
 }
 
-/* 分组标题（框架 / 事务 / 证据 / 运行 / 脚本）：与上一组拉开，与自己的首行贴近 */
+/* 分组标题（显示名 / 配色两段下的各组，如框架 / 事务 / 证据…）：与上一组拉开，与自己的首行贴近 */
 .seqtk-settings-kind-labels h4 {
   margin: 1.2em 0 0.2em;
 }
