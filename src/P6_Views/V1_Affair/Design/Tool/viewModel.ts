@@ -102,7 +102,9 @@ export function buildFrameLine(
         depth: f.depth,
         kind,
         category: getCategoryOf(kind),
-        label: kind === NODE_KIND.TRANS ? "框架" : NODE_KIND_LABELS[kind],
+        // 框架类（不只是事务框架）在界面上统一叫「框架」：三个框架类型的差别只在
+        // 出现位置与用途，不体现在名字上（也正因如此它们不进设置页的类型名清单）。
+        label: isFrameworkKind(kind) ? "框架" : NODE_KIND_LABELS[kind],
         desc: data.desc,
         bodyPreview: body || undefined,
         bodyPreviewTooltip: body ? tooltipBodyText(body) : undefined,
@@ -134,7 +136,8 @@ export function buildNodeLine(
     const kind = data.kind;
 
     let label: string = NODE_KIND_LABELS[kind];
-    if (kind === NODE_KIND.TRANS) {
+    if (isFrameworkKind(kind)) {
+        // 同左栏：框架类一律显示「框架」（见 buildFrameLine 的说明）
         label = "框架";
     } else if (kind === NODE_KIND.EVENT) {
         label = EVENT_NATURE_LABELS[(data as { nature?: EventNature }).nature ?? "temp"];

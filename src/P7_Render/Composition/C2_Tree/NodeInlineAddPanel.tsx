@@ -14,7 +14,7 @@
 
 import { GET_KindClass } from "../../../P4_Nodes/NodeKind/KindColors";
 import { useEffect, useRef, useState } from "react";
-import { NODE_KIND, NODE_KIND_LABELS } from "../../../P4_Nodes/NodeFacade";
+import { NODE_KIND_LABELS, isFrameworkKind } from "../../../P4_Nodes/NodeFacade";
 import type { NodeKindValue } from "../../../P4_Nodes/NodeKind/NodeKind";
 import { GET_LineIndent, type NodeLineMetrics } from "../C1_NodeLine/NodeLine";
 
@@ -70,7 +70,8 @@ export function NodeInlineAddPanel({
     };
 
     // 类型预览与行徽章同色：统一走 KindColors 的类别 class（单一来源，覆盖全部大类）
-    const isFramework = current === NODE_KIND.TRANS;
+    // 框架类（不只是事务框架）在界面上统一叫「框架」—— 与行标签的判断口径一致
+    const isFramework = isFrameworkKind(current);
     const catCls = ` ${GET_KindClass(current)}`;
     const previewText = isFramework ? "框架" : NODE_KIND_LABELS[current];
 
@@ -95,7 +96,7 @@ export function NodeInlineAddPanel({
                     >
                         {kinds.map((k) => (
                             <option key={k} value={k}>
-                                {NODE_KIND_LABELS[k]}
+                                {isFrameworkKind(k) ? "框架" : NODE_KIND_LABELS[k]}
                             </option>
                         ))}
                     </select>
