@@ -79,8 +79,13 @@ export function APPLY_KindLabels(overrides?: Record<string, string> | null): voi
     }
 }
 
-/** 设置页的分组顺序（与 NODE_KIND 的声明顺序一致；UNKNOWN 下没有真实类型，不列） */
-const KIND_LABEL_GROUP_ORDER: NodeCategoryValue[] = ['FRAMEWORK', 'AFFAIR', 'EVIDENCE', 'RUNTIME', 'SCRIPT'];
+/**
+ * 设置页的分组顺序（与 NODE_KIND 的声明顺序一致；UNKNOWN 下没有真实类型，不列）
+ *
+ * 不含 FRAMEWORK：三个框架类型在界面上统一显示「框架」，区分它们只是为了确定出现位置与用途，
+ * 而且从不同时出现在同一处 —— 没有可配置的差异，因此不进设置页。
+ */
+const KIND_LABEL_GROUP_ORDER: NodeCategoryValue[] = ['AFFAIR', 'EVIDENCE', 'RUNTIME', 'SCRIPT'];
 
 /** 设置页的一组类型名：大类名做标题 + 组内类型与各自的默认名 */
 export interface KindLabelGroup {
