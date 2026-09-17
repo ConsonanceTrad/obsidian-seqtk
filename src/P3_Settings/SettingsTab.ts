@@ -8,15 +8,15 @@
  *     （PluginSettingTab 的默认实现就是读写 this.plugin.settings 并保存），不必逐项写 onChange
  *   - 分组与子页由框架渲染，导航与样式与官方设置一致
  *
- * 唯二需要自己动手的地方：
- *   - **状态传播规则**是一条可增删的表，声明式表达不了「任意条数的编辑器」，
- *     因此放在一个 sub-page 里用 Setting 命令式渲染（render 回调不自动保存，故自己存）
- *   - 规则列表本身需要按当前状态重算，用 this.update() 触发重建
+ * 两处仍需命令式渲染（都是"任意条数的编辑器"，声明式表达不了）：
+ *   - **状态传播规则**：可增删的规则表，放在一个 sub-page 里用 Setting 渲染
+ *   - **类型显示名**：全部类型名逐项可改，同样一个 sub-page，每项带「恢复默认」按钮
+ * 两者的 render 回调都不会自动保存，改动要自己落盘（见各自的 render 方法）。
  *
  * manifest 的 minAppVersion 已提到 1.13.0 —— 该 API 的下限。
  */
 
-import { App, PluginSettingTab, Setting, type SettingDefinitionItem } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting, type SettingDefinitionItem } from 'obsidian';
 import type SeqtkPlugin from "../main";
 import {Save_Setting, DELEGATE_TARGET_LABELS} from "./Settings";
 import { NODE_STATE_LABELS, STATE_VALUES, type SeqtkState } from "../P4_Nodes/NodeField/StateKeys";
@@ -30,6 +30,8 @@ import {
     CONFIRM_LEVEL_LABELS,
     DELETE_CHILDREN_LABELS,
 } from "../P4_Nodes/NodeField/DeletionPolicy";
+import { GET_KindLabelGroups, NODE_KIND_LABELS } from "../P4_Nodes/NodeKind/NodeLabel";
+import type { NodeKindValue } from "../P4_Nodes/NodeKind/NodeKind";
 
 /** 生成一个不会与现有规则撞车的 id */
 function nextRuleId(rules: StatePropagationRule[]): string {
@@ -162,6 +164,29 @@ export class SettingsTab extends PluginSettingTab {
                         render: (setting) => {
                             // render 不自动保存，也不会自动重画 —— 改完自己存、自己 update()
                             this.renderRules(setting.settingEl);
+                            return undefined;
+                        },
+                    },
+                ],
+            },
+            {
+                // 子页：类型名逐项可改，同样是声明式表达不了的"任意条数的编辑器"
+                type: 'page',
+                name: '类型显示名',
+                desc: '给各类型换个叫法；只影响界面显示，不改文件内容。',
+                displayValue: () => {
+                    const overrides = this.plugin.settings.kindLabels ?? {};
+                    const n = Object.values(overrides).filter(
+                        (v) => typeof v === 'string' && v.trim() !== '',
+                    ).length;
+                    return n > 0 ? `${n} 项已自定义` : '全部默认';
+                },
+                items: [
+                    {
+                        name: '类型名',
+                        render: (setting) => {
+                            // 同上：render 不自动保存、不自动重画
+                            this.renderKindLabels(setting.settingEl);
                             return undefined;
                         },
                     },
@@ -344,6 +369,119 @@ export class SettingsTab extends PluginSettingTab {
     private async save(): Promise<void> {
         await Save_Setting(this.plugin);
         this.update();
+    }
+
+    // ============================================================
+    // 类型显示名（sub-page 的命令式部分）
+    // ============================================================
+
+    /**
+     * 类型名编辑器：按大类分组列出全部类型，每项一个文本框 + 一个「恢复默认」按钮
+     *
+     * 两点与规则页同源的讲究：
+     * - 落盘时机在**失焦 / 回车**，而不是 onChange：onChange 每敲一个字都会触发，
+     *   拿它写盘等于每敲一个字写一次磁盘。onChange 这里只做即时校验（重名标红）。
+     * - 编辑过程中不 update() 重建 —— 重建会把正在编辑的输入框换掉；
+     *   只有「恢复默认」按钮在点击完成后才重建（输入框要显示回默认名）。
+     */
+    private renderKindLabels(el: HTMLElement): void {
+        // 与规则页同理：setting-item 默认是横向 flex，这里要塞多块内容
+        el.addClass('seqtk-settings-kind-labels');
+        // 框架在 update() 后会复用同一个 settingEl 再调一次本回调：不清空会追加第二份
+        el.empty();
+
+        el.createEl('p', {
+            cls: 'setting-item-description',
+            text:
+                '给各类型换个叫法：徽章、右键菜单、行内新建下拉、导入预览等处都会跟着变。\n' +
+                '只影响界面显示 —— 节点文件里存的是类型值本身，既有数据不受影响、也不会被改写。\n' +
+                '留空即用回默认名。改完需要重开视图（或重载插件），已经打开的界面才会跟着变。',
+        });
+
+        const overrides = this.plugin.settings.kindLabels;
+
+        for (const group of GET_KindLabelGroups()) {
+            el.createEl('h4', { text: group.title });
+            for (const item of group.kinds) {
+                this.renderKindLabelRow(el, item.kind, item.defaultLabel, overrides);
+            }
+        }
+    }
+
+    /** 一个类型名的编辑行 */
+    private renderKindLabelRow(
+        el: HTMLElement,
+        kind: NodeKindValue,
+        defaultLabel: string,
+        overrides: Record<string, string>,
+    ): void {
+        const row = new Setting(el).setName(defaultLabel).setDesc(`类型值 ${kind} · 留空即用回默认名。`);
+        // 当前生效名（改过就是改后的名字）：既是输入框初值，也是"没动就失焦"时要提交的值
+        const current = NODE_KIND_LABELS[kind] ?? defaultLabel;
+
+        row.addText((t) => {
+            t.setPlaceholder(defaultLabel);
+            t.setValue(current);
+            t.inputEl.addClass('seqtk-kind-label-input');
+            // 即时校验：与规则名一致，重名标红（不落盘在下面的提交里再拦一次）
+            t.onChange((v) => t.inputEl.toggleClass('seqtk-input-invalid', this.isDuplicateKindLabel(kind, v)));
+            // 落盘放在失焦 / 回车 —— onChange 是每敲一个字一次，用它写盘太吵
+            t.inputEl.addEventListener('blur', () => void this.commitKindLabel(kind, defaultLabel, t.inputEl));
+            t.inputEl.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter') return;
+                // 回车等于"改完了"：走同一条提交路径，不额外写一份逻辑
+                e.preventDefault();
+                t.inputEl.blur();
+            });
+        });
+
+        row.addExtraButton((b) =>
+            b
+                .setIcon('rotate-ccw')
+                .setTooltip('恢复默认名')
+                .onClick(async () => {
+                    delete overrides[kind];
+                    await Save_Setting(this.plugin);
+                    // 这里可以重建：输入框要显示回默认名，页头的"N 项已自定义"也要跟上。
+                    // 重建发生在点击之后，不会出现"点按钮时被换掉"的情形。
+                    this.update();
+                }),
+        );
+    }
+
+    /** 名字是否已被别的类型占用（空名不算重名：那是"用回默认"） */
+    private isDuplicateKindLabel(kind: NodeKindValue, raw: string): boolean {
+        const name = raw.trim();
+        if (name === '') return false;
+        return (Object.keys(NODE_KIND_LABELS) as NodeKindValue[]).some(
+            (k) => k !== kind && NODE_KIND_LABELS[k] === name,
+        );
+    }
+
+    /**
+     * 类型名落盘
+     *
+     * 空串、与默认名相同都视为"没改"—— 直接从覆盖表里删掉，不去存一个等于默认值的项，
+     * 这样设置文件里只留真正改过的类型，"恢复默认"也不必额外清理。
+     */
+    private async commitKindLabel(
+        kind: NodeKindValue,
+        defaultLabel: string,
+        inputEl: HTMLInputElement,
+    ): Promise<void> {
+        const name = inputEl.value.trim();
+        if (this.isDuplicateKindLabel(kind, name)) {
+            inputEl.addClass('seqtk-input-invalid');
+            new Notice(`「${name}」已经是另一个类型的显示名，未保存`);
+            return;
+        }
+        inputEl.removeClass('seqtk-input-invalid');
+
+        const overrides = this.plugin.settings.kindLabels;
+        if (name === '' || name === defaultLabel) delete overrides[kind];
+        else overrides[kind] = name;
+        // Save_Setting 内部会 APPLY_KindLabels：存下来的与生效的始终是同一份名字
+        await Save_Setting(this.plugin);
     }
 }
 
