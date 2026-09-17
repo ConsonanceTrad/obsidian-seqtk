@@ -20,17 +20,18 @@
    作为子树第 1 列竖线的起点，粗段接细线自然过渡；
    子节点行的「有子」信息已由转角方块与可见子树表达，
    故以 :not(.seqtk-row-in-expanded) 排除（非顶级行均带该类）。
-   粗细与对中：细线为 1px、以路径为中心（覆盖 x±0.5，中心 = 行左缘 + GUIDE_INSET）；
-   黑段粗一档（3px），左端因此取 GUIDE_INSET − 1.5px = 0.5px，中心才与细线重合 ——
-   若按 GUIDE_INSET 直接写 left: 2px，黑段会整体偏右、粗接细处看着接不上。 */
+   粗细与对中：细线为 1px、以路径为中心（覆盖 x±0.5，中心 = 行左缘 + GUIDE_INSET = 2px）；
+   黑段保持 2px、左端取 GUIDE_INSET − 1px = 1px —— 中心与细线重合，且两端都落在整像素上。
+   （加粗到 3px 就得写 left: 0.5px，两端各落半个像素，渲染时两侧各留一条半透明边，
+   看着发虚且左右不对称，所以宽度回到 2px。） */
 .seqtk-row.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before,
 .seqtk-frame-item.seqtk-row-expanded:not(.seqtk-row-in-expanded)::before {
   content: "";
   position: absolute;
-  left: 0.5px;
+  left: 1px;
   top: 0;
   bottom: 0;
-  width: 3px;
+  width: 2px;
   background: rgb(0 0 0 / 0.67);
   pointer-events: none;
 }
