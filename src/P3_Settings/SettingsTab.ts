@@ -430,7 +430,7 @@ export class SettingsTab extends PluginSettingTab {
      * - 页内摘要自己维护一份（见 renderKindSummary）：页头的 displayValue 只在重画时才读。
      *
      * 生效时机不同：**配色与字色立即生效**（Save_Setting 会把颜色推进 CSS 变量，徽章当场变色）；
-     * **名字要重开视图**才生效（已经渲染好的 DOM 不会自己重画），这条写在各行描述里。
+     * **名字要重开视图**才生效（已经渲染好的 DOM 不会自己重画）—— 这条只在页面顶部说明一次。
      */
     private renderKindAppearance(el: HTMLElement): void {
         // 与规则页同理：setting-item 默认是横向 flex，这里要塞多块内容。
