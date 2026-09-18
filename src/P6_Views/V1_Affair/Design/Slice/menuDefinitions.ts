@@ -418,7 +418,7 @@ function attributeGroupDefs(view: DesignView, node: TreeNode): MenuDefinition[] 
                     action: () => openEdit(view, nodeId),
                 },
                 {
-                    name: '更改描述',
+                    name: '编辑正文',
                     icon: ICON.editDesc,
                     action: () => openBodyEdit(view, nodeId),
                 },

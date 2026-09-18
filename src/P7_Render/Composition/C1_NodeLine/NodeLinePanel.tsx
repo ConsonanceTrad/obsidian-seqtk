@@ -6,9 +6,10 @@
  * `XxxPanel` 惯例（同 `DesignPanel.tsx` / `LogPanel.tsx`），避免用 `View` 后缀 ——
  * 本项目里 `View` 专指 `ItemView` 子类（视图层），混用会误导。
  *
- * 本组件是「节点行长什么样」的唯一定义处：徽章分色、描述、正文预览、预期属性徽章、
+ * 本组件是「节点行长什么样」的唯一定义处：徽章分色、描述、标签、预期属性徽章、
  * 打开按钮、状态圆点、折叠方块，以及行上的树标记（`data-tree-row` 等）与几何
  * （缩进、父列 x）全部在这里产生。视图层只注入 `NodeLineData` 并接住回调。
+ * 正文预览**不在这里渲染** —— 行内只留节点名一个长度可变量，它改并入节点名的 tooltip。
  *
  * 契约（见 P7_Render/Render.md）：
  * - 只接收 props、只发出回调；回调参数只有 `NodeLineCtx` 与原生事件，不回传 DOM
@@ -17,7 +18,7 @@
  * - 业务数据一律不在这里读写：展开/选中/右键/拖拽都只上抛
  *
  * 元素与 class 与命令式实现逐项对齐（`.seqtk-row` / `.seqtk-frame-item` /
- * `.seqtk-kind-badge` / `.seqtk-body-preview` / `.seqtk-expected-badge` /
+ * `.seqtk-kind-badge` / `.seqtk-tag-badge` / `.seqtk-expected-badge` /
  * `.seqtk-open-btn` / `.seqtk-state-dot`），保证视觉零回归。
  *
  * 例外：转角方块（原 `.seqtk-collapse-mark`）不再由本组件渲染 —— 它的位置取决于
@@ -133,40 +134,51 @@ export function NodeLinePanel({
             onDrop={actions?.onDrop ? (e) => actions.onDrop?.(ctx, e.nativeEvent) : undefined}
         >
 
-            <span className={`seqtk-kind-badge ${GET_KindClass(data.kind)}`}>{data.label}</span>
+            {/* 行内分成左右两个容器：左（main）类型徽章 · 节点名 · 标签，右（tail）时间徽章 ·
+                链接 · 状态圆点 · 打开按钮。
+                行内**只有节点名是长度可变量** —— 正文预览已不再渲染，改并进节点名的 tooltip。
+                这是刻意为之：flex 的收缩在同一轮里必然同时发生，只要行内有两个可变量，
+                名字就会被分摊到亚像素级收缩，而 ellipsis 对一点点也零容忍（末字立刻变省略号）。
+                既然只能留一个，就留名字。 */}
+            <span className="seqtk-row-main">
+                <span className={`seqtk-kind-badge ${GET_KindClass(data.kind)}`}>{data.label}</span>
 
-            <span className="seqtk-desc" data-tip={data.descTooltip}>
-                {data.desc}
+                {/* 行内不再单独渲染正文预览（原因见 tail 的说明），它并进这里的 tooltip；
+                    两段之间用换行分隔，比挤成一行可读 */}
+                <span
+                    className="seqtk-desc"
+                    data-tip={
+                        [data.descTooltip, data.bodyPreviewTooltip].filter(Boolean).join("\n") || undefined
+                    }
+                >
+                    {data.desc}
+                </span>
+
+                {/* 标签：紧跟节点名之后。最多露出 TAG_VISIBLE_LIMIT 个，其余折成「+N」——
+                    它是个鼠标悬浮区（不是按钮），浮层里用与行上同一个徽章样式补齐，
+                    纯 CSS 显隐，不参与任何点击语义 */}
+                {(data.tags?.length ?? 0) > 0 && (
+                    <span className="seqtk-tag-list">
+                        {data.tags!.slice(0, TAG_VISIBLE_LIMIT).map((tag, i) => (
+                            <span key={i} className="seqtk-tag-badge">{tag}</span>
+                        ))}
+                        {data.tags!.length > TAG_VISIBLE_LIMIT && (
+                            <span className="seqtk-tag-more">
+                                {`+${data.tags!.length - TAG_VISIBLE_LIMIT}`}
+                                <span className="seqtk-tag-more-popup">
+                                    {data.tags!.slice(TAG_VISIBLE_LIMIT).map((tag, i) => (
+                                        <span key={i} className="seqtk-tag-badge">{tag}</span>
+                                    ))}
+                                </span>
+                            </span>
+                        )}
+                    </span>
+                )}
             </span>
 
-            {/* 标签：紧跟节点名之后。最多露出 TAG_VISIBLE_LIMIT 个，其余折成「+N」——
-                它是个鼠标悬浮区（不是按钮），浮层里用与行上同一个徽章样式补齐，
-                纯 CSS 显隐，不参与任何点击语义 */}
-            {(data.tags?.length ?? 0) > 0 && (
-                <span className="seqtk-tag-list">
-                    {data.tags!.slice(0, TAG_VISIBLE_LIMIT).map((tag, i) => (
-                        <span key={i} className="seqtk-tag-badge">{tag}</span>
-                    ))}
-                    {data.tags!.length > TAG_VISIBLE_LIMIT && (
-                        <span className="seqtk-tag-more">
-                            {`+${data.tags!.length - TAG_VISIBLE_LIMIT}`}
-                            <span className="seqtk-tag-more-popup">
-                                {data.tags!.slice(TAG_VISIBLE_LIMIT).map((tag, i) => (
-                                    <span key={i} className="seqtk-tag-badge">{tag}</span>
-                                ))}
-                            </span>
-                        </span>
-                    )}
-                </span>
-            )}
-
-            {data.bodyPreview && (
-                <span className="seqtk-body-preview" data-tip={data.bodyPreviewTooltip}>
-                    {data.bodyPreview}
-                </span>
-            )}
-
-            <span className="seqtk-spacer" />
+            <span className="seqtk-row-tail">
+                {/* 正文预览不在这里渲染：见上面的说明，它并进节点名的 tooltip */}
+                <span className="seqtk-spacer" />
 
             {(data.badges ?? []).map((badge, i) => (
                 <span key={i} className="seqtk-expected-badge" data-tip={badge.tooltip}>
@@ -219,6 +231,7 @@ export function NodeLinePanel({
                     }
                 />
             )}
+            </span>
 
             {data.editing?.mode === "rename" && (
                 <InlineRenameOverlay

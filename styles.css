@@ -228,24 +228,8 @@
   stroke-width: 1;
 }
 
-/* 正文预览（节点名后；半透明弱化视觉焦点）。
-   行内弹性优先级是两极的：
-   - 不可压缩：类型徽章 / 标签 / 时间徽章 / 状态圆点 / 链接徽章 / 打开按钮 —— 一律 flex-shrink: 0
-   - 可压缩：只有节点名与正文预览，且正文预览远低于节点名
-   所以这里的收缩权重开到 100：正文预览会在名字开始被压之前就先缩到 0，
-   「节点名 > 正文预览」在数值上成立，而不只是差几倍 */
-.seqtk-body-preview {
-  flex: 0 100 auto;
-  /*max-width: 220px;*/
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-ui-small);
-  color: var(--text-muted);
-  opacity: 0.4;
-  margin-right: 6px;
-}
+/* 正文预览的样式已不再需要：它不在行内渲染了，改为并进节点名的 tooltip
+   （原因见 NodeLinePanel 的说明 —— 行内只能留一个长度可变量，那个位置留给节点名） */
 
 /* 弹性间隔：填充剩余空间，使行右侧徽章/状态圆点/按钮靠右 */
 .seqtk-spacer {
@@ -873,6 +857,31 @@ button.seqtk-open-btn {
   cursor: default;
 }
 
+/*
+ * 行内分左右两个容器（见 NodeLinePanel 的说明），弹性优先级各在容器内成立：
+ * - main 左：类型徽章 · 节点名 · 标签。名字会被标签挤（同容器才谈得上争抢），
+ *   而徽章一律 flex-shrink: 0，一步不让
+ * - tail 右：正文预览 · 时间徽章 · 链接 · 状态圆点 · 打开按钮。整块先让位 ——
+ *   所以正文预览再怎么缩也压不到节点名
+ * 这样也避开了「同一轮里所有可压缩元素同时缩」：那会让名字被分摊到亚像素级收缩，
+ * ellipsis 立刻换掉末字（就是「描述过长时名字最后一位被吃掉」的成因）
+ */
+.seqtk-row-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.seqtk-row-tail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .seqtk-row:hover {
   background: var(--background-modifier-hover);
 }
@@ -899,8 +908,12 @@ button.seqtk-open-btn {
   border: 1px solid var(--background-modifier-border);
 }
 
+/* 节点名：可压缩，但只被同容器里的标签挤（tail 那边的收缩够不着它）。
+   上限 70% —— 名字极长且这一行没有标签时，不至于把右侧整块挤没；
+   到上限就在自己内部省略 */
 .seqtk-desc {
   flex: 0 1 auto;
+  max-width: 70%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

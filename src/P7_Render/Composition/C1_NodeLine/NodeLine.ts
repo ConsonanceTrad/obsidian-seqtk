@@ -125,9 +125,14 @@ export interface NodeLineData {
     descTooltip?: string;
     /** 标签（紧跟在节点名之后逐个显示为「标签名」徽章；只展示，不接管点击） */
     tags?: string[];
-    /** 正文预览（节点名后，超长省略） */
+    /**
+     * 正文预览
+     *
+     * **不再单独渲染**：行内只能留一个长度可变量（那个位置留给节点名），它现在只作
+     * 节点名 tooltip 的来源 —— 见 NodeLinePanel 里 descTooltip 的合并处
+     */
     bodyPreview?: string;
-    /** 正文预览的悬浮提示（由调用方按 tooltipBodyText 之类的规则算好） */
+    /** 正文预览的悬浮提示（由调用方按 tooltipBodyText 之类的规则算好；同上，只进 tooltip） */
     bodyPreviewTooltip?: string;
     /** 行末预期属性徽章 */
     badges?: NodeLineBadge[];
