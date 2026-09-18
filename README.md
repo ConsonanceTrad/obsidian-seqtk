@@ -1,4 +1,4 @@
-# README
+# SeqTK README
 
 ## SeqTK English README (Translated by Google)
 
