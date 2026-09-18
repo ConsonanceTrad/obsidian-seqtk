@@ -40,6 +40,8 @@ export interface DelegatedTreeActions {
     onCancelDelegate(): void;
     /** 行右键：新建子框架 / 重命名 / 归档（三项都作用于框架树本身） */
     onContextMenu(ctx: NodeLineCtx, event: MouseEvent): void;
+    /** 空白处右键：与来源视图左栏的空白菜单同口径（新建根级节点 / 从磁盘刷新） */
+    onBlankContextMenu(event: MouseEvent): void;
     /** 行内新建提交 / 取消 */
     onCreateCommit(parentId: string, kind: NodeKindValue, name: string): void;
     onCreateCancel(parentId: string): void;
@@ -62,6 +64,13 @@ export function DelegatedTreePanel({ store, actions, host }: DelegatedTreePanelP
     return (
         <NodeTreePane
             className="seqtk-delegated-tree"
+            /* 空白处右键：行自身的 contextmenu 已 stopPropagation，能冒泡到栏的都是空白；
+               再按行选择器确认一次（与来源视图左栏同法），随后交给来源的空白菜单 */
+            onPaneContextMenu={(e) => {
+                if ((e.target as HTMLElement).closest(".seqtk-frame-item")) return;
+                e.preventDefault();
+                actions.onBlankContextMenu(e.nativeEvent);
+            }}
             title={state.title}
             titleExtra={
                 /* 与来源视图左栏的委托开关同款：收在标题末尾的图标按钮，方向相反 */

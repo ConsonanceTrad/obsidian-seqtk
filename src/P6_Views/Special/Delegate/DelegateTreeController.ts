@@ -13,9 +13,12 @@
  * 标题、就地新建的类型、行右键菜单；其余（展开 / 选中 / 行内新建与重命名 / 缓存订阅）
  * 一律共用。于是「谁在委托」是全局互斥的：本面板永远只渲染当前 active 的来源。
  *
+ * 行内新建与重命名**不在这里另写一份**：本类实现 `InlineEditView`（见 design/inlineEdit），
+ * 于是那套「附加行 / 行内重命名」的实现与设计视图、模板模式左栏是同一份 ——
+ * 三个入口的行为不会各自漂移。本类只把「重绘一次」表达成 recompute()。
+ *
  * 右键默认只开三项：新建子节点 / 重命名 / 归档 —— 都作用于**树本身**，不依赖来源视图
- * 右栏的上下文（当前选中框架、正文编辑、状态传播……）。它们复用 design/actions 的同一套
- * 实现（见那里的 NodeEditHost），所以多一个入口不会长出第二套行为。
+ * 右栏的上下文（当前选中框架、正文编辑、状态传播……）。
  * 更重的编辑仍留在各自的来源视图里：两个入口同时改同一棵树，会让「谁在编辑」变得难以预期。
  */
 
@@ -34,15 +37,27 @@ import {
     type DelegateTreeCtx,
     type DelegateTreeHost,
 } from './DelegateRegistry';
-import { archiveNode, createNode, saveNodeDesc, type NodeEditHost } from '../../V1_Affair/Design/Slice/actions';
-import { PARSE_NameTags, saveTags } from '../../V1_Affair/Design/Slice/tags';
+import {
+    cancelCreate,
+    cancelRename,
+    commitCreate,
+    commitRename,
+    setCreateRepeat,
+    startCreateBlank,
+    startCreateChild,
+    startRename,
+    type InlineEditView,
+} from '../../V1_Affair/Design/Slice/inlineEdit';
+import { archiveNode, type NodeEditHost } from '../../V1_Affair/Design/Slice/actions';
+import { SYNC_FromFiles } from '../../V0_Common/SyncFromFiles';
 import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
 import type { PluginSettings } from '../../../P3_Settings/Settings';
+import type { NodeKindValue } from '../../../P4_Nodes/NodeKind/NodeKind';
 import type { NodeLineCtx } from '../../../P7_Render/Composition/C1_NodeLine/NodeLine';
-import type { NodeInlineCreating } from '../../../P7_Render/Composition/C2_Tree/NodeTree';
+import type { DesignInlineCreating, TreeSide } from '../../V1_Affair/Design/Core/DesignPanel';
 import { createElement, type ReactElement } from 'react';
 
-export class DelegateTreeController implements NodeEditHost, DelegateTreeHost {
+export class DelegateTreeController implements NodeEditHost, DelegateTreeHost, InlineEditView {
     /** 渲染件订阅的唯一状态源 */
     readonly state = new SimpleStore<DelegatedTreeState>({
         items: [],
@@ -55,14 +70,14 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost {
     private unsub: (() => void) | null = null;
     private unsubData: (() => void) | null = null;
 
-    /** 行内新建态（右键「新建子节点」写入） */
-    private creating: NodeInlineCreating | null = null;
-    /** 正在行内重命名的节点 id（写入行覆盖信息，由行组件渲染覆盖层） */
-    private editingNodeId: string | null = null;
+    /** 行内重命名态（InlineEditView 契约：渲染件据它给该行挂输入框覆盖层） */
+    rename: { nodeId: string; side: TreeSide } | null = null;
+    /** 行内新建态（InlineEditView 契约）；委托树永远是来源左栏那棵，side 恒为 'left' */
+    creating: DesignInlineCreating | null = null;
+    /** 写盘期间压掉重算（见 design/inlineEdit 的 commitCreate） */
+    suppressRefresh = false;
     /** 本控制器不区分左右栏：满足 NodeEditHost 用的占位集合（新建一律按左栏展开） */
     private readonly rightExpanded = new Set<string>();
-    /** 写盘期间的抑制位（见 commitCreate）：重算一律压掉，避免多出一次「输入行 + 新行并存」的画面 */
-    private suppress = false;
 
     constructor(
         /** 归档确认等模态框需要；与 hub / 独立视图共用同一份能力 */
@@ -93,10 +108,59 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost {
         this.recompute();
     }
 
+    // ── InlineEditView：行内新建 / 重命名（本面板的「重绘一次」就是重算） ──
+
+    refresh(): void {
+        this.recompute();
+    }
+
     // ── DelegateTreeHost：来源的菜单动作据此复用面板的就地编辑 ──
 
     get editHost(): NodeEditHost {
         return this;
+    }
+
+    /** 在该节点下新建子节点（类型由来源决定）：转发给共用的行内新建实现 */
+    startCreateChild(ctx: NodeLineCtx): void {
+        startCreateChild(this, ctx, 'left', [this.source.childKind]);
+    }
+
+    /** 在根列表末尾新建（面板空白处右键用）：与来源视图左栏的空白新建同一形态 */
+    startCreateRoot(): void {
+        startCreateBlank(this, this.source.childKind, 'left');
+    }
+
+    /** 进入行内重命名态：同上，一份实现三个入口共用 */
+    startRename(nodeId: string): void {
+        startRename(this, nodeId, 'left');
+    }
+
+    /**
+     * 空白处右键：与来源视图左栏的空白菜单**同口径**
+     *
+     * 来源给了整份菜单就用它的；否则用默认两项 —— 新建根级节点 + 从磁盘刷新，
+     * 正是设计与模板左栏空白菜单的那两项（将来别的视图若不同，在来源里给 blankMenu）。
+     */
+    blankContextMenu(e: MouseEvent): void {
+        if (this.source.blankMenu) {
+            this.source.blankMenu(this, e);
+            return;
+        }
+        const defs: MenuDefinition[] = [
+            {
+                name: `新建${this.source.title}`,
+                icon: ICON.newFramework,
+                section: SECTION.main,
+                action: () => this.startCreateRoot(),
+            },
+            {
+                name: '从磁盘刷新',
+                icon: ICON.syncFromFiles,
+                section: SECTION.refresh,
+                action: () => void SYNC_FromFiles(this.pipe),
+            },
+        ];
+        BUILD_Menu(defs, e);
     }
 
     /** 挂上订阅并首算；重复调用无副作用 */
@@ -130,11 +194,14 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost {
                 },
                 onCancelDelegate: () => this.onCancel(),
                 onContextMenu: (ctx, e) => this.showRowMenu(ctx, e),
-                onCreateCommit: (parentId: string, _kind, name: string) => void this.commitCreate(parentId, name),
-                onCreateCancel: () => this.cancelCreate(),
-                onRepeatChange: (repeat: boolean) => this.setCreateRepeat(repeat),
-                onInlineCommit: (ctx, value) => this.commitRename(ctx, value),
-                onInlineCancel: () => this.cancelRename(),
+                // 空白处右键：与来源视图左栏的空白菜单同口径（见 blankContextMenu）
+                onBlankContextMenu: (e) => this.blankContextMenu(e),
+                onCreateCommit: (parentId: string, kind: NodeKindValue, name: string) =>
+                    void commitCreate(this, parentId, kind, name),
+                onCreateCancel: () => cancelCreate(this),
+                onRepeatChange: (repeat: boolean) => setCreateRepeat(this, repeat),
+                onInlineCommit: (ctx, value) => commitRename(this, ctx.nodeId, value),
+                onInlineCancel: () => cancelRename(this),
             } satisfies DelegatedTreeActions,
             host: { setTooltip, setIcon },
         });
@@ -143,7 +210,7 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost {
     /**
      * 行右键
      *
-     * 来源给了整份菜单就用它的（如模板那四项）；否则用默认三项 ——
+     * 来源给了整份菜单就用它的（如模板那几项）；否则用默认三项 ——
      * 三项都作用于树本身，不依赖来源视图的右栏上下文。
      */
     private showRowMenu(ctx: NodeLineCtx, e: MouseEvent): void {
@@ -174,91 +241,12 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost {
         BUILD_Menu(defs, e);
     }
 
-    /** 在该节点下新建子节点：展开它并就地插一行输入（复用行的附加行组件） */
-    startCreateChild(ctx: NodeLineCtx): void {
-        this.creating = {
-            parentId: ctx.nodeId,
-            kinds: [this.source.childKind],
-            kind: this.source.childKind,
-            depth: ctx.depth + 1,
-        };
-        this.source.expanded.add(ctx.nodeId);
-        this.source.markExpandedChanged();
-        this.recompute();
-    }
-
-    private cancelCreate(): void {
-        this.creating = null;
-        this.recompute();
-    }
-
-    /** 切换「连续输入」：提交后保留附加行，便于连续录入多个子节点 */
-    private setCreateRepeat(repeat: boolean): void {
-        if (!this.creating) return;
-        this.creating = { ...this.creating, repeat };
-        this.recompute();
-    }
-
-    private async commitCreate(parentId: string, name: string): Promise<void> {
-        const prev = this.creating;
-        // 与设计视图同一套处理：写盘期间压掉重算，数据一到就「附加行原地变新行」，
-        // 中途不让缓存订阅插进来多刷一次（那一次会同时画出输入行与新行）
-        this.suppress = true;
-        try {
-            // side 固定 left：委托树就是来源左栏那棵树，展开也落在同一个集合上
-            await createNode(
-                this,
-                { kind: this.source.childKind, desc: name, state: 'plan', afterCreate: 'direct' },
-                parentId,
-                { skipRender: true, side: 'left' },
-            );
-        } finally {
-            this.suppress = false;
-        }
-        this.creating = null;
-        // 连续输入：保留附加行；seq 递增换 key，重建实例才能接受下一次输入
-        if (prev?.repeat) {
-            this.creating = { ...prev, repeat: true, seq: (prev.seq ?? 0) + 1 };
-        }
-        this.recompute();
-    }
-
-    /** 进入行内重命名态 */
-    startRename(nodeId: string): void {
-        this.editingNodeId = nodeId;
-        this.recompute();
-    }
-
-    private commitRename(ctx: NodeLineCtx, value: string): void {
-        const data = this.pipe.GET_Node(ctx.nodeId);
-        this.editingNodeId = null;
-        if (!data || !value) {
-            this.recompute();
-            return;
-        }
-        // 与设计视图同一套规则：`名称 #甲 #乙` 里的标签段就是该节点的全部标签
-        const { desc, tags } = PARSE_NameTags(value);
-        const name = desc ?? data.desc;
-        if (name !== data.desc) {
-            saveNodeDesc(this, { nodeId: ctx.nodeId, data, children: [] }, name);
-        }
-        if ((data.tags ?? []).join('\u0000') !== tags.join('\u0000')) {
-            saveTags(this, ctx.nodeId, tags);
-        }
-        this.recompute();
-    }
-
-    private cancelRename(): void {
-        this.editingNodeId = null;
-        this.recompute();
-    }
-
     recompute(): void {
-        if (this.suppress) return;
+        if (this.suppressRefresh) return;
         const ctx: DelegateTreeCtx = {
             pipe: this.pipe,
             settings: this.settings,
-            overlayFor: (nodeId) => ({ editing: this.editingNodeId === nodeId }),
+            overlayFor: (nodeId) => ({ editing: this.rename?.nodeId === nodeId }),
         };
         this.state.set({
             items: this.source.buildItems(ctx),
@@ -266,7 +254,7 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost {
             emptyText: this.source.emptyText(ctx),
             selectedId: this.source.getSelectedId(),
             creating: this.creating,
-            editingNodeId: this.editingNodeId,
+            editingNodeId: this.rename?.nodeId ?? null,
         });
     }
 

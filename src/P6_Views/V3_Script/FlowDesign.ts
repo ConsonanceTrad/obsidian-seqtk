@@ -17,7 +17,7 @@
  */
 
 import { createElement, type ReactNode } from "react";
-import { App, Menu, Modal, Notice, Setting, TextComponent, type WorkspaceLeaf } from "obsidian";
+import { App, Menu, Modal, Notice, Setting, TextComponent, setTooltip, type WorkspaceLeaf } from "obsidian";
 import { AutoView } from "../../P1_Register/View";
 import { AutoRegister } from "../../P1_Register/Comd";
 import { ReactViewBase } from "../../P0_UI/ViewBase";
@@ -697,7 +697,7 @@ export class FlowView extends ReactViewBase {
             step.className = 'seqtk-lad-step';
             step.textContent = it.name;
             step.draggable = true;
-            step.title = '拖动重排';
+            setTooltip(step, '拖动重排');
             step.addEventListener('dragstart', (e) => {
                 e.dataTransfer?.setData('text/plain', String(idx));
             });
@@ -777,7 +777,7 @@ export class FlowView extends ReactViewBase {
         const up = document.createElement('button');
         up.className = 'seqtk-btn seqtk-btn-small seqtk-flow-x';
         up.textContent = '↑';
-        up.title = '上移';
+        setTooltip(up, '上移');
         up.disabled = idx === 0;
         up.addEventListener('click', () => {
             const [m] = siblings.splice(idx, 1);
@@ -788,7 +788,7 @@ export class FlowView extends ReactViewBase {
         const down = document.createElement('button');
         down.className = 'seqtk-btn seqtk-btn-small seqtk-flow-x';
         down.textContent = '↓';
-        down.title = '下移';
+        setTooltip(down, '下移');
         down.disabled = idx === siblings.length - 1;
         down.addEventListener('click', () => {
             const [m] = siblings.splice(idx, 1);

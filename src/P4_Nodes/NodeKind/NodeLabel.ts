@@ -42,7 +42,7 @@ const BUILTIN_KIND_LABELS: Record<NodeKindValue, string> = {
     // 「行动」而非「事项」：与「事件」读音太近，列表里一眼分不清
     AFFAIR_ITEM: '行动',
     AFFAIR_EVENT: '事件',
-    EVIDENCE_FACTOR: '因素',
+    EVIDENCE_FACTOR: '因子',
     EVIDENCE_REQUEST: '前提',
     EVIDENCE_CLUE: '线索',
     EVIDENCE_SNAPSHOT: '记录',

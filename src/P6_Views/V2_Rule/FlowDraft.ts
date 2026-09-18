@@ -693,7 +693,7 @@ export class FlowDraftView extends ReactViewBase {
         el.empty();
         if (!block.nodeId) {
             el.createEl('span', { cls: 'seqtk-draft-node-name seqtk-draft-node-placeholder', text: '未关联节点' });
-            el.title = '点击右侧 关联 按钮选择节点';
+            setTooltip(el, '点击右侧 关联 按钮选择节点');
             return;
         }
         const node = this.safeGetNode(block.nodeId);

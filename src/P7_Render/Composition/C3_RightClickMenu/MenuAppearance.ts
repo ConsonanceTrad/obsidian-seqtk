@@ -55,11 +55,12 @@ export const SECTION = {
 /** 跨菜单复用的图标（同一图标出现在多个菜单里时才收进来） */
 export const ICON = {
     newFramework: 'folder-plus',
-    newChild: 'plus',
-    evidence: 'plus',
+    newChild: 'layers-plus',
+    /** 「追加信息」入口：列表加号 —— 与子项（box / check-square / info / camera）同层次的「往清单里补一条」 */
+    evidence: 'list-plus',
     newConcept: 'lightbulb',
     newCheck: 'list-checks',
-    newEvent: 'calendar',
+    newEvent: 'zap',
     rename: 'pencil',
     editAttrs: 'settings-2',
     editDesc: 'file-text',
@@ -68,6 +69,8 @@ export const ICON = {
     batchEdit: 'file-edit',
     /** 模板组的入口 */
     templateGroup: 'bookmark',
+    /** 「创建节点」组的入口（新建构思 / 清单 / 事件） */
+    createGroup: 'plus',
     /** 外部信息组的入口 */
     externalGroup: 'link',
     /** 变更归属 */
@@ -96,7 +99,7 @@ export const STATE_ICON: Record<string, string> = {
 };
 
 /** 展开：标题与图标随即将执行的行为变化（无子项的行不出现） */
-export const EXPAND_ITEM = { name: '展开', icon: 'unfold-vertical' } as const;
+export const EXPAND_ITEM = { name: '展开子项', icon: 'list-chevrons-up-down' } as const;
 
 /** 收起：同上 */
-export const COLLAPSE_ITEM = { name: '收起', icon: 'fold-vertical' } as const;
+export const COLLAPSE_ITEM = { name: '收起子项', icon: 'list-chevrons-down-up' } as const;

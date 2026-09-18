@@ -14,6 +14,7 @@
 import { App, Modal, Setting } from 'obsidian';
 import { NODE_KIND } from '../../../P4_Nodes/NodeKind/NodeKind';
 import { NODE_KIND_LABELS } from '../../../P4_Nodes/NodeKind/NodeLabel';
+import { isFrameworkKind } from '../../../P4_Nodes/NodeFacade';
 import type { SeqtkNode } from '../../../P4_Nodes/Node';
 import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
 import { GET_LineIndent, LINE_METRICS_LEFT } from '../../Composition/C1_NodeLine/NodeLine';
@@ -24,15 +25,21 @@ export interface FrameworkOption {
   label: string;
 }
 
-/** 选择框架模态框 */
-export class SelectFrameworkModal extends Modal {
+/**
+ * 选择一项模态框（下拉 + 确定 / 取消）
+ *
+ * 下拉的字段名由调用方给：既用于「选择目标框架」，也用于「选择插入分支」，
+ * 免得同一个样子抄两份。
+ */
+export class SelectOptionModal extends Modal {
   constructor(
     app: App,
     private opts: {
       title: string;
-      /** 候选框架（nodeId + 展示名） */
-      frameworks: FrameworkOption[];
-      onSelect: (nodeId: string) => void;
+      /** 下拉前的字段名（如「目标框架」「插入分支」） */
+      label: string;
+      options: FrameworkOption[];
+      onSelect: (id: string) => void;
     },
   ) {
     super(app);
@@ -43,12 +50,12 @@ export class SelectFrameworkModal extends Modal {
     contentEl.empty();
     this.setTitle(this.opts.title);
 
-    let selected = this.opts.frameworks[0]?.nodeId ?? '';
+    let selected = this.opts.options[0]?.nodeId ?? '';
     new Setting(contentEl)
-      .setName('目标框架')
+      .setName(this.opts.label)
       .addDropdown((dd) => {
-        for (const f of this.opts.frameworks) {
-          dd.addOption(f.nodeId, f.label);
+        for (const o of this.opts.options) {
+          dd.addOption(o.nodeId, o.label);
         }
         dd.setValue(selected);
         dd.onChange((v) => { selected = v; });
@@ -69,6 +76,26 @@ export class SelectFrameworkModal extends Modal {
   }
 }
 
+/** 选择框架模态框（= 选择一项，字段名叫「目标框架」） */
+export class SelectFrameworkModal extends SelectOptionModal {
+  constructor(
+    app: App,
+    opts: {
+      title: string;
+      /** 候选框架（nodeId + 展示名） */
+      frameworks: FrameworkOption[];
+      onSelect: (nodeId: string) => void;
+    },
+  ) {
+    super(app, {
+      title: opts.title,
+      label: '目标框架',
+      options: opts.frameworks,
+      onSelect: opts.onSelect,
+    });
+  }
+}
+
 /** 模板单元条目（顶层节点 + 所属模板框架 + 子树规模） */
 export interface TemplateUnitEntry {
   /** 所属模板框架 */
@@ -80,12 +107,40 @@ export interface TemplateUnitEntry {
 }
 
 /**
+ * 归类容器判定：该模板框架下还有框架类型的子节点（不含信息框架）
+ *
+ * 这种框架只是**分类目录** —— 真正的模板库在它的子框架里。因此它不作为可用的模板
+ * （不出现在单元列表里），在模板模式左栏也不可选中；只有「不含子框架」的模板框架
+ * 才是真正可用的模板。
+ */
+export function IS_TemplateContainer(pipe: DataPipe, frameworkId: string): boolean {
+  return pipe.GET_Children(frameworkId).some(
+    (c) => !!c.data && isFrameworkKind(c.data.kind) && c.data.kind !== NODE_KIND.INFO,
+  );
+}
+
+/**
+ * 该模板框架下是否已经装了**模板单元**（非框架类型的子节点）
+ *
+ * 装了单元的框架就不再提供「新建子框架」：一个模板框架要么当分类目录（装子框架）、
+ * 要么当模板库（装单元）；两者混在一起，树上看不出哪些是模板、哪些是分类。
+ */
+export function HAS_TemplateUnits(pipe: DataPipe, frameworkId: string): boolean {
+  return pipe.GET_Children(frameworkId).some(
+    (c) => !!c.data && !isFrameworkKind(c.data.kind),
+  );
+}
+
+/**
  * 枚举全部模板单元：各模板框架 follows 直接子节点按框架声明序排列。
  * 单元含整棵子树（后代节点）；后续「插入时行为」扩展（是否含证据等）在此集中调整。
+ *
+ * 归类容器（含子框架的模板框架）整棵跳过：它的子节点是子框架，不是可用单元。
  */
 export function listTemplateUnits(pipe: DataPipe): TemplateUnitEntry[] {
   const units: TemplateUnitEntry[] = [];
   for (const f of pipe.GET_ByKind(NODE_KIND.TEMP)) {
+    if (IS_TemplateContainer(pipe, f.nodeId)) continue;
     for (const child of pipe.GET_Children(f.nodeId)) {
       if (!child.data) continue;
       units.push({

@@ -4,9 +4,10 @@
  * 与设计视图的「以文本编辑框架内容」是同一条通道：文本区编辑的就是**选中模板框架的内容**
  * （框架自身那行不出现，于是根可以多个）。导出 / 差异预告 / 回写全部复用
  * `design/Slice/textTree` 的 EXPORT / PLAN / APPLY —— 不在此另写一套对齐逻辑；
- * 本文件只补两件模板特有的事：
- * 1. 占位符校验（`{{变量}}` / `{{父.字段}}` 写错了要在编辑时看见）
- * 2. 类型链校验：模板框架下可放任意类型的单元（顶层不校验），但**单元内部的链**必须成立
+ * 本文件只补三件模板特有的事：
+ * 1. 占位符校验（`{{变量}}` / `{{p.字段}}` 写错了要在编辑时看见）
+ * 2. 类型链校验：模板框架下可放任意类型的模板单元（顶层不校验），但**单元内部的链**必须成立
+ * 3. 行内 `@` 指令的组合校验与**插入分支**拆分（`@start` / `@field` / `@pos` 见 TextTree）
  */
 
 import type { DataPipe } from '../../../../P5_Data/CoPipe/DataPipe';
@@ -14,7 +15,10 @@ import { COLLECT_TemplateSlots } from '../../../../P2_Tools/Parse/TempParse';
 import {
     PARSE_TextTree,
     PREVIEW_TextTree,
+    VALIDATE_TemplateInstr,
     VALIDATE_TemplateTree,
+    type TextTreeFieldPolicy,
+    type TextTreeInstr,
     type TextTreeIssue,
     type TextTreeNode,
 } from '../../../../P2_Tools/Parse/TextTree';
@@ -25,18 +29,18 @@ import {
     type ApplyResult,
 } from '../../Design/Slice/textTree';
 
-/** 文本区预览行（缩进层级 + 类型 + 状态） */
+/** 文本区预览行（缩进层级 + 类型 + 状态 + 源行号 + 行内指令） */
 export type TemplateTextPreviewRow = ReturnType<typeof PREVIEW_TextTree>[number];
 
 /** 文本区校验结果 */
 export interface TemplateTextCheck {
-    /** 全部问题（语法 + 类型链 + 占位符），已按行号排序 */
+    /** 全部问题（语法 + 类型链 + 行内指令 + 占位符），已按行号排序 */
     issues: TextTreeIssue[];
     /** 解析出的预览行 */
     preview: TemplateTextPreviewRow[];
     /** 差异预告（更新 / 新增 / 删除），随输入实时刷新 */
     notice: string[];
-    /** 解析出的根数量（框架的一级内容数） */
+    /** 解析出的根数量（框架的一级内容数）= 插入分支数 */
     rootCount: number;
     /** 无校验错误（是否"有改动"由视图比对基线后决定） */
     canApply: boolean;
@@ -100,8 +104,9 @@ export function CHECK_TemplateFrameworkText(
 ): TemplateTextCheck {
     const { roots, issues } = PARSE_TextTree(text);
     const chain = VALIDATE_TemplateTree(roots);
+    const instr = VALIDATE_TemplateInstr(roots);
     const slots = COLLECT_PlaceholderIssues(roots);
-    const all = [...issues, ...chain, ...slots].sort((a, b) => a.line - b.line);
+    const all = [...issues, ...chain, ...instr, ...slots].sort((a, b) => a.line - b.line);
 
     const notice: string[] = [];
     // 语法有错时算差异没有意义（解析出的树是残缺的，预告会误导）
@@ -124,6 +129,69 @@ export function CHECK_TemplateFrameworkText(
         rootCount: roots.length,
         canApply: all.length === 0,
     };
+}
+
+// ============================================================
+// 插入分支（@ 指令 → 插入细则）
+// ============================================================
+
+/** 一个插入分支：一棵树 + 它自己的插入细则 */
+export interface TemplateBranch {
+    /** 树的根（展示名称、报错定位用） */
+    root: TextTreeNode;
+    /**
+     * 插入起点在树内的**名称路径**（自根往下逐级 desc）
+     *
+     * 空数组 = 整棵树从根开始；非空时插入用的是路径末端那个节点（它的祖先不入）。
+     * 用名称而不是下标定位：文本与库同构、名称按原文保留，内容重排后也不会错位。
+     */
+    startPath: string[];
+    /** 字段保留策略（取树内第一个 `@field`；没有则不传，由数据层用默认） */
+    field?: TextTreeFieldPolicy;
+    /** 插入位置（取树内第一个 `@pos`；没有则不传，追加到末尾） */
+    pos?: number;
+}
+
+/** 深度优先找第一个满足条件的节点 */
+function FIND_First(nodes: TextTreeNode[], pick: (ins: TextTreeInstr) => boolean): TextTreeNode | null {
+    for (const n of nodes) {
+        if (n.ins && pick(n.ins)) return n;
+        const deeper = FIND_First(n.children, pick);
+        if (deeper) return deeper;
+    }
+    return null;
+}
+
+/** 深度优先找第一个满足条件的节点，并给出从根到它的名称路径 */
+function FIND_Path(nodes: TextTreeNode[], pick: (ins: TextTreeInstr) => boolean): string[] | null {
+    for (const n of nodes) {
+        if (n.ins && pick(n.ins)) return [n.desc];
+        const deeper = FIND_Path(n.children, pick);
+        if (deeper) return [n.desc, ...deeper];
+    }
+    return null;
+}
+
+/**
+ * 把解析结果拆成插入分支
+ *
+ * - 单树（一个根）：一个分支 —— `@start` 缺省时从根开始整棵树插入
+ * - 多树（多个根）：每个根一个分支（「使用模板」时被区分为多个分支选项），
+ *   每棵树各自的 `@start` / `@field` / `@pos` 从该棵树内取
+ *
+ * 指令写在树内哪一行都行（「修饰行」的直觉），这里统一取**第一个**出现的那个。
+ */
+export function BRANCHES_TemplateText(roots: TextTreeNode[]): TemplateBranch[] {
+    return roots.map((root) => {
+        const fieldNode = FIND_First([root], (ins) => ins.field !== undefined);
+        const posNode = FIND_First([root], (ins) => ins.pos !== undefined);
+        return {
+            root,
+            startPath: FIND_Path([root], (ins) => !!ins.start) ?? [],
+            ...(fieldNode?.ins?.field ? { field: fieldNode.ins.field } : {}),
+            ...(posNode?.ins?.pos !== undefined ? { pos: posNode.ins.pos } : {}),
+        };
+    });
 }
 
 /** 回写文本区内容（失败时回报已完成的部分，便于判断要不要重来） */

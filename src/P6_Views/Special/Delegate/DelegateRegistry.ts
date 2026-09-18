@@ -48,6 +48,8 @@ export interface DelegateTreeHost {
     readonly settings: PluginSettings;
     /** 就地插一行「新建子节点」输入（类型由来源的 childKind 决定） */
     startCreateChild(ctx: NodeLineCtx): void;
+    /** 就地插一行「新建根级节点」输入（面板空白处右键用；父级为空、层级 0） */
+    startCreateRoot(): void;
     /** 进入行内重命名 */
     startRename(nodeId: string): void;
     /** 重算委托树 */
@@ -98,6 +100,14 @@ export interface DelegateSource {
      * 不给则用面板的默认三项（新建子节点 / 重命名 / 归档）
      */
     rowMenu?(host: DelegateTreeHost, ctx: NodeLineCtx, event: MouseEvent): void;
+    /**
+     * 空白处右键菜单：与来源视图左栏的空白菜单**同口径**
+     *
+     * 不给则用面板的默认两项（新建根级节点 + 从磁盘刷新）—— 现有两个来源
+     * （设计 / 模板）的空白菜单正好就是这两项，所以都走默认；
+     * 将来出现别的视图，若它的空白菜单不一样，在这里给一份即可。
+     */
+    blankMenu?(host: DelegateTreeHost, event: MouseEvent): void;
     /** 被抢占或取消时由来源自己执行的收尾（复位委托标记、写回设置…） */
     release(): void;
 }

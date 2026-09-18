@@ -31,8 +31,8 @@ import type { TreeNode } from '../Tool/tree';
 
 /**
  * 右键菜单模板操作组（普通节点行 / 框架行共用）：
- * - 存为模板：将当前节点整棵子树复制进所选模板框架（源根名自动参数化为 {{框架名}}）
- * - 使用模板：选择模板单元，克隆到当前节点/框架下（{{框架名}} 替换为当前节点名）
+ * - 存为模板：将当前节点整棵子树复制进所选模板框架（源根名自动参数化为 {{frame}}）
+ * - 使用模板：选择模板单元，克隆到当前节点/框架下（{{frame}} 替换为当前节点名）
  * 「打开模板库」不在右键提供：模板库管理请用中控台/命令面板的「模板模式」。
  */
 export function appendTemplateMenu(menu: Menu, view: DesignView, node: TreeNode): void {
@@ -63,7 +63,7 @@ export async function saveAsTemplate(view: DesignView, sourceId: string): Promis
     title: '存为模板 · 选择模板框架',
     frameworks: templates.map((t) => ({ nodeId: t.nodeId, label: t.data.desc })),
     onSelect: async (targetTemplateId) => {
-      // 克隆整棵子树；源根名出现处参数化为 {{框架名}}（含 body），复用后替换为目标名
+      // 克隆整棵子树；源根名出现处参数化为 {{frame}}（含 body），复用后替换为目标名
       const newRootId = await cloneSubtree({
         sourceId,
         parentId: targetTemplateId,
@@ -100,7 +100,7 @@ export function useTemplate(view: DesignView, targetParentId: string): void {
   }).open();
 }
 
-/** 应用模板单元：整棵子树克隆到目标父下，{{框架名}} 替换为目标父名，随后展开目标 */
+/** 应用模板单元：整棵子树克隆到目标父下，{{frame}} 替换为目标父名，随后展开目标 */
 export async function applyTemplateUnit(
   view: DesignView,
   entry: { unit: { nodeId: string } },

@@ -9,19 +9,27 @@
  * （行怎么画由 P7_Render 负责，本层不手写行元素），只用来选框架与增删框架；
  * 栏间与事务设计同款：宽度把手可拖，标题末尾有委托开关，委托期间左栏与把手都不渲染
  * （把空间让给右栏）。
+ * 左栏的新建与改名**都是行内**：空白/行右键触发附加行与重命名输入框（本层只把
+ * `creating` 与行内回调转交给树组件，形态与事务设计左栏完全一致）。
  * 右栏 = 选中框架的内容，**直接由文本表示**（TemplateTextPanel：解析预览 / 合法性校验 /
  * 按差异回写）—— 内容的增删改都在文本里做，因此右栏没有第二棵树。
  *
  * 两个 store 分开订阅：按键只刷 textStore，左栏树不跟着每帧重渲。
  */
 
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useStore } from "../../../../P0_UI/useStore";
 import type { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
 import { LINE_METRICS_LEFT, type NodeLineHost } from "../../../../P7_Render/Composition/C1_NodeLine/NodeLine";
 import { IconButton } from "../../../../P7_Render/Composition/C1_NodeLine/IconButton";
 import { NodeTreePane } from "../../../../P7_Render/Composition/C2_Tree/NodeTreePane";
-import type { NodeTreeActions, TreeNodeItem } from "../../../../P7_Render/Composition/C2_Tree/NodeTree";
+import type {
+    NodeInlineCreating,
+    NodeTreeActions,
+    TreeNodeItem,
+} from "../../../../P7_Render/Composition/C2_Tree/NodeTree";
+import type { NodeKindValue } from "../../../../P4_Nodes/NodeKind/NodeKind";
+import type { TemplateConflictPolicy } from "../../../../P2_Tools/Parse/TempParse";
 import { TemplateTextPanel, type TemplateTextState } from "./TemplateTextPanel";
 
 /** 文本区状态：定义随文本区渲染件走，这里转出供视图类取用 */
@@ -29,7 +37,7 @@ export type { TemplateTextState };
 
 /** 结构态（TemplateView 重算后写入；渲染件只读） */
 export interface TemplateState {
-    /** 缓存尚未就绪（新建按钮据此禁用） */
+    /** 缓存尚未就绪 */
     initializing: boolean;
     /** 左栏：全部模板框架（含嵌套的子框架，已按展开状态填好 children） */
     leftItems: TreeNodeItem[];
@@ -43,39 +51,58 @@ export interface TemplateState {
     delegated: boolean;
     /** 左栏宽度（记忆于设置；面板内拖动时以本地状态为准，结束时上报） */
     leftPaneWidth: number;
+    /** 行内新建态（附加行插在哪个父节点下） */
+    creating: NodeInlineCreating | null;
+    /** 正在行内重命名的节点 id（那一行由行组件渲染输入框） */
+    renameId: string | null;
 }
 
 /**
  * 交互入口（由 TemplateView 实现）
  *
- * 与 DesignPanel 同法：渲染件只回传 `NodeLineCtx` 与原生事件。模板模式只有左栏一棵树，
- * 因此不需要「哪一栏」这个参数。
+ * 与 DesignPanel 同法：渲染件只回传 `NodeLineCtx` 与原生事件，不做任何判定。模板模式
+ * 只有左栏一棵树，因此不需要「哪一栏」这个参数。
  *
- * `applyTemplate` / `deleteNode` / `openFile` 由视图的行右键菜单路径消费（渲染件经
- * `contextMenu` 转发，不直接调用）—— 它们与 `createRootFramework` 一样属于视图的写操作
- * 入口，列在这里是为了契约完整。
+ * `applyTemplate` / `archiveNode` / `openFile` / `blankContextMenu` 由视图的右键菜单路径
+ * 消费（渲染件只转发 `contextMenu`），列在这里是为了契约完整。
  */
 export interface TemplateActions {
     /** 展开 / 收起左栏某行 */
     toggle(nodeId: string): void;
     /** 选中该模板框架（行末按钮） */
     select(nodeId: string): void;
-    /** 行右键（框架的增删与应用） */
+    /** 行右键（框架的应用 / 新建 / 改名 / 归档） */
     contextMenu(nodeId: string, event: MouseEvent): void;
-    /** 新建根级模板框架 */
-    createRootFramework(): void;
+    /** 左栏空白右键（新建模板框架 / 从磁盘刷新） */
+    blankContextMenu(event: MouseEvent): void;
     /** 应用此模板到目标框架（右键菜单） */
     applyTemplate(nodeId: string): void;
-    /** 删除模板框架（含内容，右键菜单） */
-    deleteNode(nodeId: string): void;
+    /** 归档模板框架（含内容，右键菜单；可回收，不是删除） */
+    archiveNode(nodeId: string): void;
     /** 打开模板框架正文（右键菜单） */
     openFile(nodeId: string): void;
+    /** 行内新建：提交（name 已 trim，空值由组件拦下） */
+    createCommit(parentId: string, kind: NodeKindValue, name: string): void;
+    /** 行内新建：取消 */
+    createCancel(parentId: string): void;
+    /** 行内新建：切换类型 */
+    createKindChange(parentId: string, kind: NodeKindValue): void;
+    /** 行内新建：切换「连续输入」 */
+    createRepeatChange(parentId: string, repeat: boolean): void;
+    /** 行内重命名：提交 */
+    inlineCommit(nodeId: string, value: string): void;
+    /** 行内重命名：取消 */
+    inlineCancel(): void;
     /** 文本区：内容变化（只改草稿，不落盘） */
     textChange(value: string): void;
     /** 文本区：回写 */
     textCommit(): void;
     /** 文本区：撤销改动 */
     textReset(): void;
+    /** 文本区：改插入时的同名冲突策略（预览区底部） */
+    setConflict(policy: TemplateConflictPolicy): void;
+    /** 预览上点状态圆点：把编辑文本里那一行切成完成 / 规划 */
+    togglePreviewState(line: number): void;
     /** 左栏：进行 / 取消委托（全局互斥，见 Special/Delegate/DelegateRegistry） */
     toggleDelegate(): void;
     /** 左栏宽度变更（拖动结束时上报，由视图防抖写回设置） */
@@ -83,7 +110,7 @@ export interface TemplateActions {
 }
 
 export interface TemplatePanelProps {
-    /** 结构态（左栏树 / 选中 / 委托） */
+    /** 结构态（左栏树 / 选中 / 委托 / 行内编辑态） */
     state: SimpleStore<TemplateState>;
     /** 文本区态（正在编辑的文本及其预览 / 校验） */
     text: SimpleStore<TemplateTextState>;
@@ -97,6 +124,12 @@ function bindTree(a: TemplateActions): NodeTreeActions {
         onToggle: (ctx) => a.toggle(ctx.nodeId),
         onSelect: (ctx) => a.select(ctx.nodeId),
         onContextMenu: (ctx, e) => a.contextMenu(ctx.nodeId, e),
+        onInlineCommit: (ctx, value) => a.inlineCommit(ctx.nodeId, value),
+        onInlineCancel: () => a.inlineCancel(),
+        onCreateCommit: (parentId, kind, name) => a.createCommit(parentId, kind, name),
+        onCreateCancel: (parentId) => a.createCancel(parentId),
+        onCreateKindChange: (parentId, kind) => a.createKindChange(parentId, kind),
+        onCreateRepeatChange: (parentId, repeat) => a.createRepeatChange(parentId, repeat),
     };
 }
 
@@ -156,6 +189,17 @@ export function TemplatePanel({ state, text, actions, host }: TemplatePanelProps
         actions.setLeftWidth(next);
     };
 
+    /**
+     * 空白区右键：行自身的 contextmenu 已 stopPropagation，能冒泡到栏的都是空白 ——
+     * 再按行选择器确认一次（与 DesignPanel 同法），免得哪天行的转发漏了就把行上的右键
+     * 当成空白菜单弹出来。
+     */
+    const onPaneContextMenu = (e: ReactMouseEvent) => {
+        if ((e.target as HTMLElement).closest(".seqtk-frame-item")) return;
+        e.preventDefault();
+        actions.blankContextMenu(e.nativeEvent);
+    };
+
     return (
         <div className={"seqtk-split" + (s.delegated ? " seqtk-split-delegated" : "")}>
             {/* 委托期间左栏与把手不渲染：委托的目的正是把空间让给右栏（只是隐藏仍会占位） */}
@@ -166,26 +210,18 @@ export function TemplatePanel({ state, text, actions, host }: TemplatePanelProps
                     /* 宽度取 ref 而不是 state：拖动期间宽度是命令式改的，
                        重渲时若按旧 state 写回，宽度会跳回去（见 onHandleMove 的说明） */
                     paneStyle={{ width: widthRef.current, flexBasis: widthRef.current }}
+                    onPaneContextMenu={onPaneContextMenu}
                     title="模板框架"
                     titleExtra={
-                        <>
-                            <button
-                                type="button"
-                                className="seqtk-btn seqtk-btn-ghost seqtk-title-btn"
-                                disabled={s.initializing}
-                                onClick={() => actions.createRootFramework()}
-                            >
-                                新建
-                            </button>
-                            {/* 委托开关收在标题末尾：与事务设计左栏同款，方向随状态反转 */}
-                            <IconButton
-                                className={"seqtk-icon-btn seqtk-delegate-btn" + (s.delegated ? " is-active" : "")}
-                                icon={s.delegated ? "chevrons-right" : "chevrons-left"}
-                                tip={s.delegated ? "取消委托（模板框架树交还此栏）" : "委托到侧栏"}
-                                host={host}
-                                onClick={() => actions.toggleDelegate()}
-                            />
-                        </>
+                        /* 委托开关收在标题末尾：与事务设计左栏同款，方向随状态反转。
+                           新建入口不在这里 —— 它走行内（空白/行右键），与设计视图左栏一致 */
+                        <IconButton
+                            className={"seqtk-icon-btn seqtk-delegate-btn" + (s.delegated ? " is-active" : "")}
+                            icon={s.delegated ? "chevrons-right" : "chevrons-left"}
+                            tip={s.delegated ? "取消委托（模板框架树交还此栏）" : "委托到侧栏"}
+                            host={host}
+                            onClick={() => actions.toggleDelegate()}
+                        />
                     }
                     items={s.leftItems}
                     metrics={LINE_METRICS_LEFT}
@@ -193,6 +229,7 @@ export function TemplatePanel({ state, text, actions, host }: TemplatePanelProps
                     host={host}
                     rowClass="seqtk-frame-item"
                     emptyText={s.leftEmpty}
+                    creating={s.creating}
                 />
             )}
 
@@ -219,6 +256,8 @@ export function TemplatePanel({ state, text, actions, host }: TemplatePanelProps
                         onChange={actions.textChange}
                         onCommit={actions.textCommit}
                         onReset={actions.textReset}
+                        onConflictChange={actions.setConflict}
+                        onToggleState={actions.togglePreviewState}
                     />
                 )}
             </div>

@@ -17,7 +17,6 @@
  *   加一个 export function，并在 Design.ts 的 buildActions 里接线
  */
 
-import { Notice } from 'obsidian';
 import {
     BUILD_Menu,
     type MenuDefinition,
@@ -51,6 +50,7 @@ import { addExternalSource, createTimestampDoc, manageExternalSources } from './
 import { manageTags } from './tags';
 import { copySubtreeAsText, editFrameworkContentAsText, editSubtreeAsText } from './textEdit';
 import { buildFrameworkNode, buildNode, type TreeNode } from '../Tool/tree';
+import { SYNC_FromFiles } from '../../../V0_Common/SyncFromFiles';
 import type { TreeSide } from '../Core/DesignPanel';
 import type { DesignView } from '../Core/Design';
 
@@ -108,14 +108,41 @@ function evidenceSubmenuDefs(onPick: (kind: NodeKindValue) => void): MenuDefinit
     ];
 }
 
-/** 从磁盘刷新（左右栏空白菜单共用） */
-async function syncFromFiles(view: DesignView): Promise<void> {
-    if (!view.pipe.isInitialized) {
-        new Notice('查询缓存尚未就绪，请稍候');
-        return;
+/**
+ * 「创建节点」子菜单：构思 / 清单 / 事件各一条，**按父类型过滤**
+ *
+ * 过滤用 getAllowedChildKinds（见 NodeChildAllow）：框架下三条都在，构想 / 方向 / 目标 /
+ * 工序下只剩「新建事件」—— 事件本来就可以挂在任意一层。过滤后只剩一条时**直接平铺**，
+ * 不再套一层只有一项的子菜单，那种壳只是让人多点一下。
+ */
+function createNodeSubmenuDefs(onPick: (kind: NodeKindValue) => void, parentKind?: NodeKindValue): MenuDefinition[] {
+    const all = [
+        { name: '新建构思', icon: ICON.newConcept, kind: NODE_KIND.CONCEPT as NodeKindValue },
+        { name: '新建清单', icon: ICON.newCheck, kind: NODE_KIND.CHECK as NodeKindValue },
+        { name: '新建事件', icon: ICON.newEvent, kind: NODE_KIND.EVENT as NodeKindValue },
+    ];
+    const allowed = parentKind ? getAllowedChildKinds(parentKind) : undefined;
+    const picked = allowed ? all.filter((it) => allowed.includes(it.kind)) : all;
+    if (picked.length === 0) return [];
+    if (picked.length === 1) {
+        const one = picked[0];
+        return [{
+            name: one.name,
+            icon: one.icon,
+            section: SECTION.main,
+            action: () => onPick(one.kind),
+        }];
     }
-    await view.pipe.SYNC_FromFiles();
-    new Notice('已从磁盘刷新');
+    return [{
+        name: '创建节点',
+        icon: ICON.createGroup,
+        section: SECTION.main,
+        items: picked.map((it) => ({
+            name: it.name,
+            icon: it.icon,
+            action: () => onPick(it.kind),
+        })),
+    }];
 }
 
 /** 展开 / 收起：标题与图标随即将执行的行为变化（无子项的行不出现） */
@@ -131,10 +158,13 @@ function expandDefs(view: DesignView, node: TreeNode, side: TreeSide): MenuDefin
     ];
 }
 
-/** 行内追加子项：左栏是子框架；右栏按该行允许的子类型（目标固定为工序） */
+/** 行内追加子项：左栏是子框架；右栏按该行允许的子类型（目标固定为工序，事件另有入口） */
 function newChildDefs(view: DesignView, node: TreeNode, e: MouseEvent, side: TreeSide): MenuDefinition[] {
     const kind = node.data.kind;
-    const kinds = side === 'left' ? [NODE_KIND.TRANS] : getAllowedChildKinds(kind);
+    // 事件走「新建事件」那条独立入口，这里排掉它，免得同一行菜单里两条路通向同一个动作
+    const kinds = side === 'left'
+        ? [NODE_KIND.TRANS]
+        : getAllowedChildKinds(kind).filter((k) => k !== NODE_KIND.EVENT);
     if (kinds.length === 0) return [];
     const allowed = kind === NODE_KIND.TARGET ? [NODE_KIND.PROCESS] : kinds;
     return [
@@ -147,19 +177,12 @@ function newChildDefs(view: DesignView, node: TreeNode, e: MouseEvent, side: Tre
     ];
 }
 
-/** 右栏框架行的行内新建入口（不开模态框） */
+/** 右栏框架行的行内新建入口（不开模态框）：与空白处同一个「创建节点」子菜单 */
 function rightCreateDefs(view: DesignView, node: TreeNode, e: MouseEvent): MenuDefinition[] {
-    const create = (name: string, icon: string, kind: NodeKindValue): MenuDefinition => ({
-        name,
-        icon,
-        section: SECTION.main,
-        action: () => startCreateChild(view, ctxFromEvent(e, node), 'right', [kind]),
-    });
-    return [
-        create('新建构思', ICON.newConcept, NODE_KIND.CONCEPT),
-        create('新建清单', ICON.newCheck, NODE_KIND.CHECK),
-        create('新建事件', ICON.newEvent, NODE_KIND.EVENT),
-    ];
+    return createNodeSubmenuDefs(
+        (kind) => startCreateChild(view, ctxFromEvent(e, node), 'right', [kind]),
+        node.data.kind,
+    );
 }
 
 /** 模板操作组：存为模板 / 使用模板 */
@@ -193,12 +216,12 @@ export function getLeftBlankMenuDefinitions(view: DesignView): MenuDefinitions {
             name: '从磁盘刷新',
             icon: ICON.syncFromFiles,
             section: SECTION.refresh,
-            action: () => void syncFromFiles(view),
+            action: () => void SYNC_FromFiles(view.pipe),
         },
     ];
 }
 
-/** 右栏空白右键：新建三类 + 追加信息 + 批量编辑 + 模板功能 + 从磁盘刷新 */
+/** 右栏空白右键：创建节点（子菜单）+ 追加信息 + 批量编辑 + 模板功能 + 从磁盘刷新 */
 export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions {
     const parentId = view.selectedFrameworkId ?? undefined;
     const parentData = parentId ? view.pipe.GET_Node(parentId) : undefined;
@@ -210,24 +233,9 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
         ? buildFrameworkNode(view.pipe, parentId, parentData)
         : undefined;
     return [
-        {
-            name: '新建构思',
-            icon: ICON.newConcept,
-            section: SECTION.main,
-            action: () => startCreateBlank(view, NODE_KIND.CONCEPT, 'right', parentId),
-        },
-        {
-            name: '新建清单',
-            icon: ICON.newCheck,
-            section: SECTION.main,
-            action: () => startCreateBlank(view, NODE_KIND.CHECK, 'right', parentId),
-        },
-        {
-            name: '新建事件',
-            icon: ICON.newEvent,
-            section: SECTION.main,
-            action: () => startCreateBlank(view, NODE_KIND.EVENT, 'right', parentId),
-        },
+        // 形态与「追加信息」「模板功能」一致：三个「新建 X」收在一条子菜单里，
+        // 空白处右键一眼能看完（框架行的行右键用的是同一个构造函数）
+        ...createNodeSubmenuDefs((kind) => startCreateBlank(view, kind, 'right', parentId)),
         ...evidenceSubmenuDefs((kind) => startCreateBlank(view, kind, 'right', parentId)),
         // 根可多个（框架自身那行藏起来），应对框架内元素较多的情况
         ...(parentId
@@ -235,7 +243,7 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
                   {
                       name: '批量编辑',
                       icon: ICON.editFrameworkContent,
-                      section: SECTION.framework,
+                      section: SECTION.main,
                       action: () => editFrameworkContentAsText(view, parentId),
                   },
               ]
@@ -254,7 +262,7 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
             name: '从磁盘刷新',
             icon: ICON.syncFromFiles,
             section: SECTION.refresh,
-            action: () => void syncFromFiles(view),
+            action: () => void SYNC_FromFiles(view.pipe),
         },
     ];
 }
@@ -263,8 +271,8 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
  * 框架行右键：展开/收起 + 行内新建 + 重命名 + 时间规则 + 模板 + 归档
  *
  * 「追加子项」只在左栏出现（在那一栏它叫「追加子框架」）：右栏的框架卡片已经给了
- * 「新建构思 / 新建清单 / 新建事件」三个明确入口，再挂一条「按允许类型新建」的泛化项，
- * 只会让人在几个入口之间犹豫该点哪个。
+ * 「创建节点」子菜单（新建构思 / 清单 / 事件）三个明确入口，再挂一条「按允许类型新建」的
+ * 泛化项，只会让人在几个入口之间犹豫该点哪个。
  */
 function getFrameMenuDefinitions(
     view: DesignView,
@@ -307,9 +315,10 @@ function getFrameMenuDefinitions(
         },
         ...templateDefs(view, node),
         {
-            name: '归档',
+            name: '归档框架',
             icon: ICON.archive,
             section: SECTION.danger,
+            warning: true,
             action: () => archiveNode(view, node.nodeId),
         },
     ];
@@ -327,31 +336,19 @@ function getRowMenuDefinitions(
     e: MouseEvent,
     side: TreeSide,
 ): MenuDefinitions {
-    const addEvidence = (kind: NodeKindValue): void =>
+    // 行内新建的统一落点：新建的那个挂到这一行的子列表末尾
+    const addChild = (kind: NodeKindValue): void =>
         startCreateChild(view, ctxFromEvent(e, node), side, [kind]);
     return [
-        // ── 第一组：结构 + 编辑 ──
-        ...expandDefs(view, node, side),
+        // ── 第一组 ──
         ...newChildDefs(view, node, e, side),
-        ...evidenceSubmenuDefs(addEvidence),
-        ...stateDefs(view, node),
+        ...expandDefs(view, node, side),
+        ...evidenceSubmenuDefs(addChild),
         {
-            name: '管理标签',
-            icon: 'tags',
+            name: '重命名',
+            icon: ICON.rename,
             section: SECTION.main,
-            action: () => manageTags(view, node.nodeId),
-        },
-        {
-            name: '时间规则',
-            icon: ICON.editAttrs,
-            section: SECTION.main,
-            action: () => openEdit(view, node.nodeId),
-        },
-        {
-            name: '修改描述',
-            icon: ICON.editDesc,
-            section: SECTION.main,
-            action: () => openBodyEdit(view, node.nodeId),
+            action: () => startRename(view, node.nodeId, side),
         },
         {
             name: '批量编辑',
@@ -359,44 +356,73 @@ function getRowMenuDefinitions(
             section: SECTION.main,
             action: () => editSubtreeAsText(view, node.nodeId),
         },
-
-        // ── 第二组：归属 · 命名 · 复制 · 打开 ──
-        {
-            name: '变更归属',
-            icon: ICON.changeParent,
-            section: SECTION.meta,
-            action: () => changeParent(view, node.nodeId),
-        },
-        {
-            name: '重命名',
-            icon: ICON.rename,
-            section: SECTION.meta,
-            action: () => startRename(view, node.nodeId, side),
-        },
         {
             name: '复制子树',
             icon: ICON.copyText,
-            section: SECTION.meta,
+            section: SECTION.main,
             action: () => void copySubtreeAsText(view, node.nodeId),
         },
+        // 属性相关的四个动作收成一个子菜单（见 attributeGroupDefs）：它们都是
+        // 「改这个节点的某个属性」，平铺会把第一组撑得很长
+        ...attributeGroupDefs(view, node),
+
+        // ── 第二组 ──
+        ...templateGroupDefs(view, node),
+        ...externalInfoDefs(view, node),
         {
             name: '打开文件',
             icon: ICON.openFile,
-            section: SECTION.meta,
+            section: SECTION.tools,
             action: () => void openNodeFile(view, node.nodeId),
         },
 
-        // ── 第三组：工具（模板与外部信息各收成一个子菜单）──
-        ...templateGroupDefs(view, node),
-        ...externalInfoDefs(view, node),
-
-        // ── 第四组：归档（破坏性操作，靠上一道分隔线隔开）──
+        // ── 第三组：归档（破坏性操作，靠上一道分隔线隔开）──
         {
-            name: '归档',
+            name: '归档节点',
             icon: ICON.archive,
             section: SECTION.danger,
             warning: true,
             action: () => archiveNode(view, node.nodeId),
+        },
+    ];
+}
+
+/**
+ * 属性更改组：归属 / 标签 / 时间 / 描述
+ *
+ * 四个动作都是「改这个节点的某个属性」，平铺进第一组会把菜单撑得很长；收成一个子菜单后，
+ * 日常入口（结构、重命名、批量编辑）仍留在一眼可见的位置。子项不写 section ——
+ * 组内不再分组（分隔符规则见 BUILD_Menu）。
+ */
+function attributeGroupDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
+    const nodeId = node.nodeId;
+    return [
+        {
+            name: '属性更改',
+            icon: ICON.editAttrs,
+            section: SECTION.main,
+            items: [
+                {
+                    name: '变更归属',
+                    icon: ICON.changeParent,
+                    action: () => changeParent(view, nodeId),
+                },
+                {
+                    name: '管理标签',
+                    icon: 'tags',
+                    action: () => manageTags(view, nodeId),
+                },
+                {
+                    name: '时间设置',
+                    icon: ICON.editAttrs,
+                    action: () => openEdit(view, nodeId),
+                },
+                {
+                    name: '更改描述',
+                    icon: ICON.editDesc,
+                    action: () => openBodyEdit(view, nodeId),
+                },
+            ],
         },
     ];
 }
@@ -422,14 +448,19 @@ function externalInfoDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
             section: SECTION.tools,
             items: [
                 {
-                    name: '添加外部信息源',
+                    name: '关联库内文件或 URL',
                     icon: ICON.externalGroup,
                     action: () => addExternalSource(view, node.nodeId),
                 },
                 {
-                    name: '创建关联时间戳',
+                    name: '快速创建关联时间戳',
                     icon: 'file-plus',
-                    action: () => void createTimestampDoc(view, node.nodeId),
+                    action: () => void createTimestampDoc(view, node.nodeId, false),
+                },
+                {
+                    name: '创建并打开关联时间戳',
+                    icon: 'external-link',
+                    action: () => void createTimestampDoc(view, node.nodeId, true),
                 },
                 {
                     name: '管理外部信息源',
@@ -437,25 +468,6 @@ function externalInfoDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
                     action: () => manageExternalSources(view, node.nodeId),
                 },
             ],
-        },
-    ];
-}
-
-/** 状态更改子菜单：每态一个图标 + 当前状态打勾（该类型不带状态时整项不出） */
-function stateDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
-    if (!kindUsesState(node.data.kind)) return [];
-    const current = node.data.state ?? 'plan';
-    return [
-        {
-            name: '状态更改',
-            icon: ICON.changeState,
-            section: SECTION.main,
-            items: [...STATE_VALUES].map((s) => ({
-                name: NODE_STATE_LABELS[s],
-                icon: STATE_ICON[s],
-                checked: current === s,
-                action: () => setNodeState(view, node.nodeId, s),
-            })),
         },
     ];
 }

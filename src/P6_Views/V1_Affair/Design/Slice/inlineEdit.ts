@@ -1,32 +1,55 @@
 /**
- * design/inlineEdit — 设计视图行内编辑切片
+ * design/inlineEdit — 行内编辑切片
  *
  * 从 DesignView 拆出的「行内瞬时编辑态」：重命名 · 附加行新建（含连续输入）· 正文浮层。
  * 只维护「当前处于哪种编辑态」，数据落盘仍交给 design/actions。
  *
+ * 共用范围（关键）：行内新建与重命名**不绑设计视图** —— 宿主只要求实现 `InlineEditView`
+ * （见下），因此设计视图、被委托出去的那棵树（DelegateTreeController）与模板模式左栏
+ * 共用同一套实现，三处的行为不会各自漂移。正文浮层仍只服务设计视图，形参保持 DesignView。
+ *
  * 约定:
- * - 本文件函数以 view(DesignView 实例)为第一参数,只读写 view 上公开的状态
- *   （pipe / app / refresh / expandedLeft / expandedRight / rename / creating / bodyEditing /
+ * - 本文件函数以 view(InlineEditView 实现)为第一参数,只读写它上公开的状态
+ *   （pipe / app / refresh / expandedLeft / expandedRight / rename / creating /
  *   suppressRefresh）；「提交后刷新一次」的职责留在这里，数据面不做重绘
- * - 新建落盘统一走 design/actions.createNode；重命名与正文统一走 saveNodeDesc / saveNodeBody
+ * - 新建落盘统一走 design/actions.createNode；重命名统一走 saveNodeDesc + saveTags
  * - 连续输入靠 seq 递增换 key 重建附加行（见 commitCreate 的说明），不要改成复用同一 key
  *
  * 功能增补指引:
- * - 新增一种行内编辑态 → 在此加「进入 / 提交 / 取消」三件套，并在 design/viewState 里反映到行覆盖信息
+ * - 新增一种行内编辑态 → 在此加「进入 / 提交 / 取消」三件套，并在宿主的行覆盖信息
+ *   （overlayFor）里反映出来
  */
 
 import { TextPromptModal } from '../../../../P7_Render/Structure/S2_Modal/TextPromptModal';
 import { getAllowedChildKinds } from '../../../../P4_Nodes/NodeFacade';
 import { buildNode } from '../Tool/tree';
-import { createNode, saveNodeBody, saveNodeDesc } from './actions';
+import { createNode, saveNodeBody, saveNodeDesc, type NodeEditHost } from './actions';
 import { PARSE_NameTags, saveTags } from './tags';
 import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import type { NodeLineCtx } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
-import type { TreeSide } from '../Core/DesignPanel';
+import type { DesignInlineCreating, TreeSide } from '../Core/DesignPanel';
 import type { DesignView } from '../Core/Design';
 
+/**
+ * 行内编辑切片的最小宿主
+ *
+ * = NodeEditHost（数据面 + 两组展开集合 + 重绘入口）再加三样：两个瞬时编辑态由宿主
+ * 持有（渲染件要读它们才画得出输入框），以及写盘期间的抑制位 —— 都是「宿主自己的
+ * 状态」，切片只改不存。
+ */
+export interface InlineEditView extends NodeEditHost {
+    /** 行内重命名态（哪一行正在改名） */
+    rename: { nodeId: string; side: TreeSide } | null;
+    /** 行内新建态：附加行插在哪个父节点、什么类型、哪一栏发起 */
+    creating: DesignInlineCreating | null;
+    /** 写盘期间压掉重绘（提交后由本切片统一刷一次，见 commitCreate） */
+    suppressRefresh?: boolean;
+    /** 重绘一次（各宿主各自表达：视图 → refresh，委托面板 → recompute） */
+    refresh(): void;
+}
+
 /** 进入行内重命名态（由菜单「重命名」触发） */
-export function startRename(view: DesignView, nodeId: string, side: TreeSide): void {
+export function startRename(view: InlineEditView, nodeId: string, side: TreeSide): void {
     const data = view.pipe.GET_Node(nodeId);
     if (!data) return;
     view.rename = { nodeId, side };
@@ -41,7 +64,7 @@ export function startRename(view: DesignView, nodeId: string, side: TreeSide): v
  * 所以进编辑时就能看见现有标签。
  * 名称为空（整行只剩标签）时保留原名 —— 免得手滑把名字删没。
  */
-export function commitRename(view: DesignView, nodeId: string, value: string): void {
+export function commitRename(view: InlineEditView, nodeId: string, value: string): void {
     const data = view.pipe.GET_Node(nodeId);
     view.rename = null;
     if (!data || !value) {
@@ -60,13 +83,13 @@ export function commitRename(view: DesignView, nodeId: string, value: string): v
     view.refresh();
 }
 
-export function cancelRename(view: DesignView): void {
+export function cancelRename(view: InlineEditView): void {
     view.rename = null;
     view.refresh();
 }
 
 /** 空白处新建（左栏空白 → 顶级框架；右栏空白 → 选中框架的直属子节点） */
-export function startCreateBlank(view: DesignView, kind: NodeKindValue, side: TreeSide, parentId?: string): void {
+export function startCreateBlank(view: InlineEditView, kind: NodeKindValue, side: TreeSide, parentId?: string): void {
     const parent = parentId ?? '';
     view.creating = { parentId: parent, kinds: [kind], kind, depth: 0, side };
     view.refresh();
@@ -74,7 +97,7 @@ export function startCreateBlank(view: DesignView, kind: NodeKindValue, side: Tr
 
 /** 在某个子节点的子列表末尾新建（未展开则先展开） */
 export function startCreateChild(
-    view: DesignView,
+    view: InlineEditView,
     ctx: NodeLineCtx,
     side: TreeSide,
     kindsOverride?: NodeKindValue[],
@@ -89,27 +112,27 @@ export function startCreateChild(
     view.refresh();
 }
 
-export function setCreateKind(view: DesignView, kind: NodeKindValue): void {
+export function setCreateKind(view: InlineEditView, kind: NodeKindValue): void {
     if (!view.creating) return;
     view.creating = { ...view.creating, kind };
     view.refresh();
 }
 
 /** 行内新建：切换「连续输入」（提交后保留附加行） */
-export function setCreateRepeat(view: DesignView, repeat: boolean): void {
+export function setCreateRepeat(view: InlineEditView, repeat: boolean): void {
     if (!view.creating) return;
     view.creating = { ...view.creating, repeat };
     view.refresh();
 }
 
-export function cancelCreate(view: DesignView): void {
+export function cancelCreate(view: InlineEditView): void {
     view.creating = null;
     view.refresh();
 }
 
 /** 落盘新节点（数据写在 design/actions，本文件只转交意图） */
 export async function commitCreate(
-    view: DesignView,
+    view: InlineEditView,
     parentId: string,
     kind: NodeKindValue,
     name: string,
@@ -123,7 +146,7 @@ export async function commitCreate(
             view,
             { kind, desc: name, state: 'plan', afterCreate: 'direct' },
             parentId || undefined,
-            // 视图下面自己刷新一次就够；createNode 内部那两栏重绘与它重复，跳过
+            // 宿主下面自己刷新一次就够；createNode 内部那两栏重绘与它重复，跳过
             { skipRender: true, side: prev?.side },
         );
     } finally {
@@ -140,7 +163,7 @@ export async function commitCreate(
 }
 
 /**
- * 修改描述：走模态框（菜单「修改描述」的入口）
+ * 修改描述：走模态框（菜单「修改描述」的入口，只有设计视图用）
  *
  * 描述是整段 Markdown，弹窗里改比行内浮层从容；行内浮层那条链（startBodyEdit）
  * 留给行上的直接编辑入口。

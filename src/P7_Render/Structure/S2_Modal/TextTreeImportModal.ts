@@ -168,7 +168,7 @@ export class TextTreeImportModal extends Modal {
             // 文本语法里的 [ ] 只留在上面的编辑框里（那是回写要用的语法）
             line.createEl('span', {
                 cls: `seqtk-state-dot state-${row.state}`,
-                attr: { title: NODE_STATE_LABELS[row.state] },
+                attr: { 'aria-label': NODE_STATE_LABELS[row.state] },
             });
         }
 

@@ -25,6 +25,7 @@
  * 「这一行要不要画、画在行角还是父列竖线上」，绘制交给 GuideOverlay。
  */
 
+import { TAG_VISIBLE_LIMIT } from "./NodeLine";
 import { GET_KindClass } from "../../../P4_Nodes/NodeKind/KindColors";
 import { GET_SourceLabel } from "../../../P4_Nodes/NodeField/AttriGroup/External";
 import { useEffect, useLayoutEffect, useRef, type CSSProperties, type RefObject } from "react";
@@ -138,12 +139,24 @@ export function NodeLinePanel({
                 {data.desc}
             </span>
 
-            {/* 标签：紧跟节点名之后，只展示不接管点击（悬浮列出全部标签名） */}
+            {/* 标签：紧跟节点名之后。最多露出 TAG_VISIBLE_LIMIT 个，其余折成「+N」——
+                它是个鼠标悬浮区（不是按钮），浮层里用与行上同一个徽章样式补齐，
+                纯 CSS 显隐，不参与任何点击语义 */}
             {(data.tags?.length ?? 0) > 0 && (
-                <span className="seqtk-tag-list" data-tip={data.tags!.join(" ")}>
-                    {data.tags!.map((tag, i) => (
+                <span className="seqtk-tag-list">
+                    {data.tags!.slice(0, TAG_VISIBLE_LIMIT).map((tag, i) => (
                         <span key={i} className="seqtk-tag-badge">{tag}</span>
                     ))}
+                    {data.tags!.length > TAG_VISIBLE_LIMIT && (
+                        <span className="seqtk-tag-more">
+                            {`+${data.tags!.length - TAG_VISIBLE_LIMIT}`}
+                            <span className="seqtk-tag-more-popup">
+                                {data.tags!.slice(TAG_VISIBLE_LIMIT).map((tag, i) => (
+                                    <span key={i} className="seqtk-tag-badge">{tag}</span>
+                                ))}
+                            </span>
+                        </span>
+                    )}
                 </span>
             )}
 

@@ -81,14 +81,13 @@
    标签：#标签 徽章（行上）+ 管理弹窗
    ============================================================ */
 
-/* 行上：紧跟节点名之后逐个展示。只展示不接管点击，故用 span 而非 button；
-   标签多时整体收缩（min-width: 0 让 flex 允许压缩），由 tooltip 兜底看全 */
+/* 行上：紧跟节点名之后逐个展示（用 span，不接管点击、也不挂悬浮提示）。
+   自身 flex-shrink: 0 —— 宽度不够时该让位的是正文预览（它带 ellipsis），标签始终完整 */
 .seqtk-tag-list {
+  padding-left: 3px;
   display: inline-flex;
-  flex-shrink: 1;
-  min-width: 0;
+  flex-shrink: 0;
   gap: 4px;
-  overflow: hidden;
 }
 
 /* 浅绿底 + 深绿字：明暗主题下都读得清；行高与内边距收紧，不把行撑高 */
@@ -101,6 +100,44 @@
   color: #2f6b41;
   font-size: var(--font-ui-smaller);
   line-height: 1.35;
+}
+
+/* 「+N」：标签溢出后的**悬浮区**（不是按钮）。自身与标签徽章同族但更收敛；
+   鼠标移上来时，下方浮层用同一个徽章样式补齐被折叠的标签 */
+.seqtk-tag-more {
+  position: relative;
+  height: 20px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border: 1px dashed #a9d8b6;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: #3f7f52;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.35;
+}
+
+/* 浮层：绝对定位在「+N」正下方、右对齐（免得越出右边界）；一行三个 */
+.seqtk-tag-more-popup {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: var(--layer-popover, 30);
+  margin-top: 4px;
+  padding: 6px;
+  grid-template-columns: repeat(3, max-content);
+  gap: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s, 0 2px 8px rgb(0 0 0 / 20%));
+}
+
+.seqtk-tag-more:hover .seqtk-tag-more-popup {
+  display: grid;
 }
 
 /* 管理标签弹窗：一行一个标签，右侧是上移 / 下移 / 删除 */
@@ -191,10 +228,15 @@
   stroke-width: 1;
 }
 
-/* 正文预览（节点名后；内容宽，上限 220px，半透明弱化视觉焦点；flex-shrink 权重大于名称，行宽不足时先被压缩/隐藏） */
+/* 正文预览（节点名后；半透明弱化视觉焦点）。
+   行内弹性优先级是两极的：
+   - 不可压缩：类型徽章 / 标签 / 时间徽章 / 状态圆点 / 链接徽章 / 打开按钮 —— 一律 flex-shrink: 0
+   - 可压缩：只有节点名与正文预览，且正文预览远低于节点名
+   所以这里的收缩权重开到 100：正文预览会在名字开始被压之前就先缩到 0，
+   「节点名 > 正文预览」在数值上成立，而不只是差几倍 */
 .seqtk-body-preview {
-  flex: 0 5 auto;
-  max-width: 220px;
+  flex: 0 100 auto;
+  /*max-width: 220px;*/
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2347,6 +2389,17 @@ button.seqtk-open-btn {
   display: block;
 }
 
+/*
+ * 语法指南（设置子页的命令式部分）：同样先改流向
+ *
+ * 与 .seqtk-settings-rules / -kind-labels / -hub 是同一件事：render 拿到的是那条
+ * setting-item（横向 flex），不改成 block 的话，下面那些「一条一行」会被并排成一整条横排。
+ * 新增子页时照着加一个类（详见 P3_Settings/Settings.md 的「子页面的特殊性」）。
+ */
+.seqtk-settings-syntax {
+  display: block;
+}
+
 /* 一条规则 = 一块：块内的 setting-item 去掉框架自动画的分隔线并收紧行距，
    免得一条规则被切成好几段；块与块之间才留一条线，两条规则不会糊成一片 */
 .seqtk-rule-block {
@@ -2744,16 +2797,70 @@ button.seqtk-icon-btn.is-active {
   flex: 0 0 auto;
 }
 
-/* 上：实时预览（固定高度、自己滚） */
+/* 上：实时预览（固定高度；内部再分「内容列表（自己滚）+ 底部插入策略」） */
 .seqtk-template-text-preview {
   flex: 0 0 40%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-top: 6px;
   padding: 6px;
-  overflow-y: auto;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   background: var(--background-primary);
+}
+
+/* 预览内容列表：自己滚，别把底部那行策略挤出去 */
+.seqtk-texttree-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 预览行末的行内 @ 指令徽章 */
+.seqtk-texttree-instr {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 预览行上的状态圆点：可点（切完成 / 规划）—— 按钮外壳，外观仍是原来的圆点 */
+.seqtk-state-dot-btn {
+  border: none;
+  padding: 0;
+  margin: 0;
+  background-clip: padding-box;
+  cursor: pointer;
+}
+
+.seqtk-state-dot-btn:hover {
+  box-shadow: 0 0 0 2px var(--background-modifier-border);
+}
+
+/* 预览区底部：插入时的同名冲突策略 */
+.seqtk-preview-policy {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.seqtk-policy-btn {
+  height: 20px;
+  padding: 1px 6px;
+  font-size: var(--font-ui-smaller);
+}
+
+.seqtk-policy-btn.is-active {
+  height: 20px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
 /* 问题与差异预告：紧贴编辑区上方；有内容时自己滚，不挤掉编辑区 */
@@ -2765,7 +2872,15 @@ button.seqtk-icon-btn.is-active {
   overflow-y: auto;
 }
 
-/* 下：编辑文本框（占余下的固定高度、自己滚；宽度拖拽交还给整栏，故 resize 关闭） */
+/* 下：编辑区（占余下的固定高度）；候选浮层相对它定位 */
+.seqtk-template-text-edit {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+}
+
+/* 编辑文本框（占满编辑区、自己滚；宽度拖拽交还给整栏，故 resize 关闭） */
 .seqtk-template-text-input {
   flex: 1 1 0;
   min-height: 0;
@@ -2778,16 +2893,73 @@ button.seqtk-icon-btn.is-active {
   white-space: pre;
 }
 
-/* 栏标题行里的按钮：比常规 .seqtk-btn 紧凑，免得抢标题的视线 */
-.seqtk-title-btn {
+/*
+ * `@` 语法补全的候选浮层
+ *
+ * 绝对定位浮在编辑框上方：它不参与布局，textarea 的高度与光标都不会因为它出现而变。
+ */
+.seqtk-complete-pop {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: calc(100% - 2px);
+  z-index: 20;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.seqtk-complete-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.seqtk-complete-item.is-active {
+  background: var(--background-modifier-hover);
+}
+
+.seqtk-complete-label {
   flex: 0 0 auto;
-  padding: 2px 8px;
+  font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
 }
 
-.seqtk-title-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+.seqtk-complete-detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+/* 设置页「语法指南」的一条：语法片段占一行（等宽），说明另起一行（灰字）—— 纵向排布 */
+.seqtk-syntax-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.seqtk-syntax-code {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  /* 长片段（状态四连、@field 的三个取值）允许折行，不挤成一条 */
+  white-space: pre-wrap;
+}
+
+.seqtk-syntax-detail {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
 /* 行内提示文案（如文本区标题旁的口径说明）：可收缩，过长省略 */

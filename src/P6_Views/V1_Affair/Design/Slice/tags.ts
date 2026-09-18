@@ -16,17 +16,26 @@ import { TagsModal } from '../../../../P7_Render/Structure/S2_Modal/TagsModal';
 import type { NodeEditHost } from './actions';
 import type { DesignView } from '../Core/Design';
 
-/** 标签前缀；**前面必须有空白**才算标签，这样 `C#` 这类名称不会被切开 */
+/**
+ * 标签前缀：`#标签`。
+ *
+ * 与**文本块**那套 `#tag:标签`（见 P2_Tools/Parse/SyntaxGuide、TextComplete）**故意不同**：
+ * 那里是给文本树里的一行打标记，这里是给节点本身打标签。两套写法分开，就不会在正文里
+ * 被 Obsidian 顺手当成真标签，也不会与行内语法的补全互相抢触发。
+ *
+ * 前面必须有空白才算标签，这样 `C#`、`a#b` 这类名称不会被切开。
+ */
 const TAG_PREFIX = '#';
 
 /**
  * 把「名称 … #标签…」拆成名称与标签
  *
  * 规则：
- * - 以空白切分，`#` 开头且长度 > 1 的段视为标签，其余段拼回名称
- * - 因此 `#` 前必须是空白；`C#`、`a#b` 都留在名称里
+ * - 以空白切分，`#` 开头且其后还有内容的段视为标签，其余段拼回名称
+ * - 因此 `#` 前必须是空白；`C#`、`a#b`、单独的 `#` 都留在名称里
  * - 标签去重（保持出现顺序）
  * - 整段都是标签时返回 `desc: null`，由调用方保留原名 —— 免得手滑把名字删没
+ * - 不做 `tag:` 前缀剥离：手写 `#tag:甲` 时标签名就是 `tag:甲`，两套语法严格互不干扰
  */
 export function PARSE_NameTags(text: string): { desc: string | null; tags: string[] } {
     const tags: string[] = [];
@@ -34,7 +43,7 @@ export function PARSE_NameTags(text: string): { desc: string | null; tags: strin
 
     for (const part of text.split(/\s+/)) {
         if (part.length === 0) continue;
-        if (part.length > 1 && part.startsWith(TAG_PREFIX)) {
+        if (part.startsWith(TAG_PREFIX) && part.length > TAG_PREFIX.length) {
             const name = part.slice(TAG_PREFIX.length);
             if (!tags.includes(name)) tags.push(name);
             continue;

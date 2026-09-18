@@ -1,5 +1,6 @@
 import type SeqtkPlugin from "../main";
 import {DEFAULT_ROOT_FOLDER} from "../P2_Tools/Const/DefaultPaths";
+import type {TemplateConflictPolicy} from "../P2_Tools/Parse/TempParse";
 import {DEFAULT_STATE_RULES, type StatePropagationRule} from "../P4_Nodes/NodeField/Propagation";
 import {
     DEFAULT_DESTRUCTIVE_POLICY,
@@ -74,6 +75,13 @@ export interface PluginSettings {
     /** 模板模式：左栏宽度（px；0 = 使用默认宽度） */
     templateLeftPaneWidth: number;
 
+    /**
+     * 模板模式：应用模板时的同名冲突策略（追加 / 覆写 / 跳过）
+     *
+     * 在右栏预览区底部可改，改动即写回这里 —— 下次打开还是这个选择。
+     */
+    templatePolicy: TemplateConflictPolicy;
+
     /** 事务设计：左栏展开的框架 nodeId（记忆展开状态） */
     expandedFrameworkIds: string[];
 
@@ -106,6 +114,25 @@ export interface PluginSettings {
     treeScrollLeft: number;
     treeScrollRight: number;
 
+    /**
+     * 时间戳笔记的文件名格式（本插件配置；moment 的 token，如 YYYYMMDDHHmmss）
+     *
+     * 只在 timestampConfig === 'own'（或核心插件配置读不到）时生效
+     * （见 P6_Views/V1_Affair/Design/Slice/externalInfo 的 RESOLVE_TimestampConfig）
+     */
+    timestampFormat: string;
+
+    /** 时间戳笔记的落点目录（本插件配置；相对库根目录，留空 = 库根的 Timestamp 文件夹） */
+    timestampFolder: string;
+
+    /**
+     * 「创建关联时间戳」跟随哪份配置
+     *
+     * - 'core'：读核心插件「时间戳笔记生成器」的目录与格式并遵循它（默认）
+     * - 'own' ：用上面两项本插件自己的配置
+     * 核心配置读不到时一律回退到 'own' 那份，不弹错。
+     */
+    timestampConfig: 'core' | 'own';
 }
 
 /** 默认设置 */
@@ -119,6 +146,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     topFrameworkOrder: [],
     leftPaneWidth: 0,
     templateLeftPaneWidth: 0,
+    templatePolicy: 'append',
     expandedFrameworkIds: [],
     expandedRightIds: [],
     hub: {},
@@ -127,6 +155,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     selectedFrameworkId: null,
     treeScrollLeft: 0,
     treeScrollRight: 0,
+    timestampFormat: 'YYYYMMDDHHmmss',
+    timestampFolder: '',
+    timestampConfig: 'core',
 };
 
 /**
@@ -159,6 +190,23 @@ export async function Save_Setting(p: SeqtkPlugin) {
     PUSH_KindColorVars(p);
     await p.saveData(p.settings);
 }
+
+/** 「创建关联时间戳」的配置来源显示名 */
+export const TIMESTAMP_CONFIG_LABELS: Record<PluginSettings['timestampConfig'], string> = {
+    core: '跟随核心插件配置',
+    own: '使用本插件配置',
+};
+
+/**
+ * 设置页页头摘要
+ *
+ * 只说来源与本插件那份参数，**不去读核心配置** —— 那要读运行时插件表或磁盘，
+ * 是异步的，而 displayValue 是同步回调（读核心配置由运行时那侧负责）。
+ */
+export const GET_TimestampSummary = (s: PluginSettings): string =>
+    s.timestampConfig === 'own'
+        ? `本插件（${s.timestampFolder || 'Timestamp'} / ${s.timestampFormat}）`
+        : '跟随核心插件配置';
 
 export const Get_Settings = () => {
 

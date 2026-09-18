@@ -5,7 +5,7 @@
  * 装配 / 注册 / 微调 / 数据注入 / 交互转发；其余按功能切片放在 `Template/Slice/`：
  *   Slice/templateModel.ts     数据 → 视图模型（左栏模板框架树）
  *   Slice/templateText.ts      右栏文本区：导出 / 校验预览 / 回写
- *   Slice/templateActions.ts   新建 / 删除 / 打开正文
+ *   Slice/templateActions.ts   删除 / 打开正文
  *   Slice/templateApply.ts     把模板内容插进目标框架
  *   Slice/TemplateTreeShared.ts 左栏共享状态（与委托面板同源）
  *   Slice/templateDelegate.ts  模板来源的委托描述（委托到侧栏时按它渲染）
@@ -15,11 +15,14 @@
  * 右栏 = 选中框架的内容，**直接用文本表示** —— 对框架内容做解析预览、合法性校验，再按差异
  * 回写。内容的增删改一律在文本里进行，不再另画一棵单元树。
  *
+ * 左栏的增删与命名**与事务设计同法**：行内新建（附加行，含连续输入）与行内重命名，
+ * 都转发给 `design/inlineEdit` —— 与设计视图、委托面板是同一份实现，没有弹窗新建。
+ *
  * 模板语义：模板单元 = 模板框架（framework-template）的 follows 直属子树，desc / body 里的
- * `{{框架名}}`、`{{父.字段}}`、`{{变量:提示|默认值}}` 在插入时求值（语法与求值见
+ * `{{frame}}`、`{{p.字段}}`、`{{变量名:提示|默认值}}` 在插入时求值（语法与求值见
  * P2_Tools/Parse/TempParse.ts）。
  *
- * 两个 store 分开：结构态（树 / 选中 / 委托）与文本区态（正在编辑的文本）——
+ * 两个 store 分开：结构态（树 / 选中 / 委托 / 行内编辑态）与文本区态（正在编辑的文本）——
  * 按键只刷后者，左栏树不跟着每帧重渲。
  */
 
@@ -32,38 +35,50 @@ import { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
 import { Save_Setting } from "../../../../P3_Settings/Settings";
 import { NODE_KIND } from "../../../../P4_Nodes/NodeKind/NodeKind";
 import { NODE_KIND_LABELS } from "../../../../P4_Nodes/NodeKind/NodeLabel";
-import { PARSE_TextTree } from "../../../../P2_Tools/Parse/TextTree";
-import { TransactionCreateModal } from "../../../../P7_Render/Structure/S2_Modal/TransactionModals";
+import { PARSE_TextTree, TOGGLE_TextTreeState } from "../../../../P2_Tools/Parse/TextTree";
 import { BUILD_Menu, type MenuDefinition } from "../../../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition";
+import { ICON, SECTION } from "../../../../P7_Render/Composition/C3_RightClickMenu/MenuAppearance";
+import { HAS_TemplateUnits, IS_TemplateContainer } from "../../../../P7_Render/Structure/S2_Modal/TemplateModals";
 import {
     TemplatePanel,
     type TemplateActions,
     type TemplateState,
     type TemplateTextState,
 } from "./TemplatePanel";
-import { BUILD_TemplateLeftItems } from "../Slice/templateModel";
+import { BUILD_TemplateLeftItems, EMPTY_TemplateTreeText } from "../Slice/templateModel";
 import { TEMPLATE_TREE } from "../Slice/TemplateTreeShared";
 import {
     APPLY_TemplateFrameworkText,
     CHECK_TemplateFrameworkText,
     EXPORT_TemplateFrameworkText,
 } from "../Slice/templateText";
-import {
-    CREATE_TemplateNode,
-    DELETE_TemplateTree,
-    OPEN_NodeFile,
-} from "../Slice/templateActions";
+import { OPEN_NodeFile } from "../Slice/templateActions";
+import { archiveNode } from "../../Design/Slice/actions";
 import { APPLY_Template } from "../Slice/templateApply";
 // 副作用导入：模板来源的工厂在该模块顶层注册给委托登记处，
 // 少了它 `DELEGATE.delegate('template')` 会找不到来源（委托按钮点了没反应）
 import "../Slice/templateDelegate";
+import {
+    cancelCreate,
+    cancelRename,
+    commitCreate,
+    commitRename,
+    setCreateKind,
+    setCreateRepeat,
+    startCreateBlank,
+    startCreateChild,
+    startRename,
+    type InlineEditView,
+} from "../../Design/Slice/inlineEdit";
+import { SYNC_FromFiles } from "../../../V0_Common/SyncFromFiles";
 import { DELEGATE } from "../../../Special/Delegate/DelegateRegistry";
 import { START_Delegate } from "../../../Special/Delegate/delegateTargets";
 import type SeqtkPlugin from "../../../../main";
 import type { PanelEntry } from "../../../panelRegistry";
 import type { DataPipe } from "../../../../P5_Data/CoPipe/DataPipe";
 import type { PluginSettings } from "../../../../P3_Settings/Settings";
-import type { NodeKindValue } from "../../../../P4_Nodes/NodeKind/NodeKind";
+import type { NodeLineCtx } from "../../../../P7_Render/Composition/C1_NodeLine/NodeLine";
+import type { DesignInlineCreating, TreeSide } from "../../Design/Core/DesignPanel";
 
 export const VIEW_TYPE_TEMPLATE = 'seqtk-template';
 
@@ -77,6 +92,7 @@ const EMPTY_TEXT_STATE: TemplateTextState = {
     notice: [],
     rootCount: 0,
     canApply: false,
+    conflict: 'append',
 };
 
 /** 左栏宽度范围（px）与默认值 —— 与 DesignPanel 同一口径，两个视图间切换时栏宽不跳 */
@@ -86,12 +102,29 @@ const LEFT_WIDTH_DEFAULT = 280;
 /** 设置写回的防抖等待（拖动结束与连续展开不必每帧落盘） */
 const PERSIST_DEBOUNCE_MS = 600;
 
+/**
+ * 行内新建要的落点上下文
+ *
+ * 层级取自行上的 data-depth（与设计视图 menuDefinitions 的 ctxFromEvent 同一套判据：
+ * 附加行的缩进靠它对齐）；parentId 不在 `startCreateChild` 的用武之地，留空即可。
+ */
+function CTX_FromRowEvent(event: MouseEvent, nodeId: string): NodeLineCtx {
+    const row = (event.target as HTMLElement).closest<HTMLElement>('.seqtk-frame-item');
+    return { nodeId, parentId: '', depth: Number(row?.dataset.depth ?? '0') };
+}
+
 @AutoView()
 @AutoRegister()
-export class TemplateView extends ReactViewBase {
+export class TemplateView extends ReactViewBase implements InlineEditView {
     /** 面板目录条目 */
     static metas: PanelEntry[] = [
-        {viewType: VIEW_TYPE_TEMPLATE, title: '模板模式', icon: 'copy', description: '模板库管理：左栏模板框架树负责选框架与增删（可像事务设计那样委托到侧栏），右栏以文本直接编辑选中框架的内容（实时解析预览与合法性校验）；创建模板在事务设计右键「存为模板」。', category: '事务设计'},
+        {
+            viewType: VIEW_TYPE_TEMPLATE,
+            title: '模板模式',
+            icon: 'copy',
+            description: '模板库管理，供解析与复用的节点结构。',
+            category: '事务设计'
+        },
     ];
 
     /** 视图工厂：由 Register_View 以 (leaf) 调用 */
@@ -117,13 +150,15 @@ export class TemplateView extends ReactViewBase {
     /** 视图容器附加类（基座 addClass 用） */
     protected cssClass = 'seqtk-template-view';
 
-    /** 结构态：左栏框架树 / 选中 / 委托（渲染件经 useStore 订阅） */
+    /** 结构态：左栏框架树 / 选中 / 委托 / 行内编辑态（渲染件经 useStore 订阅） */
     private readonly stateStore = new SimpleStore<TemplateState>({
         initializing: true,
         leftItems: [],
         selectedId: null,
         delegated: false,
         leftPaneWidth: LEFT_WIDTH_DEFAULT,
+        creating: null,
+        renameId: null,
     });
 
     /** 文本区态：正在编辑的文本与它的预览 / 校验（与结构态分开，按键只刷这一份） */
@@ -135,6 +170,19 @@ export class TemplateView extends ReactViewBase {
      * 这里保持 `view.expandedLeft` 的既有写法不变。
      */
     public expandedLeft = TEMPLATE_TREE.expanded;
+
+    /**
+     * 行内编辑态（InlineEditView 契约，见 design/inlineEdit）
+     *
+     * 与设计视图、委托面板共用同一套「附加行 / 行内重命名」实现：本类只持有这两个状态，
+     * 进入与提交都走那套切片。
+     */
+    public creating: DesignInlineCreating | null = null;
+    public rename: { nodeId: string; side: TreeSide } | null = null;
+    /** 写盘期间压掉重绘（见 design/inlineEdit 的 commitCreate） */
+    public suppressRefresh = false;
+    /** 本视图只有左栏一棵树：满足 NodeEditHost 的占位集合 */
+    private readonly rightExpanded = new Set<string>();
 
     /** 当前选中的模板框架 nodeId（null = 未选）；与委托面板共享，转发到共享状态 */
     public get selectedFrameworkId(): string | null {
@@ -182,6 +230,22 @@ export class TemplateView extends ReactViewBase {
 
     getIcon(): string {
         return 'copy';
+    }
+
+    // ── NodeEditHost：让 design/actions 与 design/inlineEdit 的动作能直接复用 ──
+
+    /** 模板模式没有右栏树，但 NodeEditHost 要求成对给出（新建一律按左栏展开） */
+    get expandedRight(): Set<string> {
+        return this.rightExpanded;
+    }
+
+    /** 两栏重绘在本视图是同一件事：重建结构态与文本区 */
+    renderLeft(): void {
+        this.refresh();
+    }
+
+    renderRight(): void {
+        this.refresh();
     }
 
     /** 渲染件在 TemplatePanel.tsx：视图类不写 JSX 字面量（见 P6_Views/Views.md 契约） */
@@ -237,7 +301,7 @@ export class TemplateView extends ReactViewBase {
     // 数据注入：状态重建
     // ============================================================
 
-    /** 重建结构态与文本区（数据变化 / 选中变化 / 展开变化 / 委托变化后调用） */
+    /** 重建结构态与文本区（数据变化 / 选中变化 / 展开变化 / 委托变化 / 行内编辑变化后调用） */
     public refresh(): void {
         this.collapseSelectionIfGone();
 
@@ -247,16 +311,19 @@ export class TemplateView extends ReactViewBase {
         const current = frameworkId ? this.pipe.GET_Node(frameworkId) : undefined;
         this.stateStore.set({
             initializing: !this.pipe.isInitialized,
-            leftItems: BUILD_TemplateLeftItems(this.pipe, this.expandedLeft, frameworkId),
+            // 行覆盖信息：正在重命名的那一行由行组件渲染输入框
+            leftItems: BUILD_TemplateLeftItems(this.pipe, this.expandedLeft, frameworkId, (nodeId) => ({
+                editing: this.rename?.nodeId === nodeId,
+            })),
             leftEmpty: !this.pipe.isInitialized
                 ? '正在加载缓存…'
-                : this.pipe.GET_ByKind(NODE_KIND.TEMP).length === 0
-                    ? '暂无模板框架：点标题栏「新建」，或先在事务设计里「存为模板」'
-                    : undefined,
+                : this.pipe.GET_ByKind(NODE_KIND.TEMP).length === 0 ? EMPTY_TemplateTreeText : undefined,
             selectedId: frameworkId,
             rightTitle: current ? `${NODE_KIND_LABELS[current.kind]} · ${current.desc}` : undefined,
             delegated: TEMPLATE_TREE.delegated,
             leftPaneWidth: this.leftWidth,
+            creating: this.creating,
+            renameId: this.rename?.nodeId ?? null,
         });
         this.refreshText();
     }
@@ -285,16 +352,21 @@ export class TemplateView extends ReactViewBase {
             notice: check.notice,
             rootCount: check.rootCount,
             canApply: check.canApply && value !== baseline,
+            // 插入时的同名冲突策略：记忆在设置里，预览区底部可改
+            conflict: this.settings.templatePolicy ?? 'append',
         });
     }
 
     /**
-     * 选中的框架若已不存在（别处删了），清掉选中与草稿
+     * 选中的框架若已不存在（别处归档 / 删了），清掉选中与草稿
      *
-     * 切片协作可见：templateActions.DELETE_TemplateTree 删到当前选中时也会调用（幂等）。
+     * 切片协作可见：委托面板的同名回调与本视图共用同一份判定（幂等）。
      */
     public collapseSelectionIfGone(): void {
-        if (this.selectedFrameworkId && !this.pipe.GET_Node(this.selectedFrameworkId)) {
+        const id = this.selectedFrameworkId;
+        // 选中项没了、或**变成了归类容器**（刚给它加了子框架）→ 清掉选中与草稿：
+        // 容器没有编辑入口，右栏不该继续挂着它的内容
+        if (id && (!this.pipe.GET_Node(id) || IS_TemplateContainer(this.pipe, id))) {
             this.selectedFrameworkId = null;
             this.textDraft = null;
         }
@@ -314,16 +386,45 @@ export class TemplateView extends ReactViewBase {
                 this.refresh();
             },
             select: (nodeId) => {
+                // 归类容器不可选中（它只是分类目录）：点它不改变选中，右栏也不动
+                if (IS_TemplateContainer(this.pipe, nodeId)) return;
                 this.selectedFrameworkId = nodeId;
                 // 换框架：文本区回到新框架的导出结果（草稿属于上一个框架）
                 this.textDraft = null;
                 this.refresh();
             },
             contextMenu: (nodeId, e) => this.showRowMenu(nodeId, e),
-            createRootFramework: () => this.openCreate([NODE_KIND.TEMP]),
+            // 左栏空白右键：行内新建根级模板框架 + 从磁盘刷新（与事务设计左栏同一处、同一套形态）
+            blankContextMenu: (e) => {
+                BUILD_Menu(
+                    [
+                        {
+                            name: '新建模板框架',
+                            icon: ICON.newFramework,
+                            section: SECTION.main,
+                            action: () => startCreateBlank(this, NODE_KIND.TEMP, 'left'),
+                        },
+                        {
+                            name: '从磁盘刷新',
+                            icon: ICON.syncFromFiles,
+                            section: SECTION.refresh,
+                            action: () => void SYNC_FromFiles(this.pipe),
+                        },
+                    ],
+                    e,
+                );
+            },
             applyTemplate: (nodeId) => APPLY_Template(this, nodeId),
-            deleteNode: (nodeId) => DELETE_TemplateTree(this, nodeId),
+            // 归档而非删除：模板是可复用资产，误删代价大，归档后还能捞回来
+            archiveNode: (nodeId) => archiveNode(this, nodeId),
             openFile: (nodeId) => OPEN_NodeFile(this, nodeId),
+            // ── 行内新建 / 重命名：转发给 design/inlineEdit（与设计视图、委托面板同一份实现）──
+            createCommit: (parentId, kind, name) => void commitCreate(this, parentId, kind, name),
+            createCancel: () => cancelCreate(this),
+            createKindChange: (_parentId, kind) => setCreateKind(this, kind),
+            createRepeatChange: (_parentId, repeat) => setCreateRepeat(this, repeat),
+            inlineCommit: (nodeId, value) => commitRename(this, nodeId, value),
+            inlineCancel: () => cancelRename(this),
             textChange: (value) => {
                 this.textDraft = value;
                 this.refreshText();
@@ -331,6 +432,19 @@ export class TemplateView extends ReactViewBase {
             textCommit: () => void this.commitText(),
             textReset: () => {
                 this.textDraft = null;
+                this.refreshText();
+            },
+            setConflict: (policy) => {
+                // 记忆在设置里（下次打开还是这个选择），随后刷一次文本区把选中态显示出来
+                this.settings.templatePolicy = policy;
+                this.persistSettings?.();
+                this.refreshText();
+            },
+            togglePreviewState: (line) => {
+                // 预览上的状态圆点：改的就是编辑文本（草稿），没按「确认」前不落库
+                const r = TOGGLE_TextTreeState(this.textDraft ?? '', line);
+                if (!r) return;
+                this.textDraft = r.value;
                 this.refreshText();
             },
             toggleDelegate: () => {
@@ -353,45 +467,42 @@ export class TemplateView extends ReactViewBase {
      *
      * 只针对模板框架本身 —— 模板内容不在这棵树上管理（内容 = 右栏的文本），所以菜单里
      * 没有「新建单元」这类内容级动作；「应用此模板到框架…」把整个框架的内容插进目标框架。
+     * 新建与重命名都是**行内**的（与事务设计左栏同一套），不再开弹窗。
+     *
+     * 两类框架各少一项：
+     * - 归类容器（含子框架）：不是可用模板，所以没有「应用」与「打开正文」
+     * - 已经装了模板单元的框架：不再给「新建子框架」（见下面的判定说明）
      * 委托出去的那份树用的是同一套菜单（见 Slice/templateDelegate）。
      */
     private showRowMenu(nodeId: string, event: MouseEvent): void {
-        const defs: MenuDefinition[] = [
-            {
-                name: '应用此模板到框架…',
-                icon: 'paste',
-                section: 'use',
-                action: () => APPLY_Template(this, nodeId),
-            },
-            {
-                name: '打开正文',
-                icon: 'file-text',
-                section: 'use',
-                action: () => OPEN_NodeFile(this, nodeId),
-            },
-            {
-                name: '新建子模板框架',
-                icon: 'folder-plus',
+        const defs: MenuDefinition[] = [];
+        // 已经装了模板单元（非框架类型子节点）的框架不再提供「新建子框架」：
+        // 一个模板框架要么当分类目录（装子框架）、要么当模板库（装单元），
+        // 混在一起就分不清哪些是模板、哪些是分类了
+        if (!HAS_TemplateUnits(this.pipe, nodeId)) {
+            defs.push({
+                name: '新建子项',
+                icon: ICON.newFramework,
                 section: 'new',
-                action: () => this.openCreate([NODE_KIND.TEMP], nodeId),
+                action: () => startCreateChild(this, CTX_FromRowEvent(event, nodeId), 'left', [NODE_KIND.TEMP]),
+            });
+        }
+        defs.push(
+            {
+                name: '重命名',
+                icon: ICON.rename,
+                section: 'new',
+                action: () => startRename(this, nodeId, 'left'),
             },
             {
-                name: '删除此模板框架（含内容）',
-                icon: 'trash-2',
+                name: '归档模板',
+                icon: ICON.archive,
                 section: 'danger',
                 warning: true,
-                action: () => DELETE_TemplateTree(this, nodeId),
+                action: () => archiveNode(this, nodeId),
             },
-        ];
+        );
         BUILD_Menu(defs, event);
-    }
-
-    /** 新建节点弹窗（kinds 为候选类型；parentId 缺省 = 建为根级框架） */
-    private openCreate(kinds: NodeKindValue[], parentId?: string): void {
-        new TransactionCreateModal(this.app, {
-            kinds,
-            onSubmit: (input) => void CREATE_TemplateNode(this, input, parentId),
-        }).open();
     }
 
     /**

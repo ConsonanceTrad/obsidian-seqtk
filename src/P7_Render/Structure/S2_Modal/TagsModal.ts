@@ -80,7 +80,9 @@ export class TagsModal extends Modal {
 
     /** 只带图标的按钮；不可用时置灰而不是隐藏（首条不能上移、末条不能下移） */
     private iconButton(parent: HTMLElement, icon: string, title: string, enabled: boolean, run: () => void): void {
-        const btn = parent.createEl('button', { cls: 'clickable-icon', attr: { title, 'aria-label': title } });
+        // 只给 aria-label：Obsidian 用它弹自己的 tooltip；再写原生 title 会同时冒出浏览器
+        // 那个小方块，两个提示叠在一起（ExternalSourcesModal 里同款写法）
+        const btn = parent.createEl('button', { cls: 'clickable-icon', attr: { 'aria-label': title } });
         setIcon(btn, icon);
         if (!enabled) {
             btn.setAttribute('disabled', 'true');

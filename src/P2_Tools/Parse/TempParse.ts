@@ -8,15 +8,16 @@
  *   顶层节点即模板单元，其下（含全部后代）为该模板要重建的结构。
  *   模板内容即普通节点（kind/desc/body/state/estate/nature/at），MD 文件仍为事实源，
  *   模板框架与普通框架同构，无需专用序列化格式。
- * - 「存为模板」时把子树中出现的源根名自动参数化为 {{框架名}}（无出现则原样保留）。
+ * - 「存为模板」时把子树中出现的源根名自动参数化为 {{frame}}（无出现则原样保留）。
  *
  * ── 占位符语法（desc / body 通用；收集与替换都走本文件） ──
+ * 关键字一律**短英文**，避免与正文里的中文撞车：
  * ```
- * {{框架名}}           插入处父节点的名称（= {{父.desc}} 的旧写法，保留兼容）
- * {{父.字段}}          插入处父节点的字段值（白名单 TEMPLATE_PARENT_FIELDS）
- * {{变量}}             插入时由使用方输入
- * {{变量:提示}}        输入时显示提示语
- * {{变量:提示|默认值}} 输入时显示提示语并预填默认值
+ * {{frame}}            插入处父节点的名称（旧的中文写法已不再识别）
+ * {{p.字段}}           插入处父节点的字段值（白名单 TEMPLATE_PARENT_FIELDS）
+ * {{变量}}             插入时由使用方输入（变量名自起，名字里别带 : 或 |）
+ * {{变量名:提示}}        输入时显示提示语
+ * {{变量名:提示|默认值}} 输入时显示提示语并预填默认值
  * ```
  * 同名变量只询问一次，取值应用到它出现的每一处；未取到值且无默认值时替换为空串
  * （「必填」由插入前的界面层把关，见 P7_Render/Structure/S2_Modal/TemplateModals.ts）。
@@ -27,7 +28,7 @@
  *   copyExpected（copy + 计划调度字段）
  * - 插入位置（TemplateInsertPolicy.position）：追加到末尾（默认）或插到父的指定同级位置
  *
- * 以上行为的默认值 = 旧版行为（仅替换 {{框架名}}、原样复制语义字段、全部追加新建），
+ * 以上行为的默认值 = 旧版行为（仅替换 {{frame}}、原样复制语义字段、全部追加新建），
  * 因此旧模板不变。新增行为一律在此文件扩展，保持 cloneSubtree 对视图的单一入口。
  */
 
@@ -45,14 +46,14 @@ import type {
     SeqtkState,
 } from "../../P4_Nodes/NodeField/StateKeys";
 
-/** 框架名占位符：使用模板时替换为插入处父节点名 */
-export const TEMPLATE_FRAMEWORK_NAME_TOKEN = '{{框架名}}';
+/** 目标框架名占位符：使用模板时替换为插入处父节点名（短英文；旧的中文写法已不再识别） */
+export const TEMPLATE_FRAMEWORK_NAME_TOKEN = '{{frame}}';
 
-/** 取「插入处父节点字段」的占位前缀：`{{父.desc}}` */
-export const TEMPLATE_PARENT_PREFIX = '父.';
+/** 取「插入处父节点字段」的占位前缀：`{{p.desc}}` */
+export const TEMPLATE_PARENT_PREFIX = 'p.';
 
 /**
- * 可作为 `{{父.<字段>}}` 的白名单
+ * 可作为 `{{p.<字段>}}` 的白名单
  *
  * 取 FieldKeys 里的**值型**字段：结构字段（follows / parent / links）不属于「属性」，
  * 插进正文既无意义又容易误导，故不列入。白名单化而非「任意字段」是为了让写错的字段名
@@ -81,9 +82,9 @@ export const TEMPLATE_PARENT_FIELDS: string[] = [
 /** 变量占位定义（同名变量只在首次出现处记定义，count 记出现次数） */
 export interface TemplateVariableSlot {
     name: string;
-    /** 提示语（`{{变量:提示|默认值}}` 中 `:` 与 `|` 之间的部分；可省） */
+    /** 提示语（`{{变量名:提示|默认值}}` 中 `:` 与 `|` 之间的部分；可省） */
     prompt?: string;
-    /** 默认值（`{{变量:提示|默认值}}` 中 `|` 之后的部分；可省） */
+    /** 默认值（`{{变量名:提示|默认值}}` 中 `|` 之后的部分；可省） */
     default?: string;
     /** 在文本中出现的次数 */
     count: number;
@@ -104,7 +105,7 @@ export interface TemplateSlots {
     variables: TemplateVariableSlot[];
     /** 引用的插入处父字段（按首次出现顺序） */
     parentFields: string[];
-    /** `{{框架名}}` 出现次数 */
+    /** `{{frame}}` 出现次数 */
     frameworkNameCount: number;
     /** 语法问题（非空时不应插入） */
     issues: TemplateSlotIssue[];
@@ -133,11 +134,12 @@ export function COLLECT_TemplateSlots(text: string): TemplateSlots {
         if (!content) {
             issues.push({
                 line: lineOf(offset), offset,
-                message: '占位符内容为空：应写 {{框架名}}、{{父.字段}} 或 {{变量名}}',
+                message: `占位符内容为空：应写 ${TEMPLATE_FRAMEWORK_NAME_TOKEN}、{{${TEMPLATE_PARENT_PREFIX}字段}} 或 {{变量名}}`,
             });
             return;
         }
-        if (content === '框架名') {
+        // 关键字由 token 派生（`{{frame}}` → `frame`），免得两处各写一份
+        if (content === TEMPLATE_FRAMEWORK_NAME_TOKEN.slice(2, -2)) {
             frameworkNameCount++;
             return;
         }
@@ -146,7 +148,7 @@ export function COLLECT_TemplateSlots(text: string): TemplateSlots {
             if (!TEMPLATE_PARENT_FIELDS.includes(field)) {
                 issues.push({
                     line: lineOf(offset), offset,
-                    message: `未知的父字段「父.${field}」；可用：${TEMPLATE_PARENT_FIELDS.join('、')}`,
+                    message: `未知的父字段「${TEMPLATE_PARENT_PREFIX}${field}」；可用：${TEMPLATE_PARENT_FIELDS.join('、')}`,
                 });
                 return;
             }
@@ -239,9 +241,9 @@ export function COLLECT_TemplateSlots(text: string): TemplateSlots {
 
 /** 替换占位符时的取值来源 */
 export interface ResolveTemplateOptions {
-    /** 插入处父节点名称（`{{框架名}}` 与 `{{父.desc}}` 都取它） */
+    /** 插入处父节点名称（`{{frame}}` 与 `{{p.desc}}` 都取它） */
     parentName: string;
-    /** 插入处父节点；省略时 `{{父.<字段>}}` 替换为空串 */
+    /** 插入处父节点；省略时 `{{p.<字段>}}` 替换为空串 */
     parent?: SeqtkNode | null;
     /** 变量取值（键 = 变量名）；未给且无默认值时替换为空串 */
     values?: Record<string, string>;
@@ -294,7 +296,7 @@ export function RESOLVE_TemplateText(text: string, opts: ResolveTemplateOptions)
     return text.replace(re, (raw, body: string) => {
         const content = body.trim();
         if (!content) return '';
-        if (content === '框架名') return opts.parentName;
+        if (content === TEMPLATE_FRAMEWORK_NAME_TOKEN.slice(2, -2)) return opts.parentName;
         if (content.startsWith(TEMPLATE_PARENT_PREFIX)) {
             const field = content.slice(TEMPLATE_PARENT_PREFIX.length).trim();
             if (!TEMPLATE_PARENT_FIELDS.includes(field)) return raw;
@@ -495,7 +497,7 @@ export async function cloneSubtree(opts: CloneSubtreeOptions): Promise<string | 
 }
 
 /**
- * 将文本中出现的源根名参数化为 {{框架名}} 占位
+ * 将文本中出现的源根名参数化为 {{frame}} 占位
  * （「存为模板」时调用；sourceRootDesc 为空则原样返回）。
  */
 export function parameterizeText(text: string, sourceRootDesc: string): string {

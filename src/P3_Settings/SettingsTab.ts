@@ -13,6 +13,18 @@
  *   - **类型外观**：类型名与配色按大类聚合在一起，同样一个 sub-page，每项带「恢复默认」按钮
  * 两者的 render 回调都不会自动保存，改动要自己落盘（见各自的 render 方法）。
  *
+ * ── sub-page 里命令式渲染的四条硬约束（同一个坑踩过三次，写在这里免得再来一遍）──
+ *   1. **先改流向**：`render` 拿到的是那条 setting-item，**默认横向 flex** —— 不先
+ *      `el.addClass('seqtk-settings-<页名>')` 并在 styles.css 里给它 `display: block`，
+ *      追加进去的多块内容会被并排成一整条横排（踩三次的就是这个）。
+ *   2. **纵向排布**：自己造的一条 = 名称一行 + 说明一行（column），且**一个条目一个语法/字段**，
+ *      不要在同一行里用分隔符并列多项。
+ *   3. **字体与颜色随官方**：说明 `var(--font-ui-smaller)` + `var(--text-muted)`，
+ *      代码片段 `var(--font-monospace)`；不要用正文色、更不要放大成标题。
+ *   4. **优先用官方组件**：`new Setting(el).setName(...).setDesc(...)` 能表达的就不手写 DOM；
+ *      只有自定义控件（取色器、代码片段、可增删的表）才手写，且沿用官方行的字体与间距。
+ *   详见 `P3_Settings/Settings.md` 的「子页面的特殊性」一节。
+ *
  * update() 的代价：它是"重建整个设置面板"，所有设置项 DOM 会换一遍 —— 焦点与滚动位置
  * 随之回到面板开头。因此**只有会改变可见项结构**的改动才调它（规则增删、方向切换），
  * 单纯改值一律就地更新（见 commit / commitKindLabel / commitKindColor / renderKindSummary）。
@@ -30,7 +42,7 @@ import {
     type ToggleComponent,
 } from 'obsidian';
 import type SeqtkPlugin from "../main";
-import {Save_Setting, DELEGATE_TARGET_LABELS} from "./Settings";
+import { Save_Setting, DELEGATE_TARGET_LABELS, TIMESTAMP_CONFIG_LABELS, GET_TimestampSummary } from "./Settings";
 import { NODE_STATE_LABELS, STATE_VALUES, type SeqtkState } from "../P4_Nodes/NodeField/StateKeys";
 import {
     DETECT_RuleConflicts,
@@ -46,6 +58,7 @@ import { NODE_KIND_LABELS } from "../P4_Nodes/NodeKind/NodeLabel";
 import { GET_KindAppearanceGroups, type KindAppearanceType, type KindColorItem } from "../P4_Nodes/NodeKind/KindColors";
 import type { NodeKindValue } from "../P4_Nodes/NodeKind/NodeKind";
 import { HUB_CATEGORIES, type HubCategory } from "../P6_Views/panelRegistry";
+import { GET_SyntaxGuide } from "../P2_Tools/Parse/SyntaxGuide";
 
 /** 生成一个不会与现有规则撞车的 id */
 function nextRuleId(rules: StatePropagationRule[]): string {
@@ -93,8 +106,8 @@ export class SettingsTab extends PluginSettingTab {
                 heading: '基础配置',
                 items: [
                     {
-                        name: '数据根文件夹',
-                        desc: '相对路径，插件文件存储位置。',
+                        name: '存储路径',
+                        desc: '相对路径。节点文件与插件缓存数据的存储位置。',
                         aliases: ['root', 'folder', '路径'],
                         control: {
                             type: 'text',
@@ -124,7 +137,7 @@ export class SettingsTab extends PluginSettingTab {
                     // 与「状态传播」分开：这条管子树怎么被带走、要不要拦一道
                     {
                         name: '连带归档',
-                        desc: '归档时，后代是否跟随着一起归档。',
+                        desc: '归档时，后代如何处理。',
                         control: {
                             type: 'dropdown',
                             key: 'archiveChildren',
@@ -138,7 +151,8 @@ export class SettingsTab extends PluginSettingTab {
                     },
                     {
                         name: '连带删除',
-                        desc: '删除时，后代是否跟随着一起归档。',
+                        // 选项里既有「后代脱离父级」也有「后代一并删除」，不能只说「归档」
+                        desc: '删除时，后代如何处理。',
                         control: {
                             type: 'dropdown',
                             key: 'deleteChildren',
@@ -203,6 +217,23 @@ export class SettingsTab extends PluginSettingTab {
                         ],
                     },
                     {
+                        // 子页：条目由解析器的常量派生（见 P2_Tools/Parse/SyntaxGuide），
+                        // 改语法时这一页跟着变；命令式渲染成一张速查表
+                        type: 'page',
+                        name: '语法指南',
+                        desc: '文本树与模板文本里能写的全部语法。',
+                        displayValue: () => `${GET_SyntaxGuide().length} 条`,
+                        items: [
+                            {
+                                name: '速查表',
+                                render: (setting) => {
+                                    this.renderSyntaxGuide(setting.settingEl);
+                                    return undefined;
+                                },
+                            },
+                        ],
+                    },
+                    {
                         // 子页：条目数由 plugin.panelRegistry 决定（谁注册了带 category 的 metas，
                         // 谁就在这一页上），声明式表达不了，同样交给命令式渲染
                         type: 'page',
@@ -221,6 +252,37 @@ export class SettingsTab extends PluginSettingTab {
                                     this.renderHubVisibility(setting.settingEl);
                                     return undefined;
                                 },
+                            },
+                        ],
+                    },
+                    {
+                        // 本页**只用声明式 control**（dropdown / text）：框架负责渲染与保存，
+                        // 因而不写 render，也就不涉及上面那四条 sub-page 约束（改流向 / 纵排 / 字体 / 官方组件）；
+                        // 页头摘要也用 displayValue（同属声明式）。
+                        // 两个文本框始终显示，切换来源不改变可见项结构 —— 因此也不需要 update()
+                        type: 'page',
+                        name: '时间戳',
+                        desc: '「创建关联时间戳」用哪份目录与格式建笔记，「快速创建」与「创建并打开」共用这份配置。',
+                        displayValue: () => GET_TimestampSummary(this.plugin.settings),
+                        items: [
+                            {
+                                name: '配置来源',
+                                desc: '跟随核心插件时读它的目录与格式；读不到或未启用时自动回退到下面两项。',
+                                control: {
+                                    type: 'dropdown',
+                                    key: 'timestampConfig',
+                                    options: TIMESTAMP_CONFIG_LABELS,
+                                },
+                            },
+                            {
+                                name: '文件名格式',
+                                desc: 'moment 的 token，例如 YYYYMMDDHHmmss。',
+                                control: { type: 'text', key: 'timestampFormat' },
+                            },
+                            {
+                                name: '落点目录',
+                                desc: '相对库根目录；留空 = 库根的 Timestamp 文件夹。',
+                                control: { type: 'text', key: 'timestampFolder' },
                             },
                         ],
                     },
@@ -828,6 +890,39 @@ export class SettingsTab extends PluginSettingTab {
         if (!slot) return;
         const n = COUNT_HiddenEntries(this.plugin.settings.hub);
         slot.setText(n > 0 ? `已隐藏 ${n} 项。` : '中控台当前显示全部面板。');
+    }
+
+    // ============================================================
+    // 语法指南（sub-page 的命令式部分）
+    // ============================================================
+
+    /**
+     * 语法速查表（只读）
+     *
+     * 条目来自解析器（`GET_SyntaxGuide()`，由语法常量派生），这里只负责排版：按分组连续
+     * 列出，一条一行（语法在上、说明在下）—— 指南与解析不会各说各话。
+     *
+     * 注意 `el` 是那条 **setting-item**（默认横向 flex）：不先改流向，下面这些行会被并排
+     * 成一整条横排（踩过三次的坑，见 P3_Settings/Settings.md「子页面的特殊性」）。
+     */
+    private renderSyntaxGuide(el: HTMLElement): void {
+        el.addClass('seqtk-settings-syntax');
+        el.empty();
+        el.createEl('p', {
+            cls: 'setting-item-description',
+            text: '这些语法在「模板模式」右栏文本区与「以文本批量编辑」里通用；在文本区里输入 @ 会唤出补全。',
+        });
+
+        let lastGroup = '';
+        for (const entry of GET_SyntaxGuide()) {
+            if (entry.group !== lastGroup) {
+                el.createEl('h4', { text: entry.group });
+                lastGroup = entry.group;
+            }
+            const row = el.createDiv('seqtk-syntax-row');
+            row.createEl('code', { cls: 'seqtk-syntax-code', text: entry.syntax });
+            row.createSpan({ cls: 'seqtk-syntax-detail', text: entry.detail });
+        }
     }
 }
 

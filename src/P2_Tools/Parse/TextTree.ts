@@ -12,11 +12,15 @@
  *       - [ ] 工序名
  *       - [ ] K:event 某事件
  * - [x] K:check 清单名
- *   - [x] 行动名
+ *   - [x] 行动名 @start @field:reset @pos:0
  * ```
  * - 缩进每级 **2 个空格**（tab 视作 2 空格），表示从属关系；**不允许跨级**（0 → 4 空格即错）
  * - `[ ]` `[/]` `[x]` `[-]` 分别表示 规划 / 进行 / 完成 / 放弃
  * - `K:<短名>` 显式指定类型（如 `K:event`、`K:factor`、`K:check`）；省略时按层级推断
+ * - `@` 开头的**行内指令**（前后须是空白或行首 / 行尾，可出现在名称的任意位置）：
+ *   `@start` 该节点是插入起点、`@field:copy|reset|expected` 字段保留、`@pos:<n>` 插入位置。
+ *   它们是模板插入细则的元标记 —— 不进节点名（插入时剥掉），但**原样留在文本里**，
+ *   所以导出 / 解析往返不丢。
  * - 类型推断（无前缀时）：顶层 = 构想，构想→方向→目标→工序（更深仍为工序），清单→行动；
  *   其余父类型无法安全推断，必须显式写 `K:`
  *
@@ -31,8 +35,8 @@ import { NODE_KIND_LABELS } from '../../P4_Nodes/NodeKind/NodeLabel';
 /** 缩进单位：2 个空格 */
 const INDENT_UNIT = 2;
 
-/** 状态 ↔ 复选框标记 */
-const STATE_TO_MARK: Record<SeqtkState, string> = {
+/** 状态 ↔ 复选框标记（设置页的「语法指南」也读它，改这里一处即全同步） */
+export const STATE_TO_MARK: Record<SeqtkState, string> = {
     plan: ' ',
     open: '/',
     done: 'x',
@@ -66,14 +70,105 @@ for (const [short, kind] of Object.entries(SHORT_TO_KIND)) {
     if (!KIND_TO_SHORT[kind]) KIND_TO_SHORT[kind] = short;
 }
 
+// ============================================================
+// 行内 @ 指令（模板插入细则的元标记）
+// ============================================================
+
+/** `@field` 的取值（插入时映射为数据层的 copy / reset / copyExpected） */
+export type TextTreeFieldPolicy = 'copy' | 'reset' | 'expected';
+
+/** 一个节点上解析出来的行内指令 */
+export interface TextTreeInstr {
+    /** `@start`：该节点是使用时那棵树的插入起点 */
+    start?: boolean;
+    /** `@field:<copy|reset|expected>`：字段保留策略 */
+    field?: TextTreeFieldPolicy;
+    /** `@pos:<n>`：插入位置（同级索引） */
+    pos?: number;
+}
+
+/** 可用指令的说明（校验报错与补全候选共用，免得两处各写一遍） */
+export const AT_TOKEN_HELP = '@start / @field:<copy|reset|expected> / @pos:<n>';
+
+/**
+ * 行内指令的匹配：指令前面是行首或空白，后面是空白或行尾
+ *
+ * 「空格 + @指令 + 空格」的写法让 `@` 出现在正常文本中间（如邮箱、`@某人`）时不会被误摘。
+ */
+const AT_TOKEN_RE = /(^|\s)@([A-Za-z][A-Za-z0-9_]*)(?::(\S+))?(?=\s|$)/g;
+
+/**
+ * 从名称里摘出行内 @ 指令
+ *
+ * - `name`：剥掉指令、收拢多余空白后的名称（指令不该进节点名）
+ * - `ins`：解析结果；一个指令都没有时为 null
+ * - `issues`：未知指令 / 非法取值 / 同类重复（重复的只取先写的那个）
+ */
+export function EXTRACT_AtTokens(
+    desc: string,
+    line = 0,
+): { name: string; ins: TextTreeInstr | null; issues: TextTreeIssue[] } {
+    const issues: TextTreeIssue[] = [];
+    const ins: TextTreeInstr = {};
+    let hit = false;
+
+    const name = desc.replace(AT_TOKEN_RE, (_all, lead: string, rawName: string, rawValue?: string) => {
+        const flag = rawName.toLowerCase();
+        const value = rawValue?.toLowerCase();
+        /** 同类指令只认第一条；重复的报问题并丢掉 */
+        const first = (already: boolean): boolean => {
+            if (already) {
+                issues.push({ line, message: `重复的 @${flag}：同一节点只取先写的那个` });
+                return false;
+            }
+            return true;
+        };
+
+        if (flag === 'start') {
+            if (rawValue !== undefined) {
+                issues.push({ line, message: '@start 不接受取值：写成 @start 即可' });
+            } else if (first(!!ins.start)) {
+                ins.start = true;
+                hit = true;
+            }
+        } else if (flag === 'field') {
+            if (value !== 'copy' && value !== 'reset' && value !== 'expected') {
+                issues.push({ line, message: `@field 的取值只能是 copy / reset / expected（当前「${rawValue ?? ''}」）` });
+            } else if (first(ins.field !== undefined)) {
+                ins.field = value;
+                hit = true;
+            }
+        } else if (flag === 'pos') {
+            const n = Number(rawValue);
+            if (rawValue === undefined || !Number.isInteger(n) || n < 0) {
+                issues.push({ line, message: `@pos 需要一个非负整数（当前「${rawValue ?? ''}」）` });
+            } else if (first(ins.pos !== undefined)) {
+                ins.pos = n;
+                hit = true;
+            }
+        } else {
+            issues.push({ line, message: `未知的行内指令 @${rawName}（可用：${AT_TOKEN_HELP}）` });
+        }
+        return lead;                        // 连指令与其后的空白一起摘掉，只留前导空白
+    });
+
+    return { name: name.trim().replace(/\s{2,}/g, ' '), ins: hit ? ins : null, issues };
+}
+
+/** 剥掉行内指令后的名称（预览显示、插入建节点时用） */
+export const STRIP_AtTokens = (desc: string): string => EXTRACT_AtTokens(desc).name;
+
 /** 文本树节点（解析产物；children 已按缩进组装） */
 export interface TextTreeNode {
     kind: NodeKindValue;
     state: SeqtkState;
+    /** 名称**原样**保留（含行内 @ 指令），这样「导出 → 解析」往返不丢 */
     desc: string;
     /** 原始行号（1 起，便于报错定位） */
     line: number;
     children: TextTreeNode[];
+    /** 行内 @ 指令（解析产物；没有指令时缺省） */
+    ins?: TextTreeInstr;
 }
 
 /** 一条解析错误 */
@@ -196,6 +291,10 @@ export function PARSE_TextTree(text: string): TextTreeParseResult {
             }
         }
 
+        // 行内 @ 指令：摘出来记在节点上，名称仍保留原文（往返不丢）
+        const extracted = EXTRACT_AtTokens(parsed.desc, lineNo);
+        issues.push(...extracted.issues);
+
         const node: TextTreeNode = {
             kind,
             state: parsed.state,
@@ -203,6 +302,7 @@ export function PARSE_TextTree(text: string): TextTreeParseResult {
             line: lineNo,
             children: [],
         };
+        if (extracted.ins) node.ins = extracted.ins;
 
         if (depth === 0) roots.push(node);
         else stack[depth - 1].children.push(node);
@@ -232,6 +332,8 @@ export interface TextTreeLine {
  * 所以正常的内容链（构想→方向→目标→工序、清单→行动）读起来干净；真正需要显式
  * 带上类型的，是**岔出链路**的那部分（如工序下挂事件、清单下挂快照）—— 那才是
  * 跨层级搬运时推断不出来的信息，且标在岔出那一层就够，更深层仍由它推断。
+ *
+ * 名称按原文输出（含行内 @ 指令）：指令是文本带着的元信息，往返必须原样保留。
  */
 export function SERIALIZE_TextTree(roots: TextTreeNode[]): string {
     const out: string[] = [];
@@ -264,17 +366,42 @@ export function FLATTEN_Tree(nodes: TextTreeNode[], depth = 0): TextTreeLine[] {
 /** 全部已知的类型短名（供设置界面 / 提示文案展示） */
 export const GET_KindShortNames = (): { short: string; kind: NodeKindValue }[] =>
     Object.entries(SHORT_TO_KIND).map(([short, kind]) => ({ short, kind }));
-/** 供界面展示的扁平行：缩进层级 + kind（取分色用）+ 中文名 + 状态 */
-export function PREVIEW_TextTree(
-    roots: TextTreeNode[],
-): { depth: number; desc: string; kind: NodeKindValue; kindLabel: string; state: SeqtkState }[] {
-    return FLATTEN_Tree(roots).map((l) => ({
-        depth: l.depth,
-        desc: l.desc,
-        kind: l.kind,
-        kindLabel: NODE_KIND_LABELS[l.kind],
-        state: l.state,
-    }));
+
+/** 预览里的一行 */
+export interface TextTreePreviewRow {
+    depth: number;
+    /** 名称（已剥掉行内 @ 指令；指令另以徽章展示） */
+    desc: string;
+    kind: NodeKindValue;
+    kindLabel: string;
+    state: SeqtkState;
+    /** 源文本行号（1 起）：预览上的交互据此回定位到编辑文本的哪一行 */
+    line: number;
+    /** 行内 @ 指令（有则渲染徽章） */
+    ins?: TextTreeInstr;
+}
+
+/**
+ * 供界面展示的扁平行：缩进层级 + kind（取分色用）+ 中文名 + 状态 + 源行号 + 行内指令
+ *
+ * 行号随解析结果一起来，所以预览上点到第几行，改的就是编辑文本里的第几行 —— 两者不会错位。
+ */
+export function PREVIEW_TextTree(roots: TextTreeNode[]): TextTreePreviewRow[] {
+    const out: TextTreePreviewRow[] = [];
+    const visit = (node: TextTreeNode, depth: number): void => {
+        out.push({
+            depth,
+            desc: STRIP_AtTokens(node.desc),
+            kind: node.kind,
+            kindLabel: NODE_KIND_LABELS[node.kind],
+            state: node.state,
+            line: node.line,
+            ...(node.ins ? { ins: node.ins } : {}),
+        });
+        for (const child of node.children) visit(child, depth + 1);
+    };
+    for (const root of roots) visit(root, 0);
+    return out;
 }
 
 // ============================================================
@@ -284,9 +411,9 @@ export function PREVIEW_TextTree(
 /**
  * 校验一棵文本树的「类型链」是否成立（逐层检查父类型允许的子类型）
  *
- * 与 PARSE_TextTree 的分工：解析只管**语法**（缩进 / 状态标记 / K: 短名），类型链规则
- * （NodeChildAllow）在这里单独校验 —— 模板要跨框架搬运，「语法对但链不成立」的结构
- * 一旦进了库只能靠人工收拾，所以要在插入前拦住。
+ * 与 PARSE_TextTree 的分工：解析只管**语法**（缩进 / 状态标记 / K: 短名 / 行内 @ 指令），
+ * 类型链规则（NodeChildAllow）在这里单独校验 —— 模板要跨框架搬运，「语法对但链不成立」的
+ * 结构一旦进了库只能靠人工收拾，所以要在插入前拦住。
  *
  * parentKind 的两种用法：
  * - 省略 / null → **不校验顶层**（编辑模板框架内容：模板框架下可放任意类型的模板单元）
@@ -321,6 +448,35 @@ export function VALIDATE_TemplateTree(
     for (const root of roots) visit(root, parentKind, true);
     return issues;
 }
+
+/** 这棵树里是否有一处 `@start` */
+function HAS_Start(nodes: TextTreeNode[]): boolean {
+    for (const n of nodes) {
+        if (n.ins?.start) return true;
+        if (HAS_Start(n.children)) return true;
+    }
+    return false;
+}
+
+/**
+ * 校验行内 @ 指令的组合规则（模板专用）
+ *
+ * - 多棵树（多分支）时，**每棵树**都必须用 `@start` 指明插入起点，否则不知道该从哪儿嵌
+ * - 单棵树时 `@start` 可选（缺省 = 整棵树整体插入）
+ */
+export function VALIDATE_TemplateInstr(roots: TextTreeNode[]): TextTreeIssue[] {
+    const issues: TextTreeIssue[] = [];
+    if (roots.length <= 1) return issues;
+    for (const root of roots) {
+        if (HAS_Start([root])) continue;
+        issues.push({ line: root.line, message: '多树模板：这棵树缺少 @start（多棵树时每棵都要指明插入起点）' });
+    }
+    return issues;
+}
+
+// ============================================================
+// 键盘辅助（缩进 / 续行 / 预览上的状态切换）
+// ============================================================
 
 /** 缩进 / 续行的文本变换结果 */
 export interface TextEditResult {
@@ -406,4 +562,35 @@ export function CONTINUE_TextLine(
     const insert = '\n' + indent + head;
     const next = value.slice(0, caret) + insert + value.slice(caret);
     return { value: next, caret: caret + insert.length };
+}
+
+/**
+ * 切换某一行的状态标记（预览上的状态圆点点击）
+ *
+ * 只认列表行的标记：**完成 → 规划**，其余（规划 / 进行 / 放弃）→ 完成 ——
+ * 与设计视图行上状态圆点的单击同一口径。
+ *
+ * 行号来自同一份解析结果的 `line`，所以预览上点到哪一行，改的就是编辑文本里的哪一行；
+ * 解析失败的行不在预览里，因此不会误改别的行。返回 null 表示那一行不是可切换的列表行。
+ */
+export function TOGGLE_TextTreeState(value: string, line: number): TextEditResult | null {
+    if (!Number.isInteger(line) || line < 1) return null;
+    const lines = value.split('\n');
+    const idx = line - 1;
+    if (idx >= lines.length) return null;
+
+    const raw = lines[idx];
+    const re = /^(\s*(?:[-*]\s+)?)\[([ xX/-])\]/;
+    const m = re.exec(raw);
+    if (!m) return null;
+    const current = MARK_TO_STATE[m[2]];
+    if (!current) return null;
+
+    const next = current === 'done' ? 'plan' : 'done';
+    lines[idx] = raw.replace(re, `$1[${STATE_TO_MARK[next]}]`);
+
+    const joined = lines.join('\n');
+    // 光标：落在这行行首（点在预览上时文本区并没有焦点，位置合法即可）
+    const caret = lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0);
+    return { value: joined, caret: Math.min(caret, joined.length) };
 }

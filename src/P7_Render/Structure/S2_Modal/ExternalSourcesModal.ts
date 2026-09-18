@@ -36,10 +36,18 @@ export class ExternalSourcesModal extends Modal {
         contentEl.addClass('seqtk-modal');
         this.setTitle('管理外部信息源');
         contentEl.createEl('p', {
-            text: '顺序即展示顺序，改动立即生效。删除只解除本节点的关联，不会动到文件本身。',
+            text: '顺序即展示顺序，改动立即生效。' +
+                '删除只移除关联，不删除文件本身。',
         });
         this.listEl = contentEl.createDiv({ cls: 'seqtk-source-manage' });
         this.render();
+
+        // 这个模态框里没有输入框，但 Obsidian 打开时会把焦点给第一个可聚焦元素 ——
+        // 也就是首个「上移」图标按钮：一进来就像它被选中，还顺带弹出它的 tooltip。
+        // 把焦点收在模态框本身；Tab 依然从第一个按钮开始（按钮自己没动）。
+        // 延迟 30ms 与 TagsModal 同理：得晚于框架那一次聚焦。
+        this.modalEl.tabIndex = -1;
+        window.setTimeout(() => this.modalEl.focus(), 30);
     }
 
     /** 整表重画：条目不多，重画比逐行打补丁省事，也不会出现半新半旧的状态 */
@@ -48,7 +56,7 @@ export class ExternalSourcesModal extends Modal {
         if (this.list.length === 0) {
             this.listEl.createDiv({
                 cls: 'seqtk-source-manage-empty',
-                text: '暂无外部信息源；可用「添加外部信息源」引入。',
+                text: '暂无外部信息源；可用「关联库内文件或 URL」引入。',
             });
             return;
         }
@@ -70,7 +78,9 @@ export class ExternalSourcesModal extends Modal {
 
     /** 只带图标的按钮；不可用时置灰而不是隐藏（首条不能上移、末条不能下移） */
     private iconButton(parent: HTMLElement, icon: string, title: string, enabled: boolean, run: () => void): void {
-        const btn = parent.createEl('button', { cls: 'clickable-icon', attr: { title, 'aria-label': title } });
+        // 只给 aria-label：Obsidian 用它弹自己的 tooltip；再写原生 title 会同时冒出浏览器
+        // 那个小方块，两个提示叠在一起（见 TagsModal 里同款写法）
+        const btn = parent.createEl('button', { cls: 'clickable-icon', attr: { 'aria-label': title } });
         setIcon(btn, icon);
         if (!enabled) {
             btn.setAttribute('disabled', 'true');

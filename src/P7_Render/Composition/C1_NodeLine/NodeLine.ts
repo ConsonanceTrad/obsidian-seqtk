@@ -123,7 +123,7 @@ export interface NodeLineData {
     desc: string;
     /** 描述行的悬浮提示（目标时间 / 重复规则等） */
     descTooltip?: string;
-    /** 标签（紧跟在节点名之后逐个显示为 `#标签` 徽章；只展示，不接管点击） */
+    /** 标签（紧跟在节点名之后逐个显示为「标签名」徽章；只展示，不接管点击） */
     tags?: string[];
     /** 正文预览（节点名后，超长省略） */
     bodyPreview?: string;
@@ -203,6 +203,14 @@ export interface NodeLineActions {
     /** 外部信息源徽章点击（带原生事件，供调用方定位菜单） */
     onSourcesClick?: (ctx: NodeLineCtx, event: MouseEvent) => void;
 }
+
+/**
+ * 行上最多露出几个标签
+ *
+ * 超出部分折成「+N」，鼠标悬浮在它上面时用浮层补齐（纯 CSS 显隐，见 NodeLinePanel）。
+ * 常量留在契约层：将来若有别处（如委托树）要按同一口径折叠，取值才不会走偏。
+ */
+export const TAG_VISIBLE_LIMIT = 3;
 
 /** 从行数据取出交互上下文 */
 export const GET_LineCtx = (d: NodeLineData): NodeLineCtx => ({
