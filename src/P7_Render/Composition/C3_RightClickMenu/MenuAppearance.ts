@@ -75,6 +75,13 @@ export const ICON = {
     externalGroup: 'link',
     /** 变更归属 */
     changeParent: 'move',
+    /** 「追加已有信息」：引用式追加，不新建节点，用「链接」表引用 */
+    appendExisting: 'link-2',
+    /** 断连：从某个上级的 follows 里摘掉，与「外部信息」的 link 用「解开链」区分 */
+    detach: 'unlink',
+    /** 整栏展开 / 收起 */
+    expandAll: 'list-chevrons-up-down',
+    collapseAll: 'list-chevrons-down-up',
     /** 复制为文本 */
     copyText: 'clipboard-copy',
     /** 打开文件 */

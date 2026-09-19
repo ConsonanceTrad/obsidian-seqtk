@@ -27,6 +27,14 @@ export interface NodePickOptions {
     emptyText?: string;
     /** 是否提供「顶层」选项（onPick 会收到空串） */
     allowTop?: boolean;
+    /**
+     * 候选条数上限（默认 50）
+     *
+     * 底层检索按创建时间倒序取前 N 条，所以默认上限对小库够用、对大库会**悄悄漏掉
+     * 早先建的节点**（典型的踩坑：框架下早就存在的证据选不到，因为它排在第 50 名之外）。
+     * 传 0 表示不设上限 —— 从既有同类节点里挑的场景（如「追加已有信息」）应当用 0。
+     */
+    limit?: number;
     onPick: (nodeId: string) => void;
 }
 
@@ -79,8 +87,10 @@ export class NodePickModal extends Modal {
         }
 
         const excluded = new Set(this.opts.excludeIds ?? []);
+        // limit 传 0 表示不设上限：给底层 -1，正是 SQLite 的「不限制」
+        const limit = this.opts.limit ?? 50;
         const results = this.pipe
-            .SEARCH_Nodes(query.trim(), 50)
+            .SEARCH_Nodes(query.trim(), limit > 0 ? limit : -1)
             .filter(
                 (r) =>
                     !excluded.has(r.nodeId) &&

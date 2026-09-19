@@ -56,6 +56,7 @@ import {
     setLeftWidth,
 } from '../Slice/session';
 import { buildState } from '../Slice/viewState';
+import type { FilterCondition } from '../Slice/filter';
 import { showSourcesMenu } from '../Slice/externalInfo';
 import {
     bindDocumentContextMenu,
@@ -102,6 +103,7 @@ const EMPTY_VIEW_STATE: DesignViewState = {
     leftItems: [],
     rightItems: [],
     rightMode: 'empty',
+    filter: [],
     creating: null,
     bodyEditing: null,
     delegated: false,
@@ -206,6 +208,13 @@ export class DesignView extends ReactViewBase {
     public creating: DesignInlineCreating | null = null;
     public bodyEditing: { nodeId: string; value: string } | null = null;
     public draggingId: string | null = null;
+    /**
+     * 右栏的复合筛选条件（判定见 design/filter）
+     *
+     * 与 rename / draggingId 同类：**会话态**，不落盘 —— 筛选是一次检索行为，
+     * 关掉视图再打开时看到完整框架，比看到上次遗留的残缺列表更符合预期。
+     */
+    public filter: FilterCondition[] = [];
     // 注：落点提示（行上的 seqtk-drop-*、右栏空白的 seqtk-drop-blank）不在这里 ——
     // 拖拽期间它由 design/dragHandlers 直接切 class，不进视图状态。
 
@@ -387,7 +396,7 @@ export class DesignView extends ReactViewBase {
         return {
             toggle: (nodeId, side) => toggleExpand(this, nodeId, side),
             select: (nodeId, side) => selectFramework(this, nodeId, side),
-            contextMenu: (nodeId, side, e) => showRowContextMenu(this, nodeId, side, e),
+            contextMenu: (ctx, side, e) => showRowContextMenu(this, ctx, side, e),
             stateClick: (nodeId) => toggleState(this, nodeId),
             stateContextMenu: (nodeId, _side, e) => showRowStateMenu(this, nodeId, e),
             dragStart: (ctx, _side, e) => onDragStart(this, ctx, e),
@@ -415,6 +424,10 @@ export class DesignView extends ReactViewBase {
             selectParentFramework: () => selectParentFramework(this),
             sourcesClick: (nodeId, _side, e) => showSourcesMenu(this, nodeId, e),
             setLeftWidth: (width) => setLeftWidth(this, width),
+            filterChange: (conditions) => {
+                this.filter = conditions;
+                this.refresh();
+            },
         };
     }
 }

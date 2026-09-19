@@ -24,6 +24,7 @@ import {
 } from '../Tool/tree';
 import { buildFrameLine, buildNodeLine, buildTreeItems, type LineOverlay } from '../Tool/viewModel';
 import { resolveNavBack } from './navigation';
+import { HAS_ActiveFilter, MATCH_Conditions } from './filter';
 import { NODE_KIND_LABELS } from '../../../../P4_Nodes/NodeFacade';
 import type { DesignViewState, TreeSide } from '../Core/DesignPanel';
 import type { TreeNodeItem } from '../../../../P7_Render/Composition/C2_Tree/NodeTree';
@@ -35,6 +36,8 @@ export function buildState(view: DesignView): DesignViewState {
         leftItems: [],
         rightItems: [],
         rightMode: 'empty',
+        // 筛选条件住在 view 上，这里只做透传（界面要在标题栏渲染它）
+        filter: view.filter,
         creating: view.creating,
         bodyEditing: view.bodyEditing,
         // 委托开关来自共享状态源：委托面板被关闭时也会复位
@@ -80,13 +83,32 @@ export function buildState(view: DesignView): DesignViewState {
         base.rightEmpty = '该框架暂无内部节点\n在右栏空白处右键可创建子节点';
         return base;
     }
-    base.rightItems = buildItems(
-        view,
-        sorted.map((c) => buildNode(view.pipe, c.nodeId, c.data!)),
-        'right',
-        fwId,
-    );
+    const rightRoots = sorted.map((c) => buildNode(view.pipe, c.nodeId, c.data!));
+    const visible = HAS_ActiveFilter(view.filter) ? PRUNE_ByFilter(view, rightRoots) : rightRoots;
+    if (visible.length === 0) {
+        base.rightEmpty = '没有符合筛选条件的节点\n在标题栏右侧调整或清空筛选';
+        return base;
+    }
+    base.rightItems = buildItems(view, visible, 'right', fwId);
     return base;
+}
+
+/**
+ * 按筛选条件裁剪右栏树：命中行保留，**不命中的祖先只要在命中行的路径上也留下**
+ *
+ * 保留父链是必须的 —— 树按 follows 层级渲染，把祖先摘掉会让命中行无处安放。
+ * 于是判据是「自己命中 **或** 子孙里有命中」，一次后序遍历即可。
+ * 正文走 pipe 现取（它缓存在数据层），不额外构造行模型。
+ */
+function PRUNE_ByFilter(view: DesignView, nodes: TreeNode[]): TreeNode[] {
+    const kept: TreeNode[] = [];
+    for (const node of nodes) {
+        const children = PRUNE_ByFilter(view, node.children);
+        const hit = children.length > 0
+            || MATCH_Conditions(node.data, view.pipe.GET_NodeBody(node.nodeId), view.filter);
+        if (hit) kept.push({ ...node, children });
+    }
+    return kept;
 }
 
 /** 未选中框架：只看提示语，右栏没有别的内容可展示 */

@@ -9,7 +9,7 @@
  * - 本文件函数以 view(DesignView 实例)为第一参数,只读 view 上公开的状态
  *   （pipe / selectedFrameworkId / expandedLeft / expandedRight），不持有任何状态
  * - 动作一律转交对应切片（actions / navigation / inlineEdit / externalInfo / textEdit /
- *   templateActions），本文件不直接写数据面
+ *   templateActions / appendExisting），本文件不直接写数据面
  * - 组与组之间由装配器按 section 变化插分隔符，声明里不写分隔标记
  *
  * 功能增补指引:
@@ -44,7 +44,8 @@ import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import type { NodeLineCtx } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
 import { archiveNode, openEdit, openNodeFile, setNodeState } from './actions';
 import { saveAsTemplate, useTemplate } from './templateActions';
-import { changeParent, toggleExpandAll } from './navigation';
+import { IS_RightCollapsed, changeParent, detachFromParent, setRightExpandAll, toggleExpandAll } from './navigation';
+import { appendExistingInfo } from './appendExisting';
 import { openBodyEdit, startCreateBlank, startCreateChild, startRename } from './inlineEdit';
 import { addExternalSource, createTimestampDoc, manageExternalSources } from './externalInfo';
 import { manageTags } from './tags';
@@ -65,45 +66,60 @@ export function showRowStateMenu(view: DesignView, nodeId: string, e: MouseEvent
     BUILD_Menu(getStateMenuDefinitions(view, buildNode(view.pipe, nodeId, data)), e);
 }
 
-/** 行右键：左栏用框架菜单；右栏框架行用右向框架菜单，其余用节点行菜单 */
-export function showRowContextMenu(view: DesignView, nodeId: string, side: TreeSide, e: MouseEvent): void {
+/**
+ * 行右键：左栏用框架菜单；右栏框架行用右向框架菜单，其余用节点行菜单
+ *
+ * `ctx` 由行渲染时算好，含**这一行所属的父**。凡涉及归属的动作都必须读它，不能拿
+ * nodeId 回头去查上级 —— 多归属时「查到的第一个」未必是用户看着的这一条
+ * （典型偏差：证据同时挂在框架与内部节点下，对内部节点断连却摘掉了框架那条）。
+ */
+export function showRowContextMenu(view: DesignView, ctx: NodeLineCtx, side: TreeSide, e: MouseEvent): void {
+    const nodeId = ctx.nodeId;
     const data = view.pipe.GET_Node(nodeId);
     if (!data) return;
     if (side === 'left') {
-        BUILD_Menu(getFrameMenuDefinitions(view, buildFrameworkNode(view.pipe, nodeId, data), e, 'left'), e);
+        BUILD_Menu(getFrameMenuDefinitions(view, buildFrameworkNode(view.pipe, nodeId, data), ctx, 'left'), e);
         return;
     }
     const node = buildNode(view.pipe, nodeId, data);
-    if (isFrameworkKind(data.kind)) BUILD_Menu(getFrameMenuDefinitions(view, node, e, 'right'), e);
-    else BUILD_Menu(getRowMenuDefinitions(view, node, e, 'right'), e);
+    if (isFrameworkKind(data.kind)) BUILD_Menu(getFrameMenuDefinitions(view, node, ctx, 'right'), e);
+    else BUILD_Menu(getRowMenuDefinitions(view, node, ctx, 'right'), e);
 }
 
 // ============================================================
 // 菜单声明：本文件只回答「长什么样、点了做什么」，装配交给 BUILD_Menu
 // ============================================================
 
-/** 行内交互上下文（层级取自行上的 data-depth：行内新建据此落到正确父级） */
-function ctxFromEvent(e: MouseEvent, node: TreeNode): NodeLineCtx {
-    const row = (e.target as HTMLElement).closest<HTMLElement>('.seqtk-row, .seqtk-frame-item');
-    return {
-        nodeId: node.nodeId,
-        parentId: node.data.parent ?? '',
-        depth: Number(row?.dataset.depth ?? '0'),
-    };
-}
-
-/** 追加信息子菜单（对象 / 条件 / 信息 / 状态）：空白菜单与行菜单共用，只是落点不同 */
-function evidenceSubmenuDefs(onPick: (kind: NodeKindValue) => void): MenuDefinition[] {
+/**
+ * 追加信息子菜单（对象 / 条件 / 信息 / 状态）：空白菜单与行菜单共用，只是落点不同
+ *
+ * `onAppendExisting` 有值时末尾多一条「追加已有信息」：它不新建节点，而是把库里**已有**的
+ * 证据节点挂到当前节点下（引用式，见 design/appendExisting）。两者同处一个子菜单，是因为
+ * 它们回答的是同一个问题 ——「往这里补一条」，只是来源不同（新写一条 / 用现成的）。
+ */
+function evidenceSubmenuDefs(
+    onPick: (kind: NodeKindValue) => void,
+    onAppendExisting?: () => void,
+): MenuDefinition[] {
     return [
         {
             name: '追加信息',
             icon: ICON.evidence,
             section: SECTION.main,
-            items: EVIDENCE_KINDS.map((kind) => ({
-                name: NODE_KIND_LABELS[kind],
-                icon: EVIDENCE_ICONS[kind],
-                action: () => onPick(kind),
-            })),
+            items: [
+                ...EVIDENCE_KINDS.map((kind) => ({
+                    name: NODE_KIND_LABELS[kind],
+                    icon: EVIDENCE_ICONS[kind],
+                    action: () => onPick(kind),
+                })),
+                ...(onAppendExisting
+                    ? [{
+                        name: '追加已有信息',
+                        icon: ICON.appendExisting,
+                        action: () => onAppendExisting(),
+                    }]
+                    : []),
+            ],
         },
     ];
 }
@@ -159,7 +175,7 @@ function expandDefs(view: DesignView, node: TreeNode, side: TreeSide): MenuDefin
 }
 
 /** 行内追加子项：左栏是子框架；右栏按该行允许的子类型（目标固定为工序，事件另有入口） */
-function newChildDefs(view: DesignView, node: TreeNode, e: MouseEvent, side: TreeSide): MenuDefinition[] {
+function newChildDefs(view: DesignView, node: TreeNode, ctx: NodeLineCtx, side: TreeSide): MenuDefinition[] {
     const kind = node.data.kind;
     // 事件走「新建事件」那条独立入口，这里排掉它，免得同一行菜单里两条路通向同一个动作
     const kinds = side === 'left'
@@ -172,15 +188,16 @@ function newChildDefs(view: DesignView, node: TreeNode, e: MouseEvent, side: Tre
             name: side === 'right' ? '追加子项' : '追加子框架',
             icon: ICON.newChild,
             section: SECTION.main,
-            action: () => startCreateChild(view, ctxFromEvent(e, node), side, allowed),
+            // 新建落到 ctx.parentId 下 —— 正是这一行显示时所属的那个父
+            action: () => startCreateChild(view, ctx, side, allowed),
         },
     ];
 }
 
 /** 右栏框架行的行内新建入口（不开模态框）：与空白处同一个「创建节点」子菜单 */
-function rightCreateDefs(view: DesignView, node: TreeNode, e: MouseEvent): MenuDefinition[] {
+function rightCreateDefs(view: DesignView, node: TreeNode, ctx: NodeLineCtx): MenuDefinition[] {
     return createNodeSubmenuDefs(
-        (kind) => startCreateChild(view, ctxFromEvent(e, node), 'right', [kind]),
+        (kind) => startCreateChild(view, ctx, 'right', [kind]),
         node.data.kind,
     );
 }
@@ -221,7 +238,7 @@ export function getLeftBlankMenuDefinitions(view: DesignView): MenuDefinitions {
     ];
 }
 
-/** 右栏空白右键：创建节点（子菜单）+ 追加信息 + 批量编辑 + 模板功能 + 从磁盘刷新 */
+/** 右栏空白右键：创建节点（子菜单）+ 追加信息 + 批量编辑 + 整栏展开收起 + 模板功能 + 从磁盘刷新 */
 export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions {
     const parentId = view.selectedFrameworkId ?? undefined;
     const parentData = parentId ? view.pipe.GET_Node(parentId) : undefined;
@@ -236,10 +253,26 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
         // 形态与「追加信息」「模板功能」一致：三个「新建 X」收在一条子菜单里，
         // 空白处右键一眼能看完（框架行的行右键用的是同一个构造函数）
         ...createNodeSubmenuDefs((kind) => startCreateBlank(view, kind, 'right', parentId)),
-        ...evidenceSubmenuDefs((kind) => startCreateBlank(view, kind, 'right', parentId)),
+        // 空白处的「追加已有信息」同样落到打开的框架下；没有打开框架时 parentId 为空，该项不出
+        ...evidenceSubmenuDefs(
+            (kind) => startCreateBlank(view, kind, 'right', parentId),
+            parentId ? () => appendExistingInfo(view, parentId) : undefined,
+        ),
         // 根可多个（框架自身那行藏起来），应对框架内元素较多的情况
         ...(parentId
             ? [
+                  // 整栏展开 / 收起：空白处才有的「看全 / 收回」入口（行级那条只管单行子树）。
+                  // 与行上一致，是**一项随状态切换**：已全部收起时给「全部展开」，否则给「全部收起」——
+                  // 并排两条会让每次都要先看一眼才知道该点哪个
+                  ...(() => {
+                      const collapsed = IS_RightCollapsed(view);
+                      return [{
+                          name: collapsed ? '全部展开' : '全部收起',
+                          icon: collapsed ? ICON.expandAll : ICON.collapseAll,
+                          section: SECTION.main,
+                          action: () => setRightExpandAll(view, collapsed),
+                      }];
+                  })(),
                   {
                       name: '批量编辑',
                       icon: ICON.editFrameworkContent,
@@ -277,16 +310,18 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
 function getFrameMenuDefinitions(
     view: DesignView,
     node: TreeNode,
-    e: MouseEvent,
+    ctx: NodeLineCtx,
     side: TreeSide,
 ): MenuDefinitions {
     const addEvidence = (kind: NodeKindValue): void =>
-        startCreateChild(view, ctxFromEvent(e, node), side, [kind]);
+        startCreateChild(view, ctx, side, [kind]);
     return [
         ...expandDefs(view, node, side),
-        ...(side === 'left' ? newChildDefs(view, node, e, side) : []),
-        ...(side === 'right' ? rightCreateDefs(view, node, e) : []),
-        ...(side === 'right' ? evidenceSubmenuDefs(addEvidence) : []),
+        ...(side === 'left' ? newChildDefs(view, node, ctx, side) : []),
+        ...(side === 'right' ? rightCreateDefs(view, node, ctx) : []),
+        ...(side === 'right'
+            ? evidenceSubmenuDefs(addEvidence, () => appendExistingInfo(view, node.nodeId))
+            : []),
         {
             name: '重命名',
             icon: ICON.rename,
@@ -333,17 +368,17 @@ function getFrameMenuDefinitions(
 function getRowMenuDefinitions(
     view: DesignView,
     node: TreeNode,
-    e: MouseEvent,
+    ctx: NodeLineCtx,
     side: TreeSide,
 ): MenuDefinitions {
-    // 行内新建的统一落点：新建的那个挂到这一行的子列表末尾
+    // 行内新建的统一落点：新建的那个挂到 ctx.parentId 下（这一行此刻所属的父）
     const addChild = (kind: NodeKindValue): void =>
-        startCreateChild(view, ctxFromEvent(e, node), side, [kind]);
+        startCreateChild(view, ctx, side, [kind]);
     return [
         // ── 第一组 ──
-        ...newChildDefs(view, node, e, side),
+        ...newChildDefs(view, node, ctx, side),
         ...expandDefs(view, node, side),
-        ...evidenceSubmenuDefs(addChild),
+        ...evidenceSubmenuDefs(addChild, () => appendExistingInfo(view, node.nodeId)),
         {
             name: '重命名',
             icon: ICON.rename,
@@ -376,7 +411,19 @@ function getRowMenuDefinitions(
             action: () => void openNodeFile(view, node.nodeId),
         },
 
-        // ── 第三组：归档（破坏性操作，靠上一道分隔线隔开）──
+        // ── 第三组：断连 / 归档（都动归属或存留，靠上一道分隔线隔开）──
+        // 「断连」是**证据类型专属**：只有证据会被引用到多处（多归属），结构节点该用
+        // 「变更归属」移动、用「归档」下架，再给它们一个「只摘链、内容留下」的入口只会混淆。
+        // 摘的是**这一行此刻所属的那个父**（ctx.parentId），不是查询得来的第一个上级 ——
+        // 多归属时两者可能不是同一条链（见 showRowContextMenu 的说明）。
+        ...(ctx.parentId && EVIDENCE_KINDS.includes(node.data.kind)
+            ? [{
+                name: '断连',
+                icon: ICON.detach,
+                section: SECTION.danger,
+                action: () => detachFromParent(view, node.nodeId, ctx.parentId),
+            }]
+            : []),
         {
             name: '归档节点',
             icon: ICON.archive,

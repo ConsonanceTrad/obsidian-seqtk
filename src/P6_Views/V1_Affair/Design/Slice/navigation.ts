@@ -21,7 +21,7 @@
  */
 
 import { NodePickModal } from '../../../../P7_Render/Structure/S2_Modal/NodePickModal';
-import { canBeChildOf } from '../../../../P7_Render/Composition/C2_Tree/drag';
+import { EVIDENCE_KINDS, canBeChildOf } from '../../../../P7_Render/Composition/C2_Tree/drag';
 import { NODE_KIND_LABELS, isFrameworkKind } from '../../../../P4_Nodes/NodeFacade';
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
 import { DELEGATE } from '../../../Special/Delegate/DelegateRegistry';
@@ -71,10 +71,43 @@ export function toggleExpandAll(view: DesignView, node: TreeNode, side: TreeSide
 }
 
 /**
+ * 右栏整栏展开 / 收起（右栏空白菜单用）
+ *
+ * 与行上的「展开子项」分工：那条只管该行的子树，这条针对整个右栏 —— 层次深时
+ * 不必逐行点开，也便于一键回到折叠态。收起就是清空展开集合（根级行恒可见）。
+ *
+ * 展开时把框架的**全部后代**塞进集合：叶子进了集合没有副作用（它们本来就没有
+ * 折叠箭头），换来的是不必先判断「谁有子节点」，且整个过程只触发一次 refresh。
+ */
+export function setRightExpandAll(view: DesignView, expand: boolean): void {
+    const fwId = view.selectedFrameworkId;
+    if (!fwId) return;
+    view.expandedRight.clear();
+    if (expand) {
+        for (const d of view.pipe.COLLECT_Descendants(fwId)) view.expandedRight.add(d.nodeId);
+    }
+    view.refresh();
+}
+
+/**
+ * 右栏是否已**全部收起**（该框架下没有任何一行处于展开态）
+ *
+ * 决定空白菜单里那一条显示哪个动作：已全部收起 → 「全部展开」，否则 → 「全部收起」。
+ * 判据取「有没有任一后代在展开集合里」，而不是「集合是否为空」—— 集合里可能残留着
+ * 别的框架（或已删除节点）的 id，那时视图上其实仍是全收起。
+ */
+export function IS_RightCollapsed(view: DesignView): boolean {
+    const fwId = view.selectedFrameworkId;
+    if (!fwId) return true;
+    const set = view.expandedRight;
+    return !view.pipe.COLLECT_Descendants(fwId).some((d) => set.has(d.nodeId));
+}
+
+/**
  * 变更归属：把节点移到另一个父节点下
  *
  * 移动的**执行**复用拖拽那条路径（design/drag.moveChildAcrossParents），
- * 因此 follows 双向维护与 parent 字段的写法与拖拽完全一致，不存在两套语义。
+ * 因此 follows 的维护方式与拖拽完全一致，不存在两套语义。
  * 候选父节点排除自身与全部后代 —— 选了会形成环。
  */
 export function changeParent(view: DesignView, nodeId: string): void {
@@ -92,9 +125,47 @@ export function changeParent(view: DesignView, nodeId: string): void {
         allow: (_id, kind) => canBeChildOf(kind, node.kind),
         emptyText: '没有能容纳该类型的父节点（自身与后代已排除）',
         onPick: (targetParentId) => {
-            moveChildAcrossParents(view, node.parent ?? '', nodeId, targetParentId, '', false);
+            // 源父从 follows 入边反查（归属只由父侧记录）；多归属时取第一个，变更归属只动这一个
+            const currentParentId = view.pipe.GET_Parent(nodeId)?.nodeId ?? '';
+            moveChildAcrossParents(view, currentParentId, nodeId, targetParentId, '', false);
         },
     }).open();
+}
+
+/**
+ * 断连：把**证据节点**从指定的那个上级那里摘下来，节点自身不删
+ *
+ * 多归属下「归档」太重了 —— 有时只是不想让它再挂在这个上级下，内容本身还要留着。
+ * 摘的是「父 → 子」这条边：只改那个上级的文件，节点自己的文件不碰。
+ *
+ * 证据类型专属（菜单项同样只在证据行上出现）：只有证据会被引用到多处，结构节点该用
+ * 「变更归属」移动、用「归档」下架。这里再判一次类型，是为了不让别的调用路径绕过菜单
+ * 把结构节点摘成游离节点 —— 那种状态在视图里没有回头的入口。
+ *
+ * `parentId` 必须由调用方给出**上下文中的那个父**（行渲染时就知道的 ctx.parentId），
+ * 不能在这里拿 nodeId 反查 —— 多归属时查到的「第一个上级」可能完全是另一条链：
+ * 实际出现过的偏差是「证据同时挂在框架与内部节点下，对内部节点断连却摘掉了框架那条」。
+ * 也不弹框：要摘的就是用户正在看的那一行所属的链，想摘别的上级换到那处再断一次即可。
+ */
+export function detachFromParent(view: DesignView, nodeId: string, parentId: string): void {
+    if (!parentId) return;
+    const node = view.pipe.GET_Node(nodeId);
+    if (!node || !EVIDENCE_KINDS.includes(node.kind)) return;
+    REMOVE_FromParent(view, parentId, nodeId);
+}
+
+/** 从指定上级的 follows 里摘掉一个子节点（本来就不在其中时什么也不做） */
+function REMOVE_FromParent(view: DesignView, parentId: string, childId: string): void {
+    const parent = view.pipe.GET_Node(parentId);
+    if (!parent) return;
+    const follows = parent.follows ?? [];
+    if (!follows.includes(childId)) return;
+    view.pipe.EXEC_Mutation({
+        op: 'update',
+        kind: parent.kind,
+        nodeId: parentId,
+        updates: { follows: follows.filter((id) => id !== childId), modify: new Date().toISOString() },
+    });
 }
 
 /** 返回父框架（右栏标题栏按钮）：回到下钻前的那个框架 */

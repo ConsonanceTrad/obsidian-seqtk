@@ -1138,6 +1138,87 @@ button.seqtk-open-btn {
   white-space: nowrap;
 }
 
+/* ============================================================
+   标题栏右侧的复合筛选（DesignFilterBar）
+   ============================================================ */
+
+.seqtk-filter {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* 有生效条件时给按钮上色 —— 收起面板后也能一眼看出「还在筛」 */
+.seqtk-filter-toggle.is-active {
+  color: var(--text-accent);
+  background-color: var(--background-modifier-hover);
+}
+
+/*
+ * 面板浮在右栏内容之上：标题栏本身是 sticky + z-index 10，
+ * 面板需要更高的层级，否则会被下面的行盖住。
+ */
+.seqtk-filter-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 320px;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.seqtk-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 正则写错的那一行：只标红值控件，不动整行（其余条件照常生效） */
+.seqtk-filter-row.is-error .seqtk-filter-value {
+  border-color: var(--text-error);
+}
+
+.seqtk-filter-field {
+  flex: 0 0 auto;
+  width: 96px;
+}
+
+.seqtk-filter-value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.seqtk-filter-del {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  color: var(--text-muted);
+}
+
+.seqtk-filter-del:hover {
+  color: var(--text-error);
+}
+
+.seqtk-filter-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.seqtk-filter-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.seqtk-filter-hint.is-error {
+  color: var(--text-error);
+}
+
 .seqtk-frame-item {
   position: relative;
   display: flex;

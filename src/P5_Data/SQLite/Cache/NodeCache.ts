@@ -332,12 +332,22 @@ export class NodeCache {
     return result;
   }
 
-  /** 获取节点的有向直属上级（parent 出边，活跃缓存） */
+  /**
+   * 获取节点的直属上级（活跃缓存）
+   *
+   * 归属只由父侧的 follows 记录（父 → 子单向），所以底层是反查 follows 入边；
+   * 多归属时这里给的是第一个，要全部用 GET_Parents。
+   */
   GET_Parent(nodeId: string): { nodeId: string; data: SeqtkNode } | null {
     const parentId = this.activeCache.GET_Parent(nodeId);
     if (!parentId) return null;
     const data = this.activeCache.GET_Node(parentId);
     return data ? { nodeId: parentId, data } : null;
+  }
+
+  /** 获取节点的全部直属上级（多归属时不止一个；顶级节点为空数组） */
+  GET_Parents(nodeId: string): string[] {
+    return this.activeCache.GET_Parents(nodeId);
   }
 
   /** 获取节点的无向关联节点（links 出边，活跃缓存） */

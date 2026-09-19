@@ -201,9 +201,18 @@ export class DataPipe {
         return this.deps.cache.GET_Children(parentNodeId);
     }
 
-    /** 取父节点（顶级节点返回 null；树构建用） */
+    /** 取父节点（顶级节点返回 null；树构建用）。多归属时给的是第一个，要全部用 GET_Parents */
     GET_Parent(nodeId: string): { nodeId: string; data: SeqtkNode } | null {
         return this.deps.cache.GET_Parent(nodeId);
+    }
+
+    /**
+     * 取全部上级（follows 入边）—— 多归属下一个节点可以同时挂在多个父之下
+     *
+     * 归属只由父侧的 follows 记录，所以这里是反查；顶部节点返回空数组。
+     */
+    GET_Parents(nodeId: string): string[] {
+        return this.deps.cache.GET_Parents(nodeId);
     }
 
     /** 取节点正文（缓存 kind） */

@@ -76,7 +76,6 @@ export class FileWrite {
         // 外部信息源（独立列表字段；空数组不落盘，保持 frontmatter 干净）
         if (Array.isArray(d.sources) && d.sources.length > 0) extras.sources = d.sources;
         if (d.follows) extras.follows = d.follows;
-        if (d.parent) extras.parent = d.parent;
         if (d.links) extras.links = d.links;
         if (d.progress) extras.progress = d.progress;
         if (d.state) extras.state = d.state;

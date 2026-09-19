@@ -33,6 +33,8 @@ import type {
     TreeNodeItem,
 } from "../../../../P7_Render/Composition/C2_Tree/NodeTree";
 import type { NodeKindValue } from "../../../../P4_Nodes/NodeKind/NodeKind";
+import type { FilterCondition } from "../Slice/filter";
+import { DesignFilterBar } from "./DesignFilterBar";
 
 /**
  * 栏标识（左栏框架树 / 右栏节点树）
@@ -66,6 +68,8 @@ export interface DesignViewState {
      * 行内新建据此判断附加行是否落在这一层 —— 右栏的根级行挂在框架下，不是空串。
      */
     rightRootParentId?: string;
+    /** 右栏的复合筛选条件（条件本身住在 DesignView，这里只为界面渲染它） */
+    filter: FilterCondition[];
     /** 瞬时交互态 */
     creating: DesignInlineCreating | null;
     bodyEditing: NodeInlineBody | null;
@@ -84,7 +88,8 @@ export interface DesignViewState {
 export interface DesignActions {
     toggle(nodeId: string, side: TreeSide): void;
     select(nodeId: string, side: TreeSide): void;
-    contextMenu(nodeId: string, side: TreeSide, event: MouseEvent): void;
+    /** 行右键：传整个 ctx —— 菜单要靠它拿到「这一行此刻挂在哪个父下」（断连等归属操作） */
+    contextMenu(ctx: NodeLineCtx, side: TreeSide, event: MouseEvent): void;
     stateClick(nodeId: string, side: TreeSide): void;
     stateContextMenu(nodeId: string, side: TreeSide, event: MouseEvent): void;
     dragStart(ctx: NodeLineCtx, side: TreeSide, event: DragEvent): void;
@@ -117,6 +122,13 @@ export interface DesignActions {
     sourcesClick(nodeId: string, side: TreeSide, event: MouseEvent): void;
     /** 左栏宽度变更（拖动结束时上报，由视图防抖写回设置） */
     setLeftWidth(width: number): void;
+    /**
+     * 右栏复合筛选：条件列表整体替换（见 design/filter）
+     *
+     * 只留一个入口而不是「增/删/改/清空」四个：界面已经拿着整份列表，算下一份比来回
+     * 发指令简单，视图侧也就只需「存下 + refresh」。
+     */
+    filterChange(conditions: FilterCondition[]): void;
 }
 
 export interface DesignPanelProps {
@@ -130,7 +142,7 @@ function bindActions(a: DesignActions, side: TreeSide): NodeTreeActions {
     return {
         onToggle: (ctx) => a.toggle(ctx.nodeId, side),
         onSelect: (ctx) => a.select(ctx.nodeId, side),
-        onContextMenu: (ctx, e) => a.contextMenu(ctx.nodeId, side, e),
+        onContextMenu: (ctx, e) => a.contextMenu(ctx, side, e),
         onStateClick: (ctx) => a.stateClick(ctx.nodeId, side),
         onStateContextMenu: (ctx, e) => a.stateContextMenu(ctx.nodeId, side, e),
         onDragStart: (ctx, e) => a.dragStart(ctx, side, e),
@@ -300,6 +312,10 @@ export function DesignPanel({ store, actions, host }: DesignPanelProps) {
                                 </button>
                             )}
                             <div className="seqtk-split-title">{state.rightTitle}</div>
+                            <DesignFilterBar
+                                conditions={state.filter}
+                                onChange={(next) => actions.filterChange(next)}
+                            />
                         </div>
                         <NodeTreePanel
                             items={state.rightItems}

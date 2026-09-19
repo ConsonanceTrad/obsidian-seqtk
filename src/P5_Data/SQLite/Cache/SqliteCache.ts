@@ -196,11 +196,9 @@ function rowToNodeFull(row: NodeRow, rels?: RelationRef[]): SeqtkNode {
   const node = rowToNode(row) as Record<string, any>;
   const list = rels ?? [];
   const follows = list.filter((r) => r.rel === 'follows').map((r) => r.nodeId);
-  const parent = list.find((r) => r.rel === 'parent')?.nodeId;
   const links = list.filter((r) => r.rel === 'links').map((r) => r.nodeId);
   const progress = list.filter((r) => r.rel === 'progress').map((r) => r.nodeId);
   if (follows.length > 0) node.follows = follows;
-  if (parent) node.parent = parent;
   if (links.length > 0) node.links = links;
   if (progress.length > 0) node.progress = progress;
   return node as SeqtkNode;
@@ -422,7 +420,6 @@ export class SqliteCache {
       db.run('INSERT OR IGNORE INTO relations (from_id, rel, to_id) VALUES (?, ?, ?)', [nodeId, rel, toId]);
     };
     (raw.follows as string[] | undefined)?.forEach((t) => addRel(t, 'follows'));
-    if (raw.parent) addRel(raw.parent, 'parent');
     (raw.links as string[] | undefined)?.forEach((t) => addRel(t, 'links'));
     (raw.progress as string[] | undefined)?.forEach((t) => addRel(t, 'progress'));
   }
@@ -676,10 +673,16 @@ export class SqliteCache {
     return this.GET_OutgoingRelations(nodeId, 'follows').map((r) => r.nodeId);
   }
 
-  /** 获取节点的有向直属上级（parent 出边，取第一条） */
+  /**
+   * 获取节点的直属上级（取第一个）
+   *
+   * 归属只由**上级的 follows** 记录（父 → 子单向），下级不再写 parent 字段，
+   * 所以这里反查 follows 入边。多归属时上级会有多个，取第一个是给「只需要一个」
+   * 的老调用点（如沿链上溯）用的；要全部请用 GET_Parents。
+   */
   GET_Parent(nodeId: string): string | null {
-    const refs = this.GET_OutgoingRelations(nodeId, 'parent');
-    return refs.length > 0 ? refs[0].nodeId : null;
+    const parents = this.GET_Parents(nodeId);
+    return parents.length > 0 ? parents[0] : null;
   }
 
   /** 获取节点的无向关联（links 出边） */
@@ -692,8 +695,8 @@ export class SqliteCache {
     return this.GET_OutgoingRelations(nodeId, 'progress').map((r) => r.nodeId);
   }
 
-  /** 获取引用该节点的上级集合（入边 follows，即哪些节点把 nodeId 当作直属下属） */
-  GET_ParentCandidates(nodeId: string): string[] {
+  /** 获取节点的全部直属上级（follows 入边，即哪些节点把 nodeId 当作直属下属）—— 多归属时不止一个 */
+  GET_Parents(nodeId: string): string[] {
     return this.GET_IncomingRelations(nodeId, 'follows').map((r) => r.nodeId);
   }
 
