@@ -17,11 +17,12 @@
  *
  * 设计来源的委托描述（DESIGN_DELEGATE）也住在本文件：它就是「设计左栏这棵树」，
  * 与共享状态本就是同一件事。模块顶层把它注册给登记处 —— main.ts 恢复上次的委托
- * （settings.delegated）时正是靠这份注册才找得到来源。
+ * （settings.delegatedOwner）时正是靠这份注册才找得到来源。
  */
 
 import { SimpleStore } from '../../../../P5_Data/Svelte/SimpleStore';
 import { DELEGATE, type DelegateSource } from '../../../Special/Delegate/DelegateRegistry';
+import { GET_RowMenu } from '../../../Special/Delegate/rowMenuRegistry';
 import { NODE_KIND } from '../../../../P4_Nodes/NodeFacade';
 import { buildFrameworkTree } from '../Tool/tree';
 import { buildFrameLine, buildTreeItems } from '../Tool/viewModel';
@@ -46,6 +47,15 @@ export class FrameworkTreeShared {
 
     private _selectedId: string | null = null;
     private _expandedVersion = 0;
+    /**
+     * 上次关库时的委托意图（settings.delegatedOwner 指向 design 的镜像，由视图写入）
+     *
+     * 启动瞬间登记处必然是空的 —— 委托要等 onReady → 对账 → START_Delegate 才接回，
+     * 而视图的 onOpen 在工作区恢复时就跑了。只看登记处，左栏与把手会先按「未委托」
+     * 铺出来、随后才跳到委托态，那就是进入视图时闪的那一下（与中控台预留面板目录同源）。
+     * 意图若最终没兑现（来源没恢复出来），main 会清掉设置并 NOTIFY，视图随即重新同步。
+     */
+    private _pendingDelegated = false;
 
     /** 委托面板与相关视图订阅它 */
     readonly store = new SimpleStore<FrameworkTreeSnapshot>({
@@ -56,8 +66,14 @@ export class FrameworkTreeShared {
 
     constructor() {
         // 登记处的变化（委托建立 / 释放 / 易主）→ 转成本模块的广播：
-        // 订阅方只认这一条通道，不必各自去订阅登记处
-        DELEGATE.store.subscribe(() => this.publish());
+        // 订阅方只认这一条通道，不必各自去订阅登记处。
+        // 同时**无条件**清掉意图：登记处一动就说明「启动恢复」那段已经结束 ——
+        // 恢复成功时意图与现状一致，被取消 / 作废时正是该把左栏交还回去的时候。
+        // （原先这里写的是「只在恢复成功时清」，于是取消委托后意图留了下来，左栏再也不回来）
+        DELEGATE.store.subscribe(() => {
+            this._pendingDelegated = false;
+            this.publish();
+        });
     }
 
     get selectedId(): string | null {
@@ -70,9 +86,25 @@ export class FrameworkTreeShared {
         this.publish();
     }
 
-    /** 设计视图左栏是否处于委托（派生自登记处，全局互斥因此自然成立） */
+    /**
+     * 同步「上次的委托意图」（视图挂载时、以及意图被作废时调用）
+     *
+     * 与 delegated 的关系：那个是「现在真在委托（或正要接回）」，本方法把「上次关库时
+     * 在委托」这条外部信息喂进来 —— 共享状态源自己不认识 settings，只能由视图转达。
+     */
+    SET_PendingDelegated(v: boolean): void {
+        if (this._pendingDelegated === v) return;
+        this._pendingDelegated = v;
+        this.publish();
+    }
+
+    /**
+     * 设计视图左栏是否要让位（真委托中，或上次的委托正在接回）
+     *
+     * 派生自登记处，全局互斥因此自然成立；并上意图是为了消掉启动瞬间那一下闪烁。
+     */
     get delegated(): boolean {
-        return DELEGATE.isDelegated('design');
+        return DELEGATE.isDelegated('design') || this._pendingDelegated;
     }
 
     set delegated(v: boolean) {
@@ -101,7 +133,8 @@ export const FRAMEWORK_TREE = new FrameworkTreeShared();
 /**
  * 设计来源：左栏的框架树被委托出去时，委托面板按这份描述渲染
  *
- * 不提供 rowMenu —— 面板给默认三项（新建子框架 / 重命名 / 归档）。
+ * rowMenu 从 Special/Delegate/rowMenuRegistry 按来源取（视图挂载时登记、卸载时撤销）：
+ * 视图在着，用的就是与未委托时**同一套**菜单；视图从未打开过则取不到，面板退回默认三项。
  */
 export const DESIGN_DELEGATE: DelegateSource = {
     owner: 'design',
@@ -116,6 +149,11 @@ export const DESIGN_DELEGATE: DelegateSource = {
     },
     markExpandedChanged: () => FRAMEWORK_TREE.markExpandedChanged(),
     subscribe: (cb) => FRAMEWORK_TREE.store.subscribe(cb),
+    // getter 而不是固定值：登记是视图挂载时才发生的，视图从未打开过就取不到，
+    // 面板据此退回默认三项（见 DelegateTreeController.showRowMenu）
+    get rowMenu() {
+        return GET_RowMenu('design');
+    },
     buildItems: (ctx) => {
         const selectedId = FRAMEWORK_TREE.selectedId;
         const roots = buildFrameworkTree(ctx.pipe, ctx.settings.topFrameworkOrder ?? []);

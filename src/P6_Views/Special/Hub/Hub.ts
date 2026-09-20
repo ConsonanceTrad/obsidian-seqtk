@@ -160,15 +160,41 @@ export class HubView extends ItemView {
      */
     private renderDelegateSection(container: HTMLElement): void {
         // 谁被委托看登记处（全局只有一份委托）；本容器只在「借用中控台」这个落点上渲染它
-        const wantTree = () =>
+        const wantTree = (): boolean =>
             !!this.pipe &&
             !!this.pluginSettings &&
             this.pluginSettings.delegateTarget === 'hub' &&
             DELEGATE.active !== null;
 
-        /** 目录显隐随委托状态切换：委托期间把它让出来，取消后还原 */
+        /**
+         * 上次关库时是否把树委托到了中控台
+         *
+         * 启动瞬间 `DELEGATE.active` 必为空 —— 委托要等 onReady → 对账 → START_Delegate 才接回，
+         * 而本视图的 onOpen 在工作区恢复时就跑了。只看 active，会先铺出完整面板目录、片刻后
+         * 才被改成委托态，那就是启动时闪的那一下。
+         * 所以目录显隐并上这份「意图」：先把位置让出去，等委托真正接回后自然衔接。
+         * 意图若最终没兑现（来源没恢复出来），main 会清掉它并 NOTIFY —— 目录随即放回来。
+         */
+        const expectedDelegatedHere = (): boolean => {
+            const s = this.pluginSettings;
+            // 三个条件缺一不可：上次有委托、落点是中控台、且「启动恢复」这段还没结束。
+            // 最后一条是关键 —— 恢复一旦落定（登记处动过），就不该再预留：委托被取消或
+            // 作废时 settings 里仍留着来源，只看它会让面板目录再也回不来（见 DELEGATE.settled）。
+            // 不限来源：本容器既承载设计来源的框架树，也承载模板来源的，判据与 wantTree 一致
+            return !!s
+                && s.delegateTarget === 'hub'
+                && s.delegatedOwner !== null
+                && !DELEGATE.settled;
+        };
+
+        /**
+         * 目录显隐：委托进行中、或上次的委托正要接回，都先把目录让出去
+         *
+         * 与 `wantTree()` 的分工要分清 —— 挂不挂树仍只看它（意图不等于真有树），
+         * 这里只管目录要不要占地方。
+         */
         const syncListVisibility = (): void => {
-            container.classList.toggle('seqtk-hub-delegated', wantTree());
+            container.classList.toggle('seqtk-hub-delegated', wantTree() || expectedDelegatedHere());
         };
 
         const mount = (): void => {

@@ -55,9 +55,10 @@ import {
 import { OPEN_NodeFile } from "../Slice/templateActions";
 import { archiveNode } from "../../Design/Slice/actions";
 import { APPLY_Template } from "../Slice/templateApply";
-// 副作用导入：模板来源的工厂在该模块顶层注册给委托登记处，
-// 少了它 `DELEGATE.delegate('template')` 会找不到来源（委托按钮点了没反应）
-import "../Slice/templateDelegate";
+// 模板来源的委托描述：该模块顶层把自己注册给委托登记处，少了它
+// `DELEGATE.delegate('template')` 会找不到来源（委托按钮点了没反应）。
+// 这里具名导入是为了拿到实例、在挂载时告知本视图的 viewType（见 DelegateSource.viewType）
+import { TEMPLATE_DELEGATE } from "../Slice/templateDelegate";
 import {
     cancelCreate,
     cancelRename,
@@ -260,9 +261,34 @@ export class TemplateView extends ReactViewBase implements InlineEditView {
 
     protected onMounted(): void {
         this.unsub = this.pipe.SUB_ActiveView(() => this.refresh());
+        // 恢复上次的打开位置：选中的模板框架、左栏展开集合（左栏宽度在构造里已恢复）。
+        // 与设计视图同一套做法 —— 位置是会话状态，重开库应回到关库前看到的地方
+        // 共享源里已有选中时不覆盖 —— 同 Design.ts 该处的说明（从委托面板跳过来时会用到）
+        if (!TEMPLATE_TREE.selectedId && this.settings.templateSelectedId) {
+            TEMPLATE_TREE.selectedId = this.settings.templateSelectedId;
+        }
+        this.expandedLeft.clear();
+        for (const id of this.settings.templateExpandedIds ?? []) this.expandedLeft.add(id);
+        // 「上次的委托意图」交给共享状态源：启动瞬间登记处还是空的，只看它左栏会先按
+        // 未委托铺出来、随后才跳到委托态（详见 TemplateTreeShared 的说明）。
+        // 必须在 refresh 之前 —— 首次算视图状态时就要用上。
+        // `!settled` 不可省：恢复一旦落定，settings 里那个来源已属历史，再拿它当意图
+        // 会把已经取消的委托又假装成待恢复（见 DELEGATE.settled）
+        TEMPLATE_TREE.SET_PendingDelegated(
+            this.settings.delegatedOwner === 'template' && !DELEGATE.settled,
+        );
+        // 告知模板来源「本视图是哪个 viewType」：委托面板里点行末的「在右侧打开」
+        // 靠它把焦点移回本视图（见 DelegateSource.viewType 与 REVEAL_SourceView）
+        TEMPLATE_DELEGATE.viewType = VIEW_TYPE_TEMPLATE;
         // 共享状态（展开 / 选中 / 委托）变化 → 重刷：委托期间左栏与把手要收起来，
-        // 从委托面板那侧取消委托时本视图也必须跟着回来
-        this.unsubShared = TEMPLATE_TREE.store.subscribe(() => this.refresh());
+        // 从委托面板那侧取消委托时本视图也必须跟着回来。顺带把意图重新同步一次 ——
+        // 共享状态变化也可能是 main 作废了上次的委托意图；同样只在尚未落定时同步
+        this.unsubShared = TEMPLATE_TREE.store.subscribe(() => {
+            TEMPLATE_TREE.SET_PendingDelegated(
+                this.settings.delegatedOwner === 'template' && !DELEGATE.settled,
+            );
+            this.refresh();
+        });
         this.refresh();
     }
 
@@ -279,13 +305,30 @@ export class TemplateView extends ReactViewBase implements InlineEditView {
     }
 
     // ============================================================
-    // 会话状态落盘（左栏宽度）
+    // 会话状态落盘（左栏宽度 / 打开位置）
     // ============================================================
 
-    /** 立即把左栏宽度写回设置（不防抖） */
+    /**
+     * 立即把会话状态写回设置（不防抖）
+     *
+     * 「打开位置」= 左栏宽度 + 选中的模板框架 + 左栏展开集合，三项一起记，
+     * 重开库时才能回到关库前看到的地方（与设计视图的 persistNow 同一套口径）。
+     */
     public persistNow(): void {
         this.settings.templateLeftPaneWidth = this.leftWidth;
+        this.settings.templateSelectedId = TEMPLATE_TREE.selectedId;
+        this.settings.templateExpandedIds = [...this.expandedLeft];
         this.persistSettings?.();
+    }
+
+    /**
+     * 把会话状态立即落盘（供插件卸载时调用）
+     *
+     * 与设计视图的 FLUSH_Session 同名同义：写回有 600ms 防抖，而关库时 Obsidian 直接
+     * 卸载插件，onBeforeUnmount 未必会被调用，最后一次变更就会丢。
+     */
+    public FLUSH_Session(): void {
+        this.persistNow();
     }
 
     /** 防抖写回：拖动结束与连续操作不会频繁落盘 */

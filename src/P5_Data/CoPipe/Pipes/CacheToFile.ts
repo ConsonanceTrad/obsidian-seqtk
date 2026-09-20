@@ -20,12 +20,6 @@ export function BUILD_FileSide(m: Mutation): (file: NodeFileManager) => Promise<
             return (f) => f.delete.DELETE_Node(m.kind, m.nodeId);
         case 'removeTree':
             return async (f) => { await f.delete.DELETE_NodeTree(m.kind, m.nodeId, m.childrenOf); };
-        case 'route-add':
-        case 'route-remove':
-            // 连线是缓存态关系：本 op 不产生独立的文件侧动作。
-            // DataPipe.EXEC_Mutation 对这两种 op 会早返回（只刷缓存、不进慢序列），
-            // 此分支保留仅为 switch 穷尽与语义完备。
-            return async () => { /* no-op */ };
         default: {
             // 穷尽性校验：Mutation 新增 op 却漏在此实现时，编译期报错
             const unhandled: never = m;

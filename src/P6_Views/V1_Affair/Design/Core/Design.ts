@@ -46,7 +46,9 @@ import { SimpleStore } from '../../../../P5_Data/Svelte/SimpleStore';
 import { Save_Setting } from '../../../../P3_Settings/Settings';
 import { BUILD_Menu } from '../../../../P7_Render/Composition/C3_RightClickMenu/MenuDefinition';
 import type { DragSource } from '../../../../P7_Render/Composition/C2_Tree/drag';
-import { FRAMEWORK_TREE } from '../Slice/FrameworkTreeShared';
+import { DESIGN_DELEGATE, FRAMEWORK_TREE } from '../Slice/FrameworkTreeShared';
+import { SET_RowMenu } from '../../../Special/Delegate/rowMenuRegistry';
+import { DELEGATE } from '../../../Special/Delegate/DelegateRegistry';
 import {
     LEFT_PANE_DEFAULT,
     bindTreeScroll,
@@ -307,11 +309,29 @@ export class DesignView extends ReactViewBase {
         });
         // 恢复会话状态：上次打开的是哪个框架（选中 = 右栏打开它）、两栏各自的展开集合。
         // 展开是两栏分开记的 —— 左栏看框架层级、右栏看节点树，混用会让展开形态串味。
-        if (this.settings.selectedFrameworkId) {
+        //
+        // **共享源里已有选中时不覆盖**：本视图可能是刚从委托面板点「在右侧打开」打开的，
+        // 那时选中已被面板设成用户点的那一个 —— 覆盖会把这次跳转当场冲掉。
+        if (!FRAMEWORK_TREE.selectedId && this.settings.selectedFrameworkId) {
             FRAMEWORK_TREE.selectedId = this.settings.selectedFrameworkId;
         }
         this.expandedRight.clear();
         for (const id of this.settings.expandedRightIds ?? []) this.expandedRight.add(id);
+        // 「上次的委托意图」交给共享状态源：启动瞬间登记处还是空的，只看它左栏会先按
+        // 未委托铺出来、随后才跳到委托态（详见 FrameworkTreeShared 的说明）。
+        // 必须在 refresh 之前 —— 首次算视图状态时就要用上。
+        // `!settled` 不可省：恢复一旦落定，settings 里那个来源就已经是「上次的历史」，
+        // 再拿它当意图，会把已经取消的委托又假装成待恢复（见 DELEGATE.settled）
+        FRAMEWORK_TREE.SET_PendingDelegated(
+            this.settings.delegatedOwner === 'design' && !DELEGATE.settled,
+        );
+        // 告知设计来源「本视图是哪个 viewType」：委托面板里点行末的「在右侧打开」
+        // 靠它把焦点移回本视图（见 DelegateSource.viewType 与 REVEAL_SourceView）
+        DESIGN_DELEGATE.viewType = VIEW_TYPE_DESIGN;
+        // 左栏行菜单的装配器登记到 rowMenuRegistry：委托后这棵树渲染在中控台里，
+        // 那边没有本视图实例，靠它才能用上与未委托时**同一套**菜单。按来源分槽，
+        // 因此不会与别的来源互相顶掉（早先那是个单个模块级变量）
+        SET_RowMenu('design', (ctx, e) => showRowContextMenu(this, ctx, 'left', e));
         // 滚动位置：捕获阶段，容器由 P7_Render 渲染，不必去它内部挂监听
         this.containerEl.addEventListener('scroll', this.onTreeScroll, true);
         this.refresh();
@@ -322,6 +342,9 @@ export class DesignView extends ReactViewBase {
         this.containerEl.removeEventListener('scroll', this.onTreeScroll, true);
         persistNow(this);                  // 关视图前把当前滚动位置落盘（防抖可能还没到点）
         document.removeEventListener('contextmenu', this.onDocumentContextMenu, true);
+        // 摘掉本视图那一槽的菜单装配器：本视图已不在，委托面板若还挂着就退回默认三项，
+        // 而不是去调用一个指向已关闭视图的装配器（只影响 design 那一槽）
+        SET_RowMenu('design', null);
         this.unsub?.();
         this.unsub = null;
         this.unsubShared?.();
@@ -376,6 +399,13 @@ export class DesignView extends ReactViewBase {
 
     /** 共享状态（委托开关 / 展开集合 / 选中框架）变化的统一入口 */
     private onSharedChanged(): void {
+        // 共享状态变了有两种来源：委托建立 / 释放，或 main 作废了「上次的委托意图」
+        // （见 FrameworkTreeShared）。两种都要把意图重新同步一次，否则作废之后左栏仍让着位。
+        // 但落定之后不能再同步 —— settings 里那个来源已属历史，写回去会把刚取消的委托
+        // 重新假装成「待恢复」，左栏就又回不来了（这正是上一轮留下的回写环路）
+        FRAMEWORK_TREE.SET_PendingDelegated(
+            this.settings.delegatedOwner === 'design' && !DELEGATE.settled,
+        );
         if (this.refreshing) return;
         this.refresh();
     }

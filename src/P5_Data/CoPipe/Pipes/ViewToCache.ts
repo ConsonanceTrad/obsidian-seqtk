@@ -29,12 +29,11 @@ export type Mutation =
     // removeTree：**预留未接线**（当前无视图构造者）。级联删除经 DataPipe.EXEC_RemoveTree 直接走
     // 缓存侧 REMOVE_NodeTree，以保证 active + archive 两库都清理且只刷一次快照。保留此分支以便
     // 将来需要经统一写意图表达时直接接线。
-    | { op: 'removeTree'; kind: NodeKindValue; nodeId: string; childrenOf: GetChildrenFn }
-    // route 增删：连线目前**只存在于缓存**（源文件侧暂无对应字段，故不落盘、重启后不保留）。
-    // 本 op 只同步缓存内存关系，文件侧是显式 no-op（见 CacheToFile 对应分支）；
-    // 若日后要把关系持久化，应给节点加 route 字段并改走 update。
-    | { op: 'route-add'; kind: NodeKindValue; nodeId: string; toId: string; description: string }
-    | { op: 'route-remove'; kind: NodeKindValue; nodeId: string; toId: string };
+    | { op: 'removeTree'; kind: NodeKindValue; nodeId: string; childrenOf: GetChildrenFn };
+
+// 线路关联曾有一对独立的 route-add / route-remove op（连线只活在缓存里、文件侧是 no-op）。
+// 现已并入**普通字段更新**：routes 落在源框架 frontmatter（见 AttriGroup/Route），
+// 于是它天然享有 update 的全部能力 —— 落盘、防回环登记、指纹比对，不必另开一条通道。
 
 /** 依据意图生成「缓存侧」立即执行闭包 */
 export function BUILD_CacheSide(m: Mutation): (cache: NodeCache) => void {
@@ -47,10 +46,6 @@ export function BUILD_CacheSide(m: Mutation): (cache: NodeCache) => void {
             return (c) => c.REMOVE_Node(m.nodeId);
         case 'removeTree':
             return (c) => { c.REMOVE_NodeTree(m.nodeId); };
-        case 'route-add':
-            return (c) => { c.ADD_Route(m.nodeId, m.toId, m.description); };
-        case 'route-remove':
-            return (c) => { c.REMOVE_Route(m.nodeId, m.toId); };
         default: {
             // 穷尽性校验：Mutation 新增 op 却漏在此实现时，编译期报错
             const unhandled: never = m;

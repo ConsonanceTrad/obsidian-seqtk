@@ -49,6 +49,7 @@ import {
     type InlineEditView,
 } from '../../V1_Affair/Design/Slice/inlineEdit';
 import { archiveNode, type NodeEditHost } from '../../V1_Affair/Design/Slice/actions';
+import { REVEAL_SourceView } from './delegateTargets';
 import { SYNC_FromFiles } from '../../V0_Common/SyncFromFiles';
 import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
 import type { PluginSettings } from '../../../P3_Settings/Settings';
@@ -191,6 +192,10 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost, I
                 onToggle: (ctx) => this.toggleExpand(ctx),
                 onSelect: (ctx) => {
                     this.source.setSelectedId(ctx.nodeId);
+                    // 行末「在右侧打开」：把焦点移回来源视图（没开着就打开）——
+                    // 面板里这棵树只是它的镜像，用户要看的是那个有两栏的完整视图。
+                    // 来源没报 viewType 时退化成只选中（见 DelegateSource.viewType）
+                    if (this.source.viewType) REVEAL_SourceView(this.app, this.source.viewType);
                 },
                 onCancelDelegate: () => this.onCancel(),
                 onContextMenu: (ctx, e) => this.showRowMenu(ctx, e),

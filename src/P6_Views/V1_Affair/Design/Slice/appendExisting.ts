@@ -14,7 +14,7 @@
 
 import { NodePickModal } from '../../../../P7_Render/Structure/S2_Modal/NodePickModal';
 import { EVIDENCE_KINDS } from '../../../../P7_Render/Composition/C2_Tree/drag';
-import type { DesignView } from '../Core/Design';
+import type { NodeEditHost } from './actions';
 
 /**
  * 把库里已有的**证据节点**挂到 parentId 节点下（引用式追加）
@@ -32,7 +32,7 @@ import type { DesignView } from '../Core/Design';
  * 把框架直接持有的证据、或别的工序下的证据，引用到当前节点里来）。
  * 证据节点总量有限，配上搜索框足够用。
  */
-export function appendExistingInfo(view: DesignView, parentId: string): void {
+export function appendExistingInfo(view: NodeEditHost, parentId: string): void {
     const parent = view.pipe.GET_Node(parentId);
     if (!parent) return;
     const existing = new Set(parent.follows ?? []);

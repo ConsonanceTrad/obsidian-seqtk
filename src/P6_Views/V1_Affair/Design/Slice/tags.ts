@@ -77,7 +77,7 @@ export function saveTags(view: NodeEditHost, nodeId: string, tags: string[]): vo
 }
 
 /** 管理标签：打开弹窗调顺序、增删条目；改动即时写盘并让行重新渲染 */
-export function manageTags(view: DesignView, nodeId: string): void {
+export function manageTags(view: NodeEditHost, nodeId: string): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     new TagsModal(view.app, node.tags ?? [], {

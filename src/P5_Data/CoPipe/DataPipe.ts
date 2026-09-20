@@ -52,12 +52,6 @@ export class DataPipe {
 
     /** 视图写意图：按 kind 通道分流执行（缓存 kind 双队列 / 文件基准防抖直写） */
     EXEC_Mutation(m: Mutation): void {
-        // 连线是缓存态关系（文件侧无独立动作）：只刷缓存，不进慢序列，
-        // 也不做 GUARD_FileSide 的路径登记（否则会误伤源文件的防回环抑制）
-        if (m.op === 'route-add' || m.op === 'route-remove') {
-            BUILD_CacheSide(m)(this.deps.cache);
-            return;
-        }
         const fileSide = this.GUARD_FileSide(m, BUILD_FileSide(m));
         if (IS_CacheKind(m.kind)) {
             const cacheSide = BUILD_CacheSide(m);

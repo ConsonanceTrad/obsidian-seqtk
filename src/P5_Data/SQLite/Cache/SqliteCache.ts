@@ -3,7 +3,7 @@
  *
  * 职责：
  * - 初始化 sql.js（SQLite 的 WASM 版）并建表
- * - 节点数据表 nodes + 关系表 relations（follows / parent / links / progress）
+ * - 节点数据表 nodes + 关系表 relations（follows / parent / links / progress / route）
  * - 节点 CRUD、关系查询、模糊搜索、环状引用检测
  * - export()/load() 二进制持久化 + 文件指纹（增量校验依据）
  *
@@ -19,6 +19,7 @@
 import initSqlJs from 'sql.js';
 import type { Database, SqlJsStatic } from 'sql.js';
 import type { SeqtkNode } from '../../../P4_Nodes/Node';
+import type { RouteRef } from '../../../P4_Nodes/NodeField/AttriGroup/Route';
 import type { NodeKindValue } from '../../../P4_Nodes/NodeKind/NodeKind';
 import type {
   SeqtkState,
@@ -184,10 +185,13 @@ function rowToNode(row: NodeRow): SeqtkNode {
 }
 
 /**
- * 在基础行解析之上补充出边关系（follows / parent / links / progress）
+ * 在基础行解析之上补充出边关系（follows / parent / links / progress / route）
  *
  * 关系存储于 relations 表而非 nodes 列，读取时必须一并还原，
  * 否则部分更新（如向 follows 追加子节点）会因缺失旧关系而被覆盖。
+ *
+ * route 也在这里还原：它以 `routes` 字段（源侧 frontmatter）为权威来源，
+ * SQLite 那侧只是它的投影，所以读回时同样按 nodeId + desc 组装成 routes。
  *
  * @param row  节点行
  * @param rels 该节点的出边关系列表（调用方提供；不传时返回无关系字段的基础对象）
@@ -198,9 +202,13 @@ function rowToNodeFull(row: NodeRow, rels?: RelationRef[]): SeqtkNode {
   const follows = list.filter((r) => r.rel === 'follows').map((r) => r.nodeId);
   const links = list.filter((r) => r.rel === 'links').map((r) => r.nodeId);
   const progress = list.filter((r) => r.rel === 'progress').map((r) => r.nodeId);
+  const routes = list
+    .filter((r) => r.rel === 'route')
+    .map((r) => (r.description ? { toId: r.nodeId, desc: r.description } : { toId: r.nodeId }));
   if (follows.length > 0) node.follows = follows;
   if (links.length > 0) node.links = links;
   if (progress.length > 0) node.progress = progress;
+  if (routes.length > 0) node.routes = routes;
   return node as SeqtkNode;
 }
 
@@ -413,15 +421,20 @@ export class SqliteCache {
       ]
     );
 
-    // 重建出边关系（保留 route 线路关联，不随 frontmatter 重建）
-    db.run("DELETE FROM relations WHERE from_id = ? AND rel != 'route'", [nodeId]);
-    const addRel = (toId: string, rel: RelationType) => {
+    // 出边关系一律从 frontmatter 重建 —— 含 route：routes 字段是权威来源，
+    // relations 表只是它的投影（早先「保留 route」的例外已随 routes 落盘取消）
+    db.run('DELETE FROM relations WHERE from_id = ?', [nodeId]);
+    const addRel = (toId: string, rel: RelationType, description?: string) => {
       if (!toId) return;
-      db.run('INSERT OR IGNORE INTO relations (from_id, rel, to_id) VALUES (?, ?, ?)', [nodeId, rel, toId]);
+      db.run(
+        'INSERT OR REPLACE INTO relations (from_id, rel, to_id, description) VALUES (?, ?, ?, ?)',
+        [nodeId, rel, toId, description ?? null],
+      );
     };
     (raw.follows as string[] | undefined)?.forEach((t) => addRel(t, 'follows'));
     (raw.links as string[] | undefined)?.forEach((t) => addRel(t, 'links'));
     (raw.progress as string[] | undefined)?.forEach((t) => addRel(t, 'progress'));
+    (raw.routes as RouteRef[] | undefined)?.forEach((r) => addRel(r.toId, 'route', r.desc));
   }
 
   /**
@@ -449,24 +462,10 @@ export class SqliteCache {
   }
 
   // ============================================================
-  // 线路关联（route，From/To + 描述，独立于节点 frontmatter）
+  // 线路关联（route）—— relations 表里的投影
+  // 权威来源是源节点 frontmatter 的 routes 字段（见 AttriGroup/Route），
+  // 写入一律经 UPSERT_Node 重建，故这里只有查询、没有增删。
   // ============================================================
-
-  /** 建立/更新一条 route 线路关联（From → To，含描述） */
-  ADD_Route(fromId: string, toId: string, description: string): void {
-    const db = this.REQUIRE_Db();
-    db.run(
-      `INSERT OR REPLACE INTO relations (from_id, rel, to_id, description)
-       VALUES (?, 'route', ?, ?)`,
-      [fromId, toId, description],
-    );
-  }
-
-  /** 移除一条 route 线路关联 */
-  REMOVE_Route(fromId: string, toId: string): void {
-    const db = this.REQUIRE_Db();
-    db.run("DELETE FROM relations WHERE from_id = ? AND rel = 'route' AND to_id = ?", [fromId, toId]);
-  }
 
   /** 节点的 route 出边（From = 该节点） */
   GET_RouteOutgoing(nodeId: string): RelationRef[] {

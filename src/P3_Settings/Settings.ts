@@ -72,8 +72,17 @@ export interface PluginSettings {
     /** 事务设计：左栏宽度（px；0 = 使用默认宽度） */
     leftPaneWidth: number;
 
+    /** 线路模式：左栏宽度（px；0 = 使用默认宽度） */
+    routeLeftPaneWidth: number;
+
     /** 模板模式：左栏宽度（px；0 = 使用默认宽度） */
     templateLeftPaneWidth: number;
+
+    /** 模板模式：上次选中的模板框架 nodeId（重开库时恢复打开位置） */
+    templateSelectedId: string | null;
+
+    /** 模板模式：左栏框架树的展开集合（重开库时恢复打开位置） */
+    templateExpandedIds: string[];
 
     /**
      * 模板模式：应用模板时的同名冲突策略（追加 / 覆写 / 跳过）
@@ -97,8 +106,16 @@ export interface PluginSettings {
      */
     hub: Record<string, { hidden: string[] }>;
 
-    /** 事务设计：是否处于委托（重开库时据此把框架树面板恢复到侧栏） */
-    delegated: boolean;
+    /**
+     * 哪个来源的树被委托到了侧栏（重开库时据此恢复；null = 没有委托）
+     *
+     * 委托是**全局互斥**的（见 Special/Delegate/DelegateRegistry），同一时刻只有一份，
+     * 所以记「是谁」就够 —— 不必给每个来源各留一个布尔，也不会出现两个都写着 true 的脏状态。
+     *
+     * 取值要与那边的 DelegateOwner 对齐；这里不直接引那个类型，是因为它住在视图层，
+     * 设置层不该反向依赖视图层。
+     */
+    delegatedOwner: 'design' | 'template' | 'route' | null;
 
     /**
      * 事务设计的框架树被委托到哪里
@@ -109,6 +126,12 @@ export interface PluginSettings {
 
     /** 事务设计：上次选中的框架 nodeId（重开库时恢复选中） */
     selectedFrameworkId: string | null;
+
+    /** 线路模式：上次选中的框架 nodeId（重开库时恢复；与设计那份各记各的） */
+    routeSelectedId: string | null;
+
+    /** 线路模式：左栏框架树的展开集合（重开库时恢复打开位置） */
+    routeExpandedIds: string[];
 
     /** 事务设计：左 / 右栏树容器的滚动位置（px） */
     treeScrollLeft: number;
@@ -145,14 +168,19 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     kindTextInverted: {},
     topFrameworkOrder: [],
     leftPaneWidth: 0,
+    routeLeftPaneWidth: 0,
     templateLeftPaneWidth: 0,
     templatePolicy: 'append',
+    templateSelectedId: null,
+    templateExpandedIds: [],
     expandedFrameworkIds: [],
     expandedRightIds: [],
     hub: {},
-    delegated: false,
+    delegatedOwner: null,
     delegateTarget: 'hub',
     selectedFrameworkId: null,
+    routeSelectedId: null,
+    routeExpandedIds: [],
     treeScrollLeft: 0,
     treeScrollRight: 0,
     timestampFormat: 'YYYYMMDDHHmmss',

@@ -22,7 +22,7 @@
 
 import { NodePickModal } from '../../../../P7_Render/Structure/S2_Modal/NodePickModal';
 import { EVIDENCE_KINDS, canBeChildOf } from '../../../../P7_Render/Composition/C2_Tree/drag';
-import { NODE_KIND_LABELS, isFrameworkKind } from '../../../../P4_Nodes/NodeFacade';
+import { NODE_KIND, NODE_KIND_LABELS, isFrameworkKind } from '../../../../P4_Nodes/NodeFacade';
 import { FRAMEWORK_TREE } from './FrameworkTreeShared';
 import { DELEGATE } from '../../../Special/Delegate/DelegateRegistry';
 import { START_Delegate } from '../../../Special/Delegate/delegateTargets';
@@ -30,7 +30,7 @@ import { moveChildAcrossParents } from './drag';
 import { setNodeState } from './actions';
 import type { TreeNode } from '../Tool/tree';
 import type { TreeSide } from '../Core/DesignPanel';
-import type { DesignView } from '../Core/Design';
+import type { MenuHost } from './menuHost';
 
 /**
  * 委托左栏框架树到中控台侧栏（进行 / 取消）
@@ -39,7 +39,7 @@ import type { DesignView } from '../Core/Design';
  * 左栏本身**不搬走**，只是多出一个同步的侧栏视图 —— 这样在别的视图工作时也能操作框架树。
  * 用 workspace 的左侧栏 leaf 而非 activateView：本视图没有 plugin 引用，也无需走面板目录。
  */
-export function toggleDelegate(view: DesignView): void {
+export function toggleDelegate(view: MenuHost): void {
     // 登记的互斥、落点的开合都交给登记处与「发起委托」那条路：
     // 已在委托 → 释放（谁持有就释放谁）；否则让设计来源进入委托。
     // 同来源幂等，因此重开库时被工作区恢复出来的落点不会被误判成「尚未委托」。
@@ -49,7 +49,7 @@ export function toggleDelegate(view: DesignView): void {
 }
 
 /** 按栏切换展开/收起（左右栏展开状态相互独立） */
-export function toggleExpand(view: DesignView, nodeId: string, side: TreeSide): void {
+export function toggleExpand(view: MenuHost, nodeId: string, side: TreeSide): void {
     const set = side === 'left' ? view.expandedLeft : view.expandedRight;
     if (set.has(nodeId)) set.delete(nodeId);
     else set.add(nodeId);
@@ -57,7 +57,7 @@ export function toggleExpand(view: DesignView, nodeId: string, side: TreeSide): 
 }
 
 /** 按栏展开或收起该节点的全部子孙节点（依据该栏当前展开状态切换） */
-export function toggleExpandAll(view: DesignView, node: TreeNode, side: TreeSide): void {
+export function toggleExpandAll(view: MenuHost, node: TreeNode, side: TreeSide): void {
     const set = side === 'left' ? view.expandedLeft : view.expandedRight;
     const ids: string[] = [];
     const collect = (n: TreeNode): void => {
@@ -79,7 +79,7 @@ export function toggleExpandAll(view: DesignView, node: TreeNode, side: TreeSide
  * 展开时把框架的**全部后代**塞进集合：叶子进了集合没有副作用（它们本来就没有
  * 折叠箭头），换来的是不必先判断「谁有子节点」，且整个过程只触发一次 refresh。
  */
-export function setRightExpandAll(view: DesignView, expand: boolean): void {
+export function setRightExpandAll(view: MenuHost, expand: boolean): void {
     const fwId = view.selectedFrameworkId;
     if (!fwId) return;
     view.expandedRight.clear();
@@ -96,7 +96,7 @@ export function setRightExpandAll(view: DesignView, expand: boolean): void {
  * 判据取「有没有任一后代在展开集合里」，而不是「集合是否为空」—— 集合里可能残留着
  * 别的框架（或已删除节点）的 id，那时视图上其实仍是全收起。
  */
-export function IS_RightCollapsed(view: DesignView): boolean {
+export function IS_RightCollapsed(view: MenuHost): boolean {
     const fwId = view.selectedFrameworkId;
     if (!fwId) return true;
     const set = view.expandedRight;
@@ -109,8 +109,11 @@ export function IS_RightCollapsed(view: DesignView): boolean {
  * 移动的**执行**复用拖拽那条路径（design/drag.moveChildAcrossParents），
  * 因此 follows 的维护方式与拖拽完全一致，不存在两套语义。
  * 候选父节点排除自身与全部后代 —— 选了会形成环。
+ *
+ * 候选里的**框架只留事务框架**：信息框架不承载事务树，模板框架属于模板模式，
+ * 把节点挂到它们下面在语义上说不通。非框架节点照旧，层级判定交给 canBeChildOf。
  */
-export function changeParent(view: DesignView, nodeId: string): void {
+export function changeParent(view: MenuHost, nodeId: string): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     const exclude = [
@@ -121,8 +124,11 @@ export function changeParent(view: DesignView, nodeId: string): void {
         title: '变更归属 · 选择目标父节点',
         excludeIds: exclude,
         // 只列「能容纳本节点类型」的父 —— 层级错位的候选不该出现在列表里。
-        // 判定与拖拽落点同一条（C2_Tree/drag.canBeChildOf），不会出现「拖不进去却能选出来」
-        allow: (_id, kind) => canBeChildOf(kind, node.kind),
+        // 判定与拖拽落点同一条（C2_Tree/drag.canBeChildOf），不会出现「拖不进去却能选出来」。
+        // 框架类再收一道：信息框架 / 模板框架不该作为归属目标（见函数头注释）
+        allow: (_id, kind) =>
+            canBeChildOf(kind, node.kind)
+            && (!isFrameworkKind(kind) || kind === NODE_KIND.TRANS),
         emptyText: '没有能容纳该类型的父节点（自身与后代已排除）',
         onPick: (targetParentId) => {
             // 源父从 follows 入边反查（归属只由父侧记录）；多归属时取第一个，变更归属只动这一个
@@ -147,7 +153,7 @@ export function changeParent(view: DesignView, nodeId: string): void {
  * 实际出现过的偏差是「证据同时挂在框架与内部节点下，对内部节点断连却摘掉了框架那条」。
  * 也不弹框：要摘的就是用户正在看的那一行所属的链，想摘别的上级换到那处再断一次即可。
  */
-export function detachFromParent(view: DesignView, nodeId: string, parentId: string): void {
+export function detachFromParent(view: MenuHost, nodeId: string, parentId: string): void {
     if (!parentId) return;
     const node = view.pipe.GET_Node(nodeId);
     if (!node || !EVIDENCE_KINDS.includes(node.kind)) return;
@@ -155,7 +161,7 @@ export function detachFromParent(view: DesignView, nodeId: string, parentId: str
 }
 
 /** 从指定上级的 follows 里摘掉一个子节点（本来就不在其中时什么也不做） */
-function REMOVE_FromParent(view: DesignView, parentId: string, childId: string): void {
+function REMOVE_FromParent(view: MenuHost, parentId: string, childId: string): void {
     const parent = view.pipe.GET_Node(parentId);
     if (!parent) return;
     const follows = parent.follows ?? [];
@@ -169,7 +175,7 @@ function REMOVE_FromParent(view: DesignView, parentId: string, childId: string):
 }
 
 /** 返回父框架（右栏标题栏按钮）：回到下钻前的那个框架 */
-export function selectParentFramework(view: DesignView): void {
+export function selectParentFramework(view: MenuHost): void {
     // 来源失效（被删 / 不再是框架）就继续往前找，都没有则什么也不做
     while (view.frameworkNavStack.length > 0) {
         const from = view.frameworkNavStack.pop()!;
@@ -191,7 +197,7 @@ export function selectParentFramework(view: DesignView): void {
  *
  * 切片协作可见：design/viewState.buildState 用它算右栏「返回父框架」入口。
  */
-export function resolveNavBack(view: DesignView, fwId: string): { nodeId: string; title: string } | undefined {
+export function resolveNavBack(view: MenuHost, fwId: string): { nodeId: string; title: string } | undefined {
     const stack = view.frameworkNavStack;
     const from = stack[stack.length - 1];
     if (!from) return undefined;
@@ -211,7 +217,7 @@ export function resolveNavBack(view: DesignView, fwId: string): { nodeId: string
  * 只有**右栏内下钻**才记来路（在右栏点框架行 = 进入它的内部，需要能回到原处）；
  * 左栏点选是「直接切过去」，等于重新开始，因此顺带清掉来路。
  */
-export function selectFramework(view: DesignView, nodeId: string, side: TreeSide): void {
+export function selectFramework(view: MenuHost, nodeId: string, side: TreeSide): void {
     const prev = view.selectedFrameworkId;
     if (side === 'right') {
         if (prev && prev !== nodeId) view.frameworkNavStack.push(prev);
@@ -223,7 +229,7 @@ export function selectFramework(view: DesignView, nodeId: string, side: TreeSide
 }
 
 /** 状态圆点左键：规划/进行 → 完成；完成 → 规划（循环切换） */
-export function toggleState(view: DesignView, nodeId: string): void {
+export function toggleState(view: MenuHost, nodeId: string): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     setNodeState(view, nodeId, (node.state ?? 'plan') === 'done' ? 'plan' : 'done');

@@ -28,7 +28,7 @@ import {
 import { ExternalSourcesModal } from '../../../../P7_Render/Structure/S2_Modal/ExternalSourcesModal';
 import { TextPromptModal } from '../../../../P7_Render/Structure/S2_Modal/TextPromptModal';
 import type { PluginSettings } from '../../../../P3_Settings/Settings';
-import type { DesignView } from '../Core/Design';
+import type { NodeEditHost } from './actions';
 
 /**
  * 关联一条外部信息源（URL 或库内文件路径）
@@ -39,7 +39,7 @@ import type { DesignView } from '../Core/Design';
  * 「外部信息源」是独立列表字段，不与 follows / parent 那一簇混用 ——
  * 前者描述节点之间的关系，后者描述节点与节点体系之外材料的关联。
  */
-export function addExternalSource(view: DesignView, nodeId: string): void {
+export function addExternalSource(view: NodeEditHost, nodeId: string): void {
     if (!view.pipe.GET_Node(nodeId)) return;
     new TextPromptModal(view.app, {
         title: '关联库内文件或 URL',
@@ -113,7 +113,7 @@ function READ_TimestampConfig(raw: Record<string, unknown> | undefined): Timesta
  * 两路：插件表（已启用时最直接）优先，读不到再读它的 data.json ——
  * 插件未启用、或内部结构变了时，还有一条路可走。
  */
-export async function READ_CoreTimestampConfig(app: DesignView['app']): Promise<TimestampConfig | null> {
+export async function READ_CoreTimestampConfig(app: NodeEditHost['app']): Promise<TimestampConfig | null> {
     const holder = app as unknown as {
         plugins?: { plugins?: Record<string, { settings?: Record<string, unknown> }> };
     };
@@ -171,7 +171,7 @@ const NAME_FromPath = (path: string): string => (path.split('/').pop() ?? path).
  * 重名时追加 `-1` / `-2`：核心插件那套自己保证唯一，自建就得自己兜 ——
  * 同一秒内连点两次、或格式只精确到天，都会撞名。
  */
-async function CREATE_TimestampFile(view: DesignView, config: TimestampConfig): Promise<string | null> {
+async function CREATE_TimestampFile(view: NodeEditHost, config: TimestampConfig): Promise<string | null> {
     // 目录留空 = 库根目录下的 Timestamp 文件夹。时间戳笔记是**独立笔记**，
     // 不该混进 SeqTK 的数据目录（settings.rootFolder）里，所以这里用自己那个固定落点
     const folder = config.folder || DEFAULT_TIMESTAMP_FOLDER;
@@ -201,7 +201,7 @@ async function CREATE_TimestampFile(view: DesignView, config: TimestampConfig): 
  *   但用户可能正开着别的笔记，这里显式还原一次，行为才可预期
  * - `true`（「创建并打开」）：打开刚建好的这篇
  */
-export async function createTimestampDoc(view: DesignView, nodeId: string, open: boolean): Promise<void> {
+export async function createTimestampDoc(view: NodeEditHost, nodeId: string, open: boolean): Promise<void> {
     if (!view.pipe.GET_Node(nodeId)) return;
     const prevFile = view.app.workspace.getActiveFile();
 
@@ -229,7 +229,7 @@ export async function createTimestampDoc(view: DesignView, nodeId: string, open:
 // ============================================================
 
 /** 追加一条外部信息源（写意图与其它字段更新同构） */
-function appendSource(view: DesignView, nodeId: string, source: ExternalSource): void {
+function appendSource(view: NodeEditHost, nodeId: string, source: ExternalSource): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     view.pipe.EXEC_Mutation({
@@ -242,7 +242,7 @@ function appendSource(view: DesignView, nodeId: string, source: ExternalSource):
 }
 
 /** 写回整份外部信息源列表（顺序调整与删除都走这里，仍是一次字段更新） */
-function saveSources(view: DesignView, nodeId: string, sources: ExternalSource[]): void {
+function saveSources(view: NodeEditHost, nodeId: string, sources: ExternalSource[]): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     view.pipe.EXEC_Mutation({
@@ -259,7 +259,7 @@ function saveSources(view: DesignView, nodeId: string, sources: ExternalSource[]
  * 弹窗里每次操作即时写盘（没有「保存」按钮）—— 这类小改动即时生效比先攒后存更符合预期，
  * 改错了再改回来也不比按保存麻烦。
  */
-export function manageExternalSources(view: DesignView, nodeId: string): void {
+export function manageExternalSources(view: NodeEditHost, nodeId: string): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     new ExternalSourcesModal(view.app, node.sources ?? [], {
@@ -276,7 +276,7 @@ export function manageExternalSources(view: DesignView, nodeId: string): void {
  * 行内只出一个链接图标，条目名在这里展开（只显示末段名，见 GET_SourceLabel）；
  * url 交给系统浏览器，path 交给 workspace 打开（库内文件）。
  */
-export function showSourcesMenu(view: DesignView, nodeId: string, e: MouseEvent): void {
+export function showSourcesMenu(view: NodeEditHost, nodeId: string, e: MouseEvent): void {
     const sources = view.pipe.GET_Node(nodeId)?.sources ?? [];
     if (sources.length === 0) return;
 
@@ -295,7 +295,7 @@ export function showSourcesMenu(view: DesignView, nodeId: string, e: MouseEvent)
 }
 
 /** 打开一条信息源（url → 系统浏览器；path → 库内文件） */
-function openSource(view: DesignView, target: { kind: 'url' | 'path'; value: string } | null): void {
+function openSource(view: NodeEditHost, target: { kind: 'url' | 'path'; value: string } | null): void {
     if (!target) return;
     if (target.kind === 'url') {
         window.open(target.value, '_blank');

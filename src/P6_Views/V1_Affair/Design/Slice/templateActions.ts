@@ -15,7 +15,7 @@
 
 import { NODE_KIND } from '../../../../P4_Nodes/NodeFacade';
 import { Notice, Menu } from 'obsidian';
-import type { DesignView } from '../Core/Design';
+import type { NodeEditHost } from './actions';
 import {
   cloneSubtree,
   parameterizeText,
@@ -35,7 +35,7 @@ import type { TreeNode } from '../Tool/tree';
  * - 使用模板：选择模板单元，克隆到当前节点/框架下（{{frame}} 替换为当前节点名）
  * 「打开模板库」不在右键提供：模板库管理请用中控台/命令面板的「模板模式」。
  */
-export function appendTemplateMenu(menu: Menu, view: DesignView, node: TreeNode): void {
+export function appendTemplateMenu(menu: Menu, view: NodeEditHost, node: TreeNode): void {
   menu.addItem((item) =>
     item.setTitle('存为模板').setIcon('save')
       .onClick(() => void saveAsTemplate(view, node.nodeId)));
@@ -45,7 +45,7 @@ export function appendTemplateMenu(menu: Menu, view: DesignView, node: TreeNode)
 }
 
 /** 存为模板：子树整体存入所选模板框架，成为该框架下新的模板单元 */
-export async function saveAsTemplate(view: DesignView, sourceId: string): Promise<void> {
+export async function saveAsTemplate(view: NodeEditHost, sourceId: string): Promise<void> {
   if (!view.pipe.isInitialized) {
     new Notice('查询缓存尚未就绪，请稍候');
     return;
@@ -76,7 +76,7 @@ export async function saveAsTemplate(view: DesignView, sourceId: string): Promis
 }
 
 /** 使用模板：选择可用模板单元克隆到当前节点/框架下（插入为其直属子项，末尾追加） */
-export function useTemplate(view: DesignView, targetParentId: string): void {
+export function useTemplate(view: NodeEditHost, targetParentId: string): void {
   if (!view.pipe.isInitialized) {
     new Notice('查询缓存尚未就绪，请稍候');
     return;
@@ -102,7 +102,7 @@ export function useTemplate(view: DesignView, targetParentId: string): void {
 
 /** 应用模板单元：整棵子树克隆到目标父下，{{frame}} 替换为目标父名，随后展开目标 */
 export async function applyTemplateUnit(
-  view: DesignView,
+  view: NodeEditHost,
   entry: { unit: { nodeId: string } },
   targetParent: { nodeId: string; desc: string },
 ): Promise<void> {

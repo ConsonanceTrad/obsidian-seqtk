@@ -28,14 +28,12 @@ import { PARSE_NameTags, saveTags } from './tags';
 import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import type { NodeLineCtx } from '../../../../P7_Render/Composition/C1_NodeLine/NodeLine';
 import type { DesignInlineCreating, TreeSide } from '../Core/DesignPanel';
-import type { DesignView } from '../Core/Design';
 
 /**
  * 行内编辑切片的最小宿主
  *
- * = NodeEditHost（数据面 + 两组展开集合 + 重绘入口）再加三样：两个瞬时编辑态由宿主
- * 持有（渲染件要读它们才画得出输入框），以及写盘期间的抑制位 —— 都是「宿主自己的
- * 状态」，切片只改不存。
+ * = NodeEditHost（数据面 + 两组展开集合 + 重绘入口）再加两个瞬时编辑态：由宿主持有，
+ * 渲染件要读它们才画得出输入框 —— 属于「宿主自己的状态」，切片只改不存。
  */
 export interface InlineEditView extends NodeEditHost {
     /** 行内重命名态（哪一行正在改名） */
@@ -44,8 +42,18 @@ export interface InlineEditView extends NodeEditHost {
     creating: DesignInlineCreating | null;
     /** 写盘期间压掉重绘（提交后由本切片统一刷一次，见 commitCreate） */
     suppressRefresh?: boolean;
-    /** 重绘一次（各宿主各自表达：视图 → refresh，委托面板 → recompute） */
-    refresh(): void;
+}
+
+/**
+ * 再往上一层：宿主还得持有一个**正文编辑态**
+ *
+ * 与 rename / creating 同类，但只有「行上直接编辑正文」的宿主才有 —— 委托面板与模板视图
+ * 不给正文入口，所以单独一个接口而不是塞进 InlineEditView：否则那两个宿主也得凭空长出
+ * 一个用不到的字段（写了就是自欺的占位）。菜单宿主（menuHost）建在它之上。
+ */
+export interface BodyEditHost extends InlineEditView {
+    /** 行内正文编辑态（哪一行正在改正文、已输入什么） */
+    bodyEditing: { nodeId: string; value: string } | null;
 }
 
 /** 进入行内重命名态（由菜单「重命名」触发） */
@@ -163,12 +171,12 @@ export async function commitCreate(
 }
 
 /**
- * 修改描述：走模态框（菜单「修改描述」的入口，只有设计视图用）
+ * 修改描述：走模态框（菜单「修改描述」的入口）
  *
  * 描述是整段 Markdown，弹窗里改比行内浮层从容；行内浮层那条链（startBodyEdit）
- * 留给行上的直接编辑入口。
+ * 留给行上的直接编辑入口。本函数只需要数据面与重绘，故收 NodeEditHost。
  */
-export function openBodyEdit(view: DesignView, nodeId: string): void {
+export function openBodyEdit(view: NodeEditHost, nodeId: string): void {
     const data = view.pipe.GET_Node(nodeId);
     if (!data) return;
     new TextPromptModal(view.app, {
@@ -191,12 +199,12 @@ export function openBodyEdit(view: DesignView, nodeId: string): void {
 }
 
 /** 进入正文编辑态（行内浮层，见 openBodyEdit 的说明） */
-export function startBodyEdit(view: DesignView, nodeId: string): void {
+export function startBodyEdit(view: BodyEditHost, nodeId: string): void {
     view.bodyEditing = { nodeId, value: view.pipe.GET_NodeBody(nodeId) ?? '' };
     view.refresh();
 }
 
-export function commitBody(view: DesignView, nodeId: string, body: string): void {
+export function commitBody(view: BodyEditHost, nodeId: string, body: string): void {
     const prev = view.bodyEditing?.value ?? '';
     const data = view.pipe.GET_Node(nodeId);
     view.bodyEditing = null;
@@ -206,7 +214,7 @@ export function commitBody(view: DesignView, nodeId: string, body: string): void
     view.refresh();
 }
 
-export function cancelBody(view: DesignView): void {
+export function cancelBody(view: BodyEditHost): void {
     view.bodyEditing = null;
     view.refresh();
 }

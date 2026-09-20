@@ -430,28 +430,6 @@ export class NodeCache {
   // 线路关联（route，From/To + 描述，独立于节点 frontmatter）
   // ============================================================
 
-  /**
-   * 建立/更新 route 线路关联（双库同步；archive 未就绪时仅写 active，
-   * 下次 ARCHIVE_Refresh 以磁盘数据重灌时不携带 route——route 属内存增强信息，
-   * 若需长期保存由上层负责持久化）
-   */
-  ADD_Route(fromId: string, toId: string, description: string): void {
-    this.ASSERT_Writable();
-    this.activeCache.ADD_Route(fromId, toId, description);
-    if (this.archiveCache.isReady) {
-      this.archiveCache.ADD_Route(fromId, toId, description);
-    }
-  }
-
-  /** 移除 route 线路关联 */
-  REMOVE_Route(fromId: string, toId: string): void {
-    this.ASSERT_Writable();
-    this.activeCache.REMOVE_Route(fromId, toId);
-    if (this.archiveCache.isReady) {
-      this.archiveCache.REMOVE_Route(fromId, toId);
-    }
-  }
-
   /** route 查询基准：archive 就绪时以其为准（含全部节点的路线边），否则回退 active */
   private routeBase(): SqliteCache {
     return this.archiveCache.isReady ? this.archiveCache : this.activeCache;

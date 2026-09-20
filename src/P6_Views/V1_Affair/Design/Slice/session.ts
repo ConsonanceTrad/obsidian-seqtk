@@ -36,8 +36,10 @@ export function persistNow(view: DesignView): void {
     view.settings.leftPaneWidth = view.leftWidth;
     view.settings.expandedFrameworkIds = [...FRAMEWORK_TREE.expandedLeft];
     view.settings.expandedRightIds = [...view.expandedRight];
-    // 会话状态：重开库时按这三项把视图恢复成关库前的样子
-    view.settings.delegated = FRAMEWORK_TREE.delegated;
+    // 会话状态：重开库时按这几项把视图恢复成关库前的样子。
+    // 注意这里**不写** delegatedOwner —— 那是全局单值（谁被委托），与「哪个视图开着」无关，
+    // 由 Special/Delegate/DelegateSession 统一负责（见那边的 PERSIST_Delegate）：写两处
+    // 既有重复的风险，也让「新增来源时该照哪一处抄」变得没人说得清。
     view.settings.selectedFrameworkId = FRAMEWORK_TREE.selectedId;
     view.persistSettings?.();
 }

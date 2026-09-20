@@ -3,22 +3,27 @@
  *
  * 判定（落点解析 / 能否落）已迁到 `P7_Render/Composition/C2_Tree/drag.ts`（纯逻辑，不接触
  * 数据层，`EVIDENCE_KINDS` 也在那里）。本文件只保留**需要写数据**的部分：同父排序、
- * 顶级排序、跨父移动 —— 仍以 `view` 为第一参数，但它们经 **pipe.EXEC_Mutation** 落盘，
- * 不再直连 nodeCache / fileManager / operationQueue。
+ * 顶级排序、跨父移动 —— 它们经 **pipe.EXEC_Mutation** 落盘，不直连 nodeCache / fileManager /
+ * operationQueue。
+ *
+ * 第一参数按需取接口：同父排序与跨父移动只要 `NodeEditHost`；顶级排序还要读写 `topOrder`，
+ * 故那一个收 `TreeEditHost`（见 Slice/treeEditHost）。抽成接口后，线路模式的左栏框架树
+ * 能复用这整套行为。
  *
  * 事件绑定不再在这里（原来的 dragstart/dragover/drop 挂在行 DOM 上）：现在由 P7_Render 的
- * 行组件发出回调，`DesignView` 接住、判定后，把「移动意图」交给这里的函数执行。
+ * 行组件发出回调，视图接住、判定后，把「移动意图」交给这里的函数执行。
  *
  * 指示清理（原 clearDropIndicators / installDragCancelHandler）也不再需要：行的「正在拖拽」
  * 由 `NodeLineData.dragging` 表达；落点提示由 design/dragHandlers 直接切行上的 class
  * （见该切片文件头），两者都不需要单独的清理钩子。
  */
 
-import type { DesignView } from '../Core/Design';
+import type { NodeEditHost } from './actions';
+import type { TreeEditHost } from './treeEditHost';
 import { buildFrameworkTree } from '../Tool/tree';
 
 /** 在同父 follows 中把 sourceId 移到 targetId 前/后，持久化并重渲染 */
-export function moveChildInFollows(view: DesignView, parentId: string, sourceId: string, targetId: string, before: boolean): void {
+export function moveChildInFollows(view: NodeEditHost, parentId: string, sourceId: string, targetId: string, before: boolean): void {
   const parent = view.pipe.GET_Node(parentId);
   if (!parent) return;
   const follows = [...(parent.follows ?? [])];
@@ -43,7 +48,7 @@ export function moveChildInFollows(view: DesignView, parentId: string, sourceId:
  * 顶级框架排序：以当前渲染顺序（topFrameworkOrder + 未列入按创建时间）重建数组，
  * 将 sourceId 移到 targetId 前/后，更新 topOrder 并回调保存到 settings。
  */
-export function moveTopInOrder(view: DesignView, sourceId: string, targetId: string, before: boolean): void {
+export function moveTopInOrder(view: TreeEditHost, sourceId: string, targetId: string, before: boolean): void {
   const roots = buildFrameworkTree(view.pipe, view.topOrder);
   const order = roots.map((r) => r.nodeId);
   const srcIdx = order.indexOf(sourceId);
@@ -59,11 +64,13 @@ export function moveTopInOrder(view: DesignView, sourceId: string, targetId: str
 }
 
 /**
- * 跨父移动：旧父 follows 移除 sourceId → 新父 follows 在目标行前/后插入 → source 节点
- * parent 更新，三者各为一条 update 写意图（缓存立即 + MD 延迟写盘）；展开新父并重渲染。
+ * 跨父移动：旧父 follows 移除 sourceId → 新父 follows 在目标行前/后插入 → 展开新父并重渲染
+ *
+ * 只动**涉及的那两个父**的 follows，不写被移动节点自己 —— 归属只由父侧记录（父 → 子单向，
+ * 见 AffiliationFields），所以这里也不需要更新 source 的 parent 字段（那个字段已废弃）。
  */
 export function moveChildAcrossParents(
-  view: DesignView,
+  view: NodeEditHost,
   sourceParentId: string,
   sourceId: string,
   targetParentId: string,
@@ -96,15 +103,6 @@ export function moveChildAcrossParents(
       kind: tgtParent.kind,
       nodeId: targetParentId,
       updates: { follows: newFollows, modify: new Date().toISOString() },
-    });
-  }
-  const src = view.pipe.GET_Node(sourceId);
-  if (src) {
-    view.pipe.EXEC_Mutation({
-      op: 'update',
-      kind: src.kind,
-      nodeId: sourceId,
-      updates: { parent: targetParentId, modify: new Date().toISOString() },
     });
   }
   // 展开新父（右栏拖拽）并刷新视图

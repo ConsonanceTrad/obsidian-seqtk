@@ -112,17 +112,12 @@ export class NodePickModal extends Modal {
                 cls: `seqtk-kind-badge ${GET_KindClass(data.kind)}`,
                 text: NODE_KIND_LABELS[data.kind],
             });
-            const nameEl = row.createEl('span', { cls: 'seqtk-draft-node-item-name', text: data.desc });
+            row.createEl('span', { cls: 'seqtk-draft-node-item-name', text: data.desc });
+            // nodeId 已经单独一列，不必在悬浮时再拼进名字 —— 那只是把同一串东西换个地方重复
             row.createEl('span', { cls: 'seqtk-draft-node-item-id', text: nodeId });
             row.addEventListener('click', () => {
                 this.opts.onPick(nodeId);
                 this.close();
-            });
-            row.addEventListener('mouseenter', () => {
-                nameEl.textContent = `${data.desc}  (${nodeId})`;
-            });
-            row.addEventListener('mouseleave', () => {
-                nameEl.textContent = data.desc;
             });
         }
     }

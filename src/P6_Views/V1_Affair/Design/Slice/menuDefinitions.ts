@@ -53,14 +53,14 @@ import { copySubtreeAsText, editFrameworkContentAsText, editSubtreeAsText } from
 import { buildFrameworkNode, buildNode, type TreeNode } from '../Tool/tree';
 import { SYNC_FromFiles } from '../../../V0_Common/SyncFromFiles';
 import type { TreeSide } from '../Core/DesignPanel';
-import type { DesignView } from '../Core/Design';
+import type { MenuHost } from './menuHost';
 
 // ============================================================
 // 装配入口
 // ============================================================
 
 /** 状态圆点右键：完整状态菜单 */
-export function showRowStateMenu(view: DesignView, nodeId: string, e: MouseEvent): void {
+export function showRowStateMenu(view: MenuHost, nodeId: string, e: MouseEvent): void {
     const data = view.pipe.GET_Node(nodeId);
     if (!data) return;
     BUILD_Menu(getStateMenuDefinitions(view, buildNode(view.pipe, nodeId, data)), e);
@@ -73,7 +73,7 @@ export function showRowStateMenu(view: DesignView, nodeId: string, e: MouseEvent
  * nodeId 回头去查上级 —— 多归属时「查到的第一个」未必是用户看着的这一条
  * （典型偏差：证据同时挂在框架与内部节点下，对内部节点断连却摘掉了框架那条）。
  */
-export function showRowContextMenu(view: DesignView, ctx: NodeLineCtx, side: TreeSide, e: MouseEvent): void {
+export function showRowContextMenu(view: MenuHost, ctx: NodeLineCtx, side: TreeSide, e: MouseEvent): void {
     const nodeId = ctx.nodeId;
     const data = view.pipe.GET_Node(nodeId);
     if (!data) return;
@@ -162,7 +162,7 @@ function createNodeSubmenuDefs(onPick: (kind: NodeKindValue) => void, parentKind
 }
 
 /** 展开 / 收起：标题与图标随即将执行的行为变化（无子项的行不出现） */
-function expandDefs(view: DesignView, node: TreeNode, side: TreeSide): MenuDefinition[] {
+function expandDefs(view: MenuHost, node: TreeNode, side: TreeSide): MenuDefinition[] {
     if (node.children.length === 0) return [];
     const expanded = (side === 'right' ? view.expandedRight : view.expandedLeft).has(node.nodeId);
     return [
@@ -175,7 +175,7 @@ function expandDefs(view: DesignView, node: TreeNode, side: TreeSide): MenuDefin
 }
 
 /** 行内追加子项：左栏是子框架；右栏按该行允许的子类型（目标固定为工序，事件另有入口） */
-function newChildDefs(view: DesignView, node: TreeNode, ctx: NodeLineCtx, side: TreeSide): MenuDefinition[] {
+function newChildDefs(view: MenuHost, node: TreeNode, ctx: NodeLineCtx, side: TreeSide): MenuDefinition[] {
     const kind = node.data.kind;
     // 事件走「新建事件」那条独立入口，这里排掉它，免得同一行菜单里两条路通向同一个动作
     const kinds = side === 'left'
@@ -195,7 +195,7 @@ function newChildDefs(view: DesignView, node: TreeNode, ctx: NodeLineCtx, side: 
 }
 
 /** 右栏框架行的行内新建入口（不开模态框）：与空白处同一个「创建节点」子菜单 */
-function rightCreateDefs(view: DesignView, node: TreeNode, ctx: NodeLineCtx): MenuDefinition[] {
+function rightCreateDefs(view: MenuHost, node: TreeNode, ctx: NodeLineCtx): MenuDefinition[] {
     return createNodeSubmenuDefs(
         (kind) => startCreateChild(view, ctx, 'right', [kind]),
         node.data.kind,
@@ -203,7 +203,7 @@ function rightCreateDefs(view: DesignView, node: TreeNode, ctx: NodeLineCtx): Me
 }
 
 /** 模板操作组：存为模板 / 使用模板 */
-function templateDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
+function templateDefs(view: MenuHost, node: TreeNode): MenuDefinition[] {
     return [
         {
             name: '存为模板',
@@ -221,7 +221,7 @@ function templateDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
 }
 
 /** 左栏空白右键：新建框架 + 从磁盘刷新 */
-export function getLeftBlankMenuDefinitions(view: DesignView): MenuDefinitions {
+export function getLeftBlankMenuDefinitions(view: MenuHost): MenuDefinitions {
     return [
         {
             name: '新建框架',
@@ -239,7 +239,7 @@ export function getLeftBlankMenuDefinitions(view: DesignView): MenuDefinitions {
 }
 
 /** 右栏空白右键：创建节点（子菜单）+ 追加信息 + 批量编辑 + 整栏展开收起 + 模板功能 + 从磁盘刷新 */
-export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions {
+export function getRightBlankMenuDefinitions(view: MenuHost): MenuDefinitions {
     const parentId = view.selectedFrameworkId ?? undefined;
     const parentData = parentId ? view.pipe.GET_Node(parentId) : undefined;
     /**
@@ -308,7 +308,7 @@ export function getRightBlankMenuDefinitions(view: DesignView): MenuDefinitions 
  * 泛化项，只会让人在几个入口之间犹豫该点哪个。
  */
 function getFrameMenuDefinitions(
-    view: DesignView,
+    view: MenuHost,
     node: TreeNode,
     ctx: NodeLineCtx,
     side: TreeSide,
@@ -328,12 +328,9 @@ function getFrameMenuDefinitions(
             section: SECTION.main,
             action: () => startRename(view, node.nodeId, side),
         },
-        {
-            name: '时间规则',
-            icon: ICON.editAttrs,
-            section: SECTION.main,
-            action: () => openEdit(view, node.nodeId),
-        },
+        // 属性类动作收进与普通节点行同一个子菜单（attributeGroupDefs）—— 框架同样有归属、
+        // 标签、时间规则与正文，平铺出来只会比行菜单更乱
+        ...attributeGroupDefs(view, node),
         {
             // 框架卡片这一项编辑的是它的**内容**（框架自身那行不出现、根可多个），
             // 与右栏空白处那条「批量编辑」是同一个入口
@@ -341,12 +338,6 @@ function getFrameMenuDefinitions(
             icon: ICON.batchEdit,
             section: SECTION.main,
             action: () => editFrameworkContentAsText(view, node.nodeId),
-        },
-        {
-            name: '管理标签',
-            icon: 'tags',
-            section: SECTION.main,
-            action: () => manageTags(view, node.nodeId),
         },
         ...templateDefs(view, node),
         {
@@ -366,7 +357,7 @@ function getFrameMenuDefinitions(
  * 归档独立成组：它是破坏性操作，单独隔一道线与上面的日常项分开，免得手滑点到。
  */
 function getRowMenuDefinitions(
-    view: DesignView,
+    view: MenuHost,
     node: TreeNode,
     ctx: NodeLineCtx,
     side: TreeSide,
@@ -441,7 +432,7 @@ function getRowMenuDefinitions(
  * 日常入口（结构、重命名、批量编辑）仍留在一眼可见的位置。子项不写 section ——
  * 组内不再分组（分隔符规则见 BUILD_Menu）。
  */
-function attributeGroupDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
+function attributeGroupDefs(view: MenuHost, node: TreeNode): MenuDefinition[] {
     const nodeId = node.nodeId;
     return [
         {
@@ -475,7 +466,7 @@ function attributeGroupDefs(view: DesignView, node: TreeNode): MenuDefinition[] 
 }
 
 /** 模板组：两个模板动作用一个子菜单收拢，少占一行 */
-function templateGroupDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
+function templateGroupDefs(view: MenuHost, node: TreeNode): MenuDefinition[] {
     return [
         {
             name: '模板功能',
@@ -487,7 +478,7 @@ function templateGroupDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
 }
 
 /** 外部信息组：挂一条外部链接、创建关联时间戳文档，或整理已有条目 */
-function externalInfoDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
+function externalInfoDefs(view: MenuHost, node: TreeNode): MenuDefinition[] {
     return [
         {
             name: '外部信息',
@@ -520,7 +511,7 @@ function externalInfoDefs(view: DesignView, node: TreeNode): MenuDefinition[] {
 }
 
 /** 状态圆点右键：完整状态菜单（单击状态圆点本身是循环切换，不经过此菜单） */
-function getStateMenuDefinitions(view: DesignView, node: TreeNode): MenuDefinitions {
+function getStateMenuDefinitions(view: MenuHost, node: TreeNode): MenuDefinitions {
     const current = node.data.state ?? 'plan';
     return [...STATE_VALUES].map((s) => ({
         name: NODE_STATE_LABELS[s],

@@ -90,19 +90,26 @@
   gap: 4px;
 }
 
-/* 浅绿底 + 深绿字：明暗主题下都读得清；行高与内边距收紧，不把行撑高 */
+/*
+ * 标签徽章：配色走 Obsidian 自己的标签变量（--tag-background / --tag-color），
+ * 明暗主题与各套主题都自动适配，不再是一块固定的浅绿「外来色」。
+ * 括号里是回退值 —— 部分主题不定义 --tag-*，那时用中性色，观感依旧成立。
+ * 形状用胶囊圆角、略放内边距、字重加半档；行高与内边距仍收紧，不把行撑高。
+ */
 .seqtk-tag-badge {
   flex-shrink: 0;
-  padding: 0 5px;
-  border: 1px solid #a9d8b6;
-  border-radius: var(--radius-s);
-  background: #e7f5ec;
-  color: #2f6b41;
+  padding: 0 8px;
+  border: 1px solid var(--tag-border-color, transparent);
+  border-radius: var(--radius-l, 999px);
+  background: var(--tag-background, var(--background-modifier-hover));
+  color: var(--tag-color, var(--text-muted));
   font-size: var(--font-ui-smaller);
+  font-weight: var(--font-medium, 500);
   line-height: 1.35;
 }
 
-/* 「+N」：标签溢出后的**悬浮区**（不是按钮）。自身与标签徽章同族但更收敛；
+/* 「+N」：标签溢出后的**悬浮区**（不是按钮）。与标签徽章同族但更收敛：
+   无底色、边框改虚线，圆角与配色跟徽章对齐；
    鼠标移上来时，下方浮层用同一个徽章样式补齐被折叠的标签 */
 .seqtk-tag-more {
   position: relative;
@@ -110,16 +117,16 @@
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  padding: 0 5px;
-  border: 1px dashed #a9d8b6;
-  border-radius: var(--radius-s);
+  padding: 0 8px;
+  border: 1px dashed var(--tag-border-color, var(--background-modifier-border));
+  border-radius: var(--radius-l, 999px);
   background: transparent;
-  color: #3f7f52;
+  color: var(--tag-color, var(--text-muted));
   font-size: var(--font-ui-smaller);
   line-height: 1.35;
 }
 
-/* 浮层：绝对定位在「+N」正下方、右对齐（免得越出右边界）；一行三个 */
+/* 浮层：绝对定位在「+N」正下方、右对齐（免得越出右边界）；一行七个 */
 .seqtk-tag-more-popup {
   display: none;
   position: absolute;
@@ -128,10 +135,10 @@
   z-index: var(--layer-popover, 30);
   margin-top: 4px;
   padding: 6px;
-  grid-template-columns: repeat(3, max-content);
+  grid-template-columns: repeat(7, max-content);
   gap: 4px;
   border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m, var(--radius-s));
   background: var(--background-primary);
   box-shadow: var(--shadow-s, 0 2px 8px rgb(0 0 0 / 20%));
 }
@@ -858,11 +865,12 @@ button.seqtk-open-btn {
 }
 
 /*
- * 行内分左右两个容器（见 NodeLinePanel 的说明），弹性优先级各在容器内成立：
- * - main 左：类型徽章 · 节点名 · 标签。名字会被标签挤（同容器才谈得上争抢），
- *   而徽章一律 flex-shrink: 0，一步不让
- * - tail 右：正文预览 · 时间徽章 · 链接 · 状态圆点 · 打开按钮。整块先让位 ——
- *   所以正文预览再怎么缩也压不到节点名
+ * 行内分左右两个容器（见 NodeLinePanel 的说明），分工是「名字吸收、尾部不动」：
+ * - main 左：类型徽章 · 节点名 · 标签。吃掉整行剩余空间并允许缩到 0 —— 名字过长时
+ *   由它自己出省略号；徽章与标签一律 flex-shrink: 0，一步不让
+ * - tail 右：时间徽章 · 链接 · 状态圆点 · 打开按钮。**一步不让**（flex: 0 0 auto）：
+ *   它们只是矮矮一排，若跟着一起收缩，名字很长时两边份额都不够、这些元素会被顶出行外，
+ *   而它们是操作入口，出了视野就点不到了
  * 这样也避开了「同一轮里所有可压缩元素同时缩」：那会让名字被分摊到亚像素级收缩，
  * ellipsis 立刻换掉末字（就是「描述过长时名字最后一位被吃掉」的成因）
  */
@@ -870,7 +878,7 @@ button.seqtk-open-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -878,8 +886,7 @@ button.seqtk-open-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .seqtk-row:hover {
@@ -908,12 +915,11 @@ button.seqtk-open-btn {
   border: 1px solid var(--background-modifier-border);
 }
 
-/* 节点名：可压缩，但只被同容器里的标签挤（tail 那边的收缩够不着它）。
-   上限 70% —— 名字极长且这一行没有标签时，不至于把右侧整块挤没；
-   到上限就在自己内部省略 */
+/* 节点名：行内唯一可压缩的量，占满 main 的剩余空间，过长时自己出省略号。
+   不设 max-width —— 空间归它，上限由 tail（flex: 0 0 auto）自然留出；
+   标签 flex-shrink: 0，所以有标签时先缩名字 */
 .seqtk-desc {
-  flex: 0 1 auto;
-  max-width: 70%;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1265,22 +1271,170 @@ button.seqtk-open-btn {
   border-color: var(--interactive-accent);
 }
 
-/* 线路模式 */
-.seqtk-route-info {
-  padding: 4px 8px;
-  margin-bottom: 4px;
+/* ============================================================
+   线路模式：右栏「双向追索的关联树」
+   ============================================================ */
+
+.seqtk-route-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  overflow: auto;
+}
+
+.seqtk-route-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 树的一节：方向行 + 本行 + 证据。不按层级缩进 —— 缩进会把「下游」读成「上游的下属」 */
+.seqtk-route-node {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/*
+ * 方向行：箭头 + 那条 route 边的描述
+ *
+ * 它取代了缩进 —— 方向靠箭头读，而不是靠「往右挪多少」。同时承担分割职责：
+ * 上面一道细线把相邻两节分开，于是「这条边连到哪个框架」一眼可辨。
+ */
+.seqtk-route-dir {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--background-modifier-border);
+}
+
+.seqtk-route-arrow {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-weight: var(--font-semibold);
+}
+
+.seqtk-route-dir-desc {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.seqtk-route-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 根（当前框架）：加一条强调边，一眼认出观察对象 */
+.seqtk-route-line-root {
+  padding: 4px 6px;
   border: 1px solid var(--background-modifier-border);
+  border-left: 3px solid var(--interactive-accent);
   border-radius: var(--radius-s);
   background: var(--background-secondary);
 }
 
-.seqtk-route-info-text {
-  font-size: var(--font-ui-small);
-  color: var(--text-normal);
+.seqtk-route-kind {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 
-.seqtk-frame-item-temp {
-  border-left: 2px solid var(--interactive-accent);
+.seqtk-route-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 进度聚合：等宽数字，便于在树里纵向比对 */
+.seqtk-route-progress {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.seqtk-route-act {
+  flex: 0 0 auto;
+  height: auto;
+  padding: 0 6px;
+}
+
+.seqtk-route-desc-empty {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* 本框架的直接证据：缩进一级、淡一档，不抢链路的视线 */
+.seqtk-route-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* 不缩进：缩进在这棵树里只表示方向，见 .seqtk-route-dir 的说明 */
+  margin: 2px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.seqtk-route-evidence li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+/* 每行一个「·」前缀：与链路行区分开，又不引入缩进 */
+.seqtk-route-evidence li::before {
+  content: '·';
+  flex: 0 0 auto;
+}
+
+.seqtk-route-evidence-kind {
+  flex: 0 0 auto;
+}
+
+.seqtk-route-evidence-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seqtk-route-truncated {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  font-style: italic;
+}
+
+/* 左栏框架列表：行盒模型沿用 .seqtk-frame-item，这里只去掉列表默认样式 */
+.seqtk-route-frame-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.seqtk-route-frame-list .seqtk-frame-item {
+  cursor: pointer;
 }
 
 /* ============================================================

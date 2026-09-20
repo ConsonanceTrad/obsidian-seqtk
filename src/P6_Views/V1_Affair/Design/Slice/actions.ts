@@ -5,8 +5,9 @@
  * 归档 / 级联删除 / 保存名称与正文 / 跳转打开节点文件。
  *
  * 约定:
- * - 本文件函数以 view(DesignView 实例)为第一参数,只读/写 view 上公开的
- *   状态与能力(renderLeft/renderRight、expandedLeft/Right、**pipe**),不新增任何 UI 状态
+ * - 本文件函数以 view(NodeEditHost 实现)为第一参数,只读/写它上面的能力
+ *   (pipe / app / settings、renderLeft/renderRight、expandedLeft/Right、refresh),
+ *   不新增任何 UI 状态 —— 设计视图 / 委托面板 / 模板视图 / 线路视图都满足它
  * - 所有写盘统一走 **view.pipe**（EXEC_Mutation 缓存立即 + 文件慢序列 / EXEC_Create 新建 /
  *   EXEC_RemoveMany 批量删除），本文件不再直连 nodeCache / fileManager / operationQueue
  *
@@ -73,6 +74,14 @@ export interface NodeEditHost {
   expandedRight: Set<string>;
   renderLeft(): void;
   renderRight(): void;
+  /**
+   * 重绘一次
+   *
+   * 各宿主各自表达自己的「重绘」：视图 → refresh，委托面板 → recompute，线路视图 → 重算两栏。
+   * 放在这里而不是让各切片自己声明，是因为文本编辑 / 外部信息 / 标签这几个切片都要它，
+   * 而它们除此之外只需要数据面。
+   */
+  refresh(): void;
 }
 
 /**
@@ -83,7 +92,7 @@ export interface NodeEditHost {
  * @param parentId  父节点 ID（创建下属时）
  * @param parentKind 父节点类型（决定可创建的子类型）
  */
-export function openCreate(view: DesignView, fixedKind?: NodeKind, parentId?: string, parentKind?: NodeKind): void {
+export function openCreate(view: NodeEditHost, fixedKind?: NodeKind, parentId?: string, parentKind?: NodeKind): void {
   if (!view.pipe.isInitialized) {
     new Notice('查询缓存尚未就绪，请稍候');
     return;
@@ -165,7 +174,7 @@ export async function createNode(
 }
 
 /** 打开「时间规则」模态框 */
-export function openEdit(view: DesignView, nodeId: string): void {
+export function openEdit(view: NodeEditHost, nodeId: string): void {
   if (!view.pipe.isInitialized) return;
   const node = view.pipe.GET_Node(nodeId);
   if (!node) return;
@@ -179,7 +188,7 @@ export function openEdit(view: DesignView, nodeId: string): void {
 
 /** 时间规则：diff 出变更字段并写队列（无变化则跳过）。名称与状态不在这里改 —— 各有入口 */
 export function editNode(
-  view: DesignView,
+  view: NodeEditHost,
   nodeId: string,
   node: SeqtkNode,
   input: EditInput,
@@ -218,7 +227,7 @@ export function editNode(
 }
 
 /** 切换节点状态（无变化直接跳过）；随后按 stateRules 做父子状态传播 */
-export function setNodeState(view: DesignView, nodeId: string, state: SeqtkState): void {
+export function setNodeState(view: NodeEditHost, nodeId: string, state: SeqtkState): void {
   const node = view.pipe.GET_Node(nodeId);
   if (!node || node.state === state) return;
   view.pipe.EXEC_Mutation({
@@ -237,7 +246,7 @@ export function setNodeState(view: DesignView, nodeId: string, state: SeqtkState
  * 传播产生的写入与手动变更走同一条写意图，故缓存与源文件行为一致。
  * 规则为空（或全未启用）时直接返回，不产生任何额外查询。
  */
-function applyStatePropagation(view: DesignView, nodeId: string, state: SeqtkState): void {
+function applyStatePropagation(view: NodeEditHost, nodeId: string, state: SeqtkState): void {
   const rules = view.settings.stateRules ?? [];
   if (rules.length === 0) return;
 
@@ -288,7 +297,7 @@ export function saveNodeDesc(view: NodeEditHost, node: TreeNode, newDesc: string
 }
 
 /** 保存节点正文（body）变更 */
-export function saveNodeBody(view: DesignView, node: TreeNode, body: string): void {
+export function saveNodeBody(view: NodeEditHost, node: TreeNode, body: string): void {
   view.pipe.EXEC_Mutation({
     op: 'setBody',
     kind: node.data.kind,
@@ -357,7 +366,7 @@ export function archiveNode(view: NodeEditHost, nodeId: string): void {
  * （keep 只删自身、后代脱离父级；archive 后代改归档；delete 级联删除）。
  * 是否弹确认由 deleteConfirm 决定（none / children 仅当含子节点时 / simple / strict）。
  */
-export function deleteNodeTree(view: DesignView, node: TreeNode): void {
+export function deleteNodeTree(view: NodeEditHost, node: TreeNode): void {
   const s = view.settings;
   const mode = s.deleteChildren;
   const rootTarget = { kind: node.data.kind, nodeId: node.nodeId };
@@ -393,16 +402,11 @@ export function deleteNodeTree(view: DesignView, node: TreeNode): void {
     }
 
     if (mode === 'keep') {
-      // 只删自身；直接子脱离父级，成为无父节点（否则 parent 会指向已删节点）
+      // 只删自身：直接子随之脱离父级 —— 不需要额外动作。
+      // 归属只由父侧 follows 记录（父 → 子单向，见 AffiliationFields），父的文件连同它的
+      // follows 一起消失，子节点自然成为无父节点。这里曾经写 `parent: ''`：那是在维护一个
+      // 早已废除的字段，写进去没人读，真正的父子关系反倒没被动过。
       view.pipe.EXEC_RemoveMany([rootTarget]);
-      for (const c of directChildren) {
-        view.pipe.EXEC_Mutation({
-          op: 'update',
-          kind: c.data.kind,
-          nodeId: c.nodeId,
-          updates: { parent: '', modify: now },
-        });
-      }
       new Notice(`已删除 1 个节点（${directChildren.length} 个直属子节点已脱离父级）`);
       return;
     }

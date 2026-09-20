@@ -29,7 +29,7 @@ import {
     EXPORT_SubtreeAsText,
     PLAN_TextTreeEdit,
 } from './textTree';
-import type { DesignView } from '../Core/Design';
+import type { NodeEditHost } from './actions';
 
 /**
  * 打开文本树导入流程：解析预览 → 选放置位置 → 投递
@@ -83,7 +83,7 @@ async function deliverTextTree(
  * 类型只在推断不出来时才写 `K:xxx`（见 SERIALIZE_TextTree）：沿链路的行读起来干净，
  * 岔出链路的部分仍能无损往返。
  */
-export async function copySubtreeAsText(view: DesignView, nodeId: string): Promise<void> {
+export async function copySubtreeAsText(view: NodeEditHost, nodeId: string): Promise<void> {
     const text = EXPORT_SubtreeAsText(view.pipe, nodeId);
     if (text === null) return;
     try {
@@ -104,7 +104,7 @@ export async function copySubtreeAsText(view: DesignView, nodeId: string): Promi
  * 类型不逐行标注：起始链路由「进入时的层级 + 放置位置」表明，沿链路走的行都能推断出来；
  * 只有岔出链路的类型才写 `K:` —— 那才是跨层级搬运时必须显式带上、推断不出来的信息。
  */
-export function editSubtreeAsText(view: DesignView, nodeId: string): void {
+export function editSubtreeAsText(view: NodeEditHost, nodeId: string): void {
     const node = view.pipe.GET_Node(nodeId);
     if (!node) return;
     const text = EXPORT_SubtreeAsText(view.pipe, nodeId);
@@ -146,7 +146,7 @@ export function editSubtreeAsText(view: DesignView, nodeId: string): void {
  * children 就是编辑后的多根列表。于是现有 PLAN/APPLY 的递归对齐原封不动可用，
  * 而框架自身那行因为字段没变，不会被改到。
  */
-export function editFrameworkContentAsText(view: DesignView, frameworkId: string): void {
+export function editFrameworkContentAsText(view: NodeEditHost, frameworkId: string): void {
     const framework = view.pipe.GET_Node(frameworkId);
     if (!framework) return;
     const text = EXPORT_ChildrenAsText(view.pipe, frameworkId);
@@ -188,7 +188,7 @@ export function editFrameworkContentAsText(view: DesignView, frameworkId: string
 }
 
 /** 执行框架内容回写（多根） */
-async function applyFrameworkContentEdit(view: DesignView, frameworkId: string, roots: TextTreeNode[]): Promise<void> {
+async function applyFrameworkContentEdit(view: NodeEditHost, frameworkId: string, roots: TextTreeNode[]): Promise<void> {
     const framework = view.pipe.GET_Node(frameworkId);
     if (!framework) return;
     const result = await APPLY_TextTreeEdit(view.pipe, frameworkId, {
@@ -209,7 +209,7 @@ async function applyFrameworkContentEdit(view: DesignView, frameworkId: string, 
 }
 
 /** 执行子树回写并回报（失败时说明已完成的部分，便于判断要不要重来） */
-async function applySubtreeEdit(view: DesignView, nodeId: string, roots: TextTreeNode[]): Promise<void> {
+async function applySubtreeEdit(view: NodeEditHost, nodeId: string, roots: TextTreeNode[]): Promise<void> {
     if (roots.length !== 1) {
         new Notice('根节点必须恰好一个，未做任何修改');
         return;
