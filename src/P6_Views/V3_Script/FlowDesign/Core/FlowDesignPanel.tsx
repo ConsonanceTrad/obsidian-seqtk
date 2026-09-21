@@ -10,8 +10,8 @@
 
 import { Button, Empty, List, Tag, Typography } from "antd";
 import { useEffect, useRef } from "react";
-import { useStore } from "../../P0_UI/useStore";
-import type { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
+import { useStore } from "../../../../P0_UI/useStore";
+import type { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
 
 const { Title, Text } = Typography;
 

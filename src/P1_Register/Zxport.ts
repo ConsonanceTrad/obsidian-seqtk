@@ -23,7 +23,7 @@ import "../P6_Views/V2_Rule/ExecBind";
 import "../P6_Views/V2_Rule/FlowDraft";
 import "../P6_Views/V2_Rule/FlowPush";
 import "../P6_Views/V3_Script/ExecDesign";
-import "../P6_Views/V3_Script/FlowDesign";
+import "../P6_Views/V3_Script/FlowDesign/Core/FlowDesign";
 import "../P6_Views/V3_Script/QueryDesign";
 import "../P6_Views/V4_Agent/AgentDesign";
 import "../P6_Views/V4_Agent/AgentHook";

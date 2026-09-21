@@ -17,69 +17,36 @@
  */
 
 import { createElement, type ReactNode } from "react";
-import { App, Menu, Modal, Notice, Setting, TextComponent, setTooltip, type WorkspaceLeaf } from "obsidian";
-import { AutoView } from "../../P1_Register/View";
-import { AutoRegister } from "../../P1_Register/Comd";
-import { ReactViewBase } from "../../P0_UI/ViewBase";
-import { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
-import { NODE_KIND } from "../../P4_Nodes/NodeKind/NodeKind";
-import { NODE_KIND_LABELS } from "../../P4_Nodes/NodeKind/NodeLabel";
-import { parseFlowScript } from "../../P2_Tools/Script/parser";
-import { serializeFlowScript } from "../../P2_Tools/Script/serialize";
-import { GET_FileByPath } from "../../P5_Data/MdFile/PathTools/PathParse";
-import { TransactionCreateModal } from "../../P7_Render/Structure/S2_Modal/TransactionModals";
+import { Menu, Notice, setTooltip, type WorkspaceLeaf } from "obsidian";
+import { AutoView } from "../../../../P1_Register/View";
+import { AutoRegister } from "../../../../P1_Register/Comd";
+import { ReactViewBase } from "../../../../P0_UI/ViewBase";
+import { SimpleStore } from "../../../../P5_Data/Svelte/SimpleStore";
+import { NODE_KIND } from "../../../../P4_Nodes/NodeKind/NodeKind";
+import { NODE_KIND_LABELS } from "../../../../P4_Nodes/NodeKind/NodeLabel";
+import { parseFlowScript } from "../../../../P2_Tools/Script/parser";
+import { serializeFlowScript } from "../../../../P2_Tools/Script/serialize";
+import { GET_FileByPath } from "../../../../P5_Data/MdFile/PathTools/PathParse";
+import { TransactionCreateModal } from "../../../../P7_Render/Structure/S2_Modal/TransactionModals";
 import { FlowDesignPanel, type FlowDesignState, type FlowScriptRow } from "./FlowDesignPanel";
-import type SeqtkPlugin from "../../main";
-import type { PanelEntry } from "../panelRegistry";
-import type { DataPipe } from "../../P5_Data/CoPipe/DataPipe";
-import type { PluginSettings } from "../../P3_Settings/Settings";
-import type { NodeKindValue } from "../../P4_Nodes/NodeKind/NodeKind";
-import type { SeqtkNode } from "../../P4_Nodes/Node";
-import type { FlowScript, FlowLine, FlowLineItem, FlowTimeNode, FlowContentBlock } from "../../P2_Tools/Script/parser";
+import type SeqtkPlugin from "../../../../main";
+import type { PanelEntry } from "../../../panelRegistry";
+import type { DataPipe } from "../../../../P5_Data/CoPipe/DataPipe";
+import type { PluginSettings } from "../../../../P3_Settings/Settings";
+import type { NodeKindValue } from "../../../../P4_Nodes/NodeKind/NodeKind";
+import type { SeqtkNode } from "../../../../P4_Nodes/Node";
+import type { FlowScript, FlowLine, FlowLineItem, FlowTimeNode, FlowContentBlock } from "../../../../P2_Tools/Script/parser";
+import { FlowPromptModal } from "../Slice/modals";
+import { BUILD_ScriptRows, CREATE_Script, OPEN_ScriptFile, SELECT_Script, SHOW_ScriptMenu } from "../Slice/scriptList";
+import { RENDER_ScriptMode } from "../Slice/scriptMode";
+import { ADD_ContentByDrop, ADD_ContentToNode, ADD_LineByDrop, ADD_LineItemByDrop, ADD_TimeNodeByDrop, IS_TimeNodeType } from "../Slice/authoring";
+import type { FlowDesignHost } from "../Slice/host";
 
 export const VIEW_TYPE_FLOW = 'seqtk-flow';
 
-/** 通用多字段输入弹窗（替代 window.prompt，Obsidian Electron 不支持 prompt()） */
-class FlowPromptModal extends Modal {
-    constructor(
-        app: App,
-        private fields: { label: string; defaultValue?: string }[],
-        private onConfirm: (values: string[]) => void,
-    ) {
-        super(app);
-    }
-
-    onOpen(): void {
-        const { contentEl } = this;
-        contentEl.empty();
-        contentEl.addClass('seqtk-modal');
-        this.setTitle('输入');
-        const inputs: TextComponent[] = [];
-        for (const f of this.fields) {
-            new Setting(contentEl).setName(f.label).addText((tc) => {
-                if (f.defaultValue) tc.setValue(f.defaultValue);
-                inputs.push(tc);
-                return tc;
-            });
-        }
-        new Setting(contentEl).addButton((b) => {
-            b.setButtonText('确认').setCta().onClick(() => {
-                this.onConfirm(inputs.map((i) => i.getValue()));
-                this.close();
-            });
-        }).addButton((b) => {
-            b.setButtonText('取消').onClick(() => this.close());
-        });
-    }
-
-    onClose(): void {
-        this.contentEl.empty();
-    }
-}
-
 @AutoView()
 @AutoRegister()
-export class FlowView extends ReactViewBase {
+export class FlowView extends ReactViewBase implements FlowDesignHost {
     /** 面板目录条目 */
     static metas: PanelEntry[] = [
         {viewType: VIEW_TYPE_FLOW, title: '流程设计', icon: 'workflow', description: '内置可切换的可视化流程程序与流程脚本程序，为时段/日期/时间点编写推送规则（脚本为事实源）。', category: '规则设计'},
@@ -101,9 +68,12 @@ export class FlowView extends ReactViewBase {
 
     /** FlowDesignPanel 提供的右栏内容容器 */
     private flowContent: HTMLDivElement | null = null;
-    private mode: 'script' | 'lad' = 'script';
-    private currentScriptId: string | null = null;
-    private currentText = '';
+    /** 切片协作可见（FlowDesignHost）：右栏模式 */
+    public mode: 'script' | 'lad' = 'script';
+    /** 切片协作可见（FlowDesignHost）：当前选中的脚本 nodeId */
+    public currentScriptId: string | null = null;
+    /** 切片协作可见（FlowDesignHost）：当前脚本的正文文本 */
+    public currentText = '';
     private currentAst: FlowScript | null = null;
     private unsub: (() => void) | null = null;
     /** 渲染件订阅的唯一状态源 */
@@ -116,10 +86,12 @@ export class FlowView extends ReactViewBase {
 
     constructor(
         leaf: WorkspaceLeaf,
-        private plugin: SeqtkPlugin,
-        /** 数据面唯一入口（读写一律经它） */
-        private pipe: DataPipe,
-        private settings: PluginSettings,
+        /** 切片协作可见（FlowDesignHost）：切片要用它取 settings 等 */
+        public plugin: SeqtkPlugin,
+        /** 数据面唯一入口（读写一律经它）；切片协作可见 */
+        public pipe: DataPipe,
+        /** 切片协作可见（FlowDesignHost） */
+        public settings: PluginSettings,
     ) {
         super(leaf);
     }
@@ -169,87 +141,33 @@ export class FlowView extends ReactViewBase {
     // 左栏：流程脚本列表（数据 → 状态）
     // ============================================================
 
-    private recompute(): void {
-        const scripts: FlowScriptRow[] = this.pipe
-            .GET_ByKind(NODE_KIND.FLOW)
-            .map(({ nodeId, data }) => ({ nodeId, desc: data.desc, kindLabel: NODE_KIND_LABELS[data.kind] }));
-
+    /** 重算左栏与右栏外壳状态（数据 → 视图状态）；切片协作可见 */
+    public recompute(): void {
         this.state.set({
             initializing: !this.pipe.isInitialized,
-            scripts,
+            scripts: BUILD_ScriptRows(this),
             currentScriptId: this.currentScriptId,
             mode: this.mode,
             contentEmpty: this.currentScriptId ? undefined : '请在左侧选择流程脚本',
         });
     }
 
+    // ---- 左栏操作：实现在 Slice/scriptList，这里只转发 ----
+
     private selectScript(nodeId: string): void {
-        this.currentScriptId = nodeId;
-        this.currentText = this.pipe.GET_NodeBody(nodeId);
-        this.recompute();
-        this.renderContent();
+        SELECT_Script(this, nodeId);
     }
 
     private showScriptMenu(nodeId: string | null, data: SeqtkNode | null, e: MouseEvent): void {
-        const menu = new Menu();
-        if (nodeId && data) {
-            menu.addItem((item) =>
-                item.setTitle('编辑').setIcon('pencil')
-                    .onClick(() => this.selectScript(nodeId)));
-            menu.addItem((item) =>
-                item.setTitle('打开文件').setIcon('file-text')
-                    .onClick(() => this.openNodeFile(data.kind, nodeId)));
-            menu.addItem((item) =>
-                item.setTitle('归档').setIcon('archive')
-                    .onClick(() => {
-                        this.pipe.EXEC_Mutation({
-                            op: 'update',
-                            kind: data.kind,
-                            nodeId,
-                            updates: { open: false, modify: new Date().toISOString() },
-                        });
-                    }));
-            menu.addSeparator();
-            menu.addItem((item) =>
-                item.setTitle('删除').setIcon('trash')
-                    .onClick(() => {
-                        this.pipe.EXEC_Mutation({ op: 'remove', kind: data.kind, nodeId });
-                    }));
-        } else {
-            menu.addItem((item) =>
-                item.setTitle('新建流程脚本').setIcon('plus')
-                    .onClick(() => this.createScript()));
-        }
-        menu.showAtMouseEvent(e);
+        SHOW_ScriptMenu(this, nodeId, data, e);
     }
 
     private createScript(): void {
-        new TransactionCreateModal(this.app, {
-            kinds: [NODE_KIND.FLOW],
-            onSubmit: (input) => {
-                const now = new Date().toISOString();
-                const data = {
-                    kind: input.kind,
-                    desc: input.desc,
-                    open: true,
-                    create: now,
-                    modify: now,
-                } as SeqtkNode;
-                // 文件先行 + 缓存写入，统一由 EXEC_Create 承担（无父）
-                void this.pipe.EXEC_Create({ kind: input.kind, data }).then((nodeId) => {
-                    this.selectScript(nodeId);
-                }).catch((e) => {
-                    console.error('[SeqTK] 新建流程脚本失败:', e);
-                    new Notice('新建流程脚本失败，请查看控制台');
-                });
-            },
-        }).open();
+        CREATE_Script(this);
     }
 
     private openNodeFile(kind: NodeKindValue, nodeId: string): void {
-        const filePath = GET_FileByPath(kind, nodeId, this.plugin.settings);
-        const file = this.app.vault.getFileByPath(filePath);
-        if (file) void this.app.workspace.getLeaf('tab')?.openFile(file, { state: { mode: 'source' } });
+        OPEN_ScriptFile(this, kind, nodeId);
     }
 
     // ============================================================
@@ -262,45 +180,14 @@ export class FlowView extends ReactViewBase {
         this.renderContent();
     }
 
-    private renderContent(): void {
+    /** 重绘右栏内容；切片协作可见 */
+    public renderContent(): void {
         const el = this.flowContent;
         if (!el) return;
         el.empty();
         if (!this.currentScriptId) return;   // 空态由 Panel 渲染
-        if (this.mode === 'script') this.renderScriptMode(el);
+        if (this.mode === 'script') RENDER_ScriptMode(this, el);
         else this.renderLadMode(el);
-    }
-
-    // ---- 脚本态 ----
-
-    private renderScriptMode(el: HTMLElement): void {
-        const wrap = el.createDiv('seqtk-flow-script');
-        const textArea = wrap.createEl('textarea', {
-            cls: 'seqtk-flow-textarea',
-            attr: { spellcheck: 'false' },
-        });
-        textArea.value = this.currentText;
-        const errorEl = wrap.createDiv('seqtk-flow-errors');
-
-        const showParseErrors = () => {
-            errorEl.empty();
-            const ast = parseFlowScript(this.currentText);
-            if (ast.errors.length === 0) {
-                errorEl.createEl('div', { cls: 'seqtk-flow-ok', text: '语法正确' });
-            } else {
-                for (const err of ast.errors) {
-                    errorEl.createEl('div', {
-                        cls: 'seqtk-flow-err',
-                        text: `第 ${err.line} 行：${err.message}`,
-                    });
-                }
-            }
-        };
-        textArea.addEventListener('input', () => {
-            this.currentText = textArea.value;
-            showParseErrors();
-        });
-        showParseErrors();
     }
 
     // ---- LAD 态（投影 + 逆向转换） ----
@@ -330,7 +217,7 @@ export class FlowView extends ReactViewBase {
         this.renderPalette(layout);
         // 编辑区任意空白按类型智能归位：时间节点→时间轴、步骤类→第一条线路行、内容块→第一个时间节点
         const handleEditDrop = (type: string): void => {
-            if (this.isTimeNodeType(type)) {
+            if (IS_TimeNodeType(type)) {
                 this.addTimeNodeByDrop(type, ast.timeNodes);
             } else if (type === 'line') {
                 this.addLineByDrop(() => ast.lines);
@@ -402,11 +289,6 @@ export class FlowView extends ReactViewBase {
         });
     }
 
-    /** 时间节点类型判断 */
-    private isTimeNodeType(type: string): boolean {
-        return type === 'at' || type === 'span' || type === 'repeat' || type === 'when';
-    }
-
     /** 投放插槽：时间节点块之间的空白条，拖时间节点类型可插入该位置 */
     private renderInsertSlot(parent: HTMLElement, onInsert: (type: string) => void): void {
         const slot = document.createElement('div');
@@ -422,7 +304,7 @@ export class FlowView extends ReactViewBase {
         slot.addEventListener('dragleave', () => slot.classList.remove('seqtk-lad-slot-active'));
         slot.addEventListener('drop', (e) => {
             const type = e.dataTransfer?.getData('seqtk/elem') ?? '';
-            if (this.isTimeNodeType(type)) {
+            if (IS_TimeNodeType(type)) {
                 e.preventDefault();
                 e.stopPropagation();
                 slot.classList.remove('seqtk-lad-slot-active');
@@ -432,122 +314,31 @@ export class FlowView extends ReactViewBase {
         parent.appendChild(slot);
     }
 
+    // ---- 拖入构造：实现在 Slice/authoring，这里只转发 ----
+
     /** 根据拖入类型在时间节点列表插入节点（insertIndex 指定位置；缺省追加末尾） */
     private addTimeNodeByDrop(type: string, siblings: FlowTimeNode[], insertIndex?: number): void {
-        const commit = (node: FlowTimeNode): void => {
-            if (insertIndex !== undefined) siblings.splice(insertIndex, 0, node);
-            else siblings.push(node);
-            this.commitAst();
-        };
-        switch (type) {
-            case 'at':
-                new FlowPromptModal(this.app, [{ label: '时间点（如 08:00）', defaultValue: '08:00' }], ([time]) => {
-                    if (!time) return;
-                    commit({ type: 'at', time, lines: [], contents: [], children: [] });
-                }).open();
-                break;
-            case 'span':
-                new FlowPromptModal(this.app, [
-                    { label: '时间段名称', defaultValue: '' },
-                    { label: '开始（如 09:00）', defaultValue: '09:00' },
-                    { label: '结束（如 12:00）', defaultValue: '12:00' },
-                ], ([name, from, to]) => {
-                    if (!from || !to) return;
-                    commit({ type: 'span', name: name || undefined, from, to, lines: [], contents: [], children: [] });
-                }).open();
-                break;
-            case 'repeat':
-                new FlowPromptModal(this.app, [
-                    { label: '周期规则名称', defaultValue: '' },
-                    { label: '周期（如 day/week）', defaultValue: 'day' },
-                    { label: '时刻（如 18:00）', defaultValue: '18:00' },
-                ], ([name, every, time]) => {
-                    if (!every || !time) return;
-                    commit({ type: 'repeat', name: name || undefined, every, time, lines: [], contents: [], children: [] });
-                }).open();
-                break;
-            case 'when':
-                new FlowPromptModal(this.app, [{ label: '条件（如 工作日）', defaultValue: '' }], ([cond]) => {
-                    if (!cond) return;
-                    commit({ type: 'when', when: cond, lines: [], contents: [], children: [] });
-                }).open();
-                break;
-            default:
-                return;
-        }
+        ADD_TimeNodeByDrop(this, type, siblings, insertIndex);
     }
 
     /** 拖入线路行元素：step / if / not / do */
     private addLineItemByDrop(type: string, line: FlowLine): void {
-        const commit = (item: FlowLineItem): void => {
-            line.items.push(item);
-            this.commitAst();
-        };
-        switch (type) {
-            case 'step':
-                new FlowPromptModal(this.app, [{ label: '步骤名称', defaultValue: '' }], ([name]) => {
-                    if (!name) return;
-                    commit({ type: 'step', name, next: '', nextKind: 'seq' });
-                }).open();
-                break;
-            case 'if':
-            case 'not':
-                new FlowPromptModal(this.app, [{ label: type === 'not' ? 'NOT 条件' : 'IF 条件', defaultValue: '' }], ([cond]) => {
-                    if (!cond) return;
-                    commit({ type: 'if', not: type === 'not', cond, do: undefined });
-                }).open();
-                break;
-            case 'do':
-                new FlowPromptModal(this.app, [{ label: 'DO 动作', defaultValue: '' }], ([act]) => {
-                    if (!act) return;
-                    commit({ type: 'if', not: false, cond: 'true', do: act });
-                }).open();
-                break;
-            default:
-                return;
-        }
+        ADD_LineItemByDrop(this, type, line);
     }
 
     /** 拖入例程：新建线路行到指定数组（弹窗询问名称） */
     private addLineByDrop(getTarget: () => FlowLine[]): void {
-        new FlowPromptModal(this.app, [{ label: '例程名称', defaultValue: '' }], ([name]) => {
-            getTarget().push({ type: 'line', name: name || undefined, items: [] });
-            this.commitAst();
-        }).open();
+        ADD_LineByDrop(this, getTarget);
     }
 
     /** 拖入内容块：lst / task → 归位到 do 输出 */
     private addContentByDrop(type: string, node: FlowTimeNode): void {
-        if (type !== 'lst' && type !== 'task') return;
-        new FlowPromptModal(this.app, [{ label: `${type.toUpperCase()} 内容文本`, defaultValue: '' }], ([text]) => {
-            if (!text) return;
-            this.addContentToNode(node, { kind: type, text: text.trim() } as FlowContentBlock);
-            this.commitAst();
-        }).open();
+        ADD_ContentByDrop(this, type, node);
     }
 
     /** 将内容块归位到时间节点的 do 输出（无线路行/do 则自动创建） */
     private addContentToNode(node: FlowTimeNode, block: FlowContentBlock): void {
-        if (node.lines.length === 0) {
-            node.lines.push({ type: 'line', items: [] });
-        }
-        const line = node.lines[0];
-        let doItem: FlowLineItem | null = null;
-        for (let k = line.items.length - 1; k >= 0; k--) {
-            const it = line.items[k];
-            if (it.type === 'if' && it.do !== undefined) {
-                doItem = it;
-                break;
-            }
-        }
-        if (!doItem) {
-            const item: FlowLineItem = { type: 'if', not: false, cond: 'true', do: '', contents: [] };
-            line.items.push(item);
-            doItem = item;
-        }
-        if (doItem.type === 'if') {
-            doItem.contents = [...(doItem.contents ?? []), block];
-        }
+        ADD_ContentToNode(node, block);
     }
 
     /** 右键菜单删除（LAD 不显示删除按钮，保持视觉干净） */
@@ -869,8 +660,8 @@ export class FlowView extends ReactViewBase {
         }
     }
 
-    /** LAD 修改 → 序列化写回脚本文本并重渲染 */
-    private commitAst(): void {
+    /** LAD 修改 → 序列化写回脚本文本并重渲染；切片协作可见（FlowDesignHost） */
+    public commitAst(): void {
         if (!this.currentAst) return;
         this.currentText = serializeFlowScript(this.currentAst);
         const el = this.flowContent;
