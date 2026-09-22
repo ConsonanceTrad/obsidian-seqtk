@@ -25,8 +25,8 @@ import type { TreeNodeItem } from '../../../P7_Render/Composition/C2_Tree/NodeTr
 import type { LineOverlay } from '../../V1_Affair/Design/Tool/viewModel';
 import type { NodeEditHost } from '../../V1_Affair/Design/Slice/actions';
 
-/** 委托来源：设计 / 模板 / 线路各一棵树，全局互斥（同时只有一个被委托出去） */
-export type DelegateOwner = 'design' | 'template' | 'route';
+/** 委托来源：设计 / 模板 / 线路 / 流程各一棵树，全局互斥（同时只有一个被委托出去） */
+export type DelegateOwner = 'design' | 'template' | 'route' | 'flow';
 
 /** 委托快照（落点据它决定「渲染谁的那一节」） */
 export interface DelegateSnapshot {

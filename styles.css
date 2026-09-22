@@ -1438,13 +1438,8 @@ button.seqtk-open-btn {
 }
 
 /* ============================================================
-   流程设计 · LAD 母线渲染
+   流程设计 · LAD 流渲染
    ============================================================ */
-.seqtk-lad-top,
-.seqtk-lad-axis {
-  padding: 8px;
-}
-
 .seqtk-lad-section-title {
   font-size: var(--font-ui-small);
   font-weight: var(--font-semibold);
@@ -1452,49 +1447,79 @@ button.seqtk-open-btn {
   margin-bottom: 6px;
 }
 
-.seqtk-lad-line {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  background: var(--background-secondary);
-  padding: 6px 8px;
-  margin-bottom: 6px;
-}
-
-.seqtk-lad-line-head {
-  font-size: var(--font-ui-small);
-  font-weight: var(--font-semibold);
-  margin-bottom: 4px;
-}
-
-.seqtk-lad-on {
-  color: var(--text-muted);
-  font-weight: normal;
-}
-
-.seqtk-lad-items {
+/* 一条语句：分支芯片 + 传送芯片 */
+.seqtk-lad-stream {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
 }
 
-.seqtk-lad-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+/* 分支指令：带边框文本块（阅读直觉优先） */
+.seqtk-lad-branch {
+  display: inline-block;
+  border-radius: var(--radius-s);
+  padding: 3px 8px;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-monospace);
+  border: 1.5px solid var(--color-green);
+  color: var(--color-green);
+  background: color-mix(in srgb, var(--color-green) 10%, transparent);
+  cursor: pointer;
 }
 
+/* 配色按「怎么启通」分：AT 是时间类（暖色），IF/NOT 是条件（红），REPT/STEP 是次序（蓝） */
+.seqtk-lad-branch-at {
+  border-color: var(--color-orange);
+  color: var(--color-orange);
+  background: color-mix(in srgb, var(--color-orange) 10%, transparent);
+}
+
+.seqtk-lad-branch-if,
+.seqtk-lad-branch-not {
+  border-color: var(--color-red);
+  color: var(--color-red);
+  background: color-mix(in srgb, var(--color-red) 10%, transparent);
+}
+
+.seqtk-lad-branch-rept,
+.seqtk-lad-branch-step {
+  border-color: var(--color-blue);
+  color: var(--color-blue);
+  background: color-mix(in srgb, var(--color-blue) 10%, transparent);
+}
+
+/* 传送指令：普通文本块；DO 是推送目标（蓝），其余只是旁注（弱化） */
 .seqtk-lad-step {
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
   background: var(--background-primary);
   padding: 3px 8px;
   font-size: var(--font-ui-small);
+  font-family: var(--font-monospace);
+  cursor: pointer;
 }
 
-.seqtk-lad-step-next {
-  background: var(--background-secondary);
+.seqtk-lad-step-do {
+  border-color: var(--color-blue);
+  color: var(--color-blue);
+}
+
+.seqtk-lad-step-jump,
+.seqtk-lad-step-reco,
+.seqtk-lad-step-exec {
   color: var(--text-muted);
+}
+
+/* 带时间块的语句：左边线点亮，与紧随其后的子块在视觉上连成一体 */
+.seqtk-lad-stream-braced {
+  border-left-color: var(--interactive-accent);
 }
 
 .seqtk-lad-arrow {
@@ -1502,81 +1527,53 @@ button.seqtk-open-btn {
   color: var(--text-muted);
 }
 
-.seqtk-lad-arrow-branch { color: var(--color-orange); }
-.seqtk-lad-arrow-parallel { color: var(--color-purple); }
-
-/* 条件元件：带边框文本块（阅读直觉优先，语义 ↔ if/if not/do） */
-.seqtk-lad-elem {
-  display: inline-block;
-  border-radius: var(--radius-s);
-  padding: 3px 8px;
-  font-size: var(--font-ui-small);
-  font-weight: var(--font-semibold);
-  font-family: var(--font-monospace);
-}
-
-.seqtk-lad-if {
-  border: 1.5px solid var(--color-green);
-  color: var(--color-green);
-  background: color-mix(in srgb, var(--color-green) 10%, transparent);
-}
-
-.seqtk-lad-not {
-  border: 1.5px solid var(--color-orange);
-  color: var(--color-orange);
-  background: color-mix(in srgb, var(--color-orange) 10%, transparent);
-}
-
-.seqtk-lad-do {
-  border: 1.5px solid var(--color-blue);
-  color: var(--color-blue);
-  background: color-mix(in srgb, var(--color-blue) 10%, transparent);
-}
-
-.seqtk-lad-timenode {
-  border-left: 3px solid var(--interactive-accent);
-  margin: 0 0 8px 4px;
-  padding-left: 10px;
-}
-
-.seqtk-lad-tn-head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: var(--font-ui-small);
-  font-weight: var(--font-semibold);
-  margin-bottom: 4px;
-}
-
-.seqtk-lad-tn-icon { color: var(--interactive-accent); }
-.seqtk-lad-tn-time { font-family: var(--font-monospace); }
-.seqtk-lad-tn-name { color: var(--text-muted); font-weight: normal; }
-
-.seqtk-lad-tn-body {
-  border-left: 1px dashed var(--background-modifier-border);
-  padding-left: 10px;
-  margin-left: 2px;
-}
-
-.seqtk-lad-content {
-  font-size: var(--font-ui-small);
-  margin: 2px 0;
-}
-
-.seqtk-lad-content-kind {
-  display: inline-block;
-  border-radius: var(--radius-s);
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-  padding: 0 5px;
-  font-size: 11px;
-  font-weight: var(--font-semibold);
-}
-
-.seqtk-lad-empty {
+/* 追加传送指令的入口 */
+.seqtk-lad-add {
   color: var(--text-faint);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 1px 6px;
+  cursor: pointer;
   font-size: var(--font-ui-small);
-  font-style: italic;
+}
+
+.seqtk-lad-add:hover {
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* 脚本级约束块：#STF / #ENF 逐条列出 */
+.seqtk-lad-window {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.seqtk-lad-window .seqtk-lad-section-title {
+  margin-bottom: 0;
+}
+
+.seqtk-lad-decl {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  padding: 2px 8px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+/* 约束芯片：STF（起）与 ENF（止）用冷暖两色分开，一眼看出哪头是哪头 */
+.seqtk-lad-decl-stf {
+  border-color: var(--color-green);
+  color: var(--color-green);
+}
+
+.seqtk-lad-decl-enf {
+  border-color: var(--color-red);
+  color: var(--color-red);
 }
 
 /* ============================================================
@@ -1643,7 +1640,34 @@ button.seqtk-open-btn {
   font-family: var(--font-monospace);
 }
 
+/*
+ * 栏：把高度链接通，让内容区自己滚。
+ *
+ * .seqtk-split-left/-right 是 height:100% + overflow:hidden，而它们里面的 .seqtk-pane
+ * 在样式里没有定义 —— 高度退回 auto、内容被父层裁掉，滚动条无从出现。这里用本视图
+ * 专用的类补齐（不动全局 .seqtk-pane，那会外溢到其余五个面板）。
+ */
+.seqtk-flow-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 左栏的列表直接排在栏里，没有内层滚动容器 → 由栏自己滚 */
+.seqtk-split-left .seqtk-flow-pane {
+  overflow: auto;
+}
+
+/* 右栏把滚动让给内容区，自己只负责约束高度 */
+.seqtk-split-right .seqtk-flow-pane {
+  overflow: hidden;
+}
+
 .seqtk-flow-lad {
+  /* 栏内唯一的伸缩项：拿到剩余高度，滚动发生在这里（组件面板的 sticky 也以它为参照） */
+  flex: 1;
+  min-height: 0;
   padding: 8px;
   overflow: auto;
 }
@@ -1654,30 +1678,11 @@ button.seqtk-open-btn {
   margin-bottom: 8px;
 }
 
-.seqtk-lad-root {
-  display: flex;
-  flex-direction: column;
-}
-
 /* LAD 编辑布局：编辑区 + 右侧组件面板 */
 .seqtk-lad-layout {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-}
-
-/* 时间节点投放插槽（空白条，拖时间节点类型插入该位置） */
-.seqtk-lad-slot {
-  height: 8px;
-  margin: 2px 0;
-  border-radius: var(--radius-s);
-  transition: background 0.15s, height 0.15s;
-}
-
-.seqtk-lad-slot-active {
-  height: 14px;
-  background: color-mix(in srgb, var(--interactive-accent) 25%, transparent);
-  outline: 1px dashed var(--interactive-accent);
 }
 
 /* 编辑区悬停高亮（整个空白区域可投放） */
@@ -1740,6 +1745,14 @@ button.seqtk-open-btn {
   box-sizing: border-box;
 }
 
+/* 面板元件：分支（新建流）与传送（追加到流）分色，拖之前就能分辨 */
+.seqtk-lad-palette-item.seqtk-lad-branch {
+  background: color-mix(in srgb, var(--color-green) 12%, transparent);
+  border: 1px solid var(--color-green);
+  color: var(--color-green);
+  font-weight: var(--font-semibold);
+}
+
 .seqtk-lad-palette-item.seqtk-lad-step {
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
@@ -1771,14 +1784,19 @@ button.seqtk-open-btn {
 /* ============================================================
    流程推送 · FlowPushView
    ============================================================ */
-.seqtk-push-title {
-  font-weight: var(--font-semibold);
-  padding: 8px 12px 4px;
+.seqtk-push-view {
+  display: flex;
+  flex-direction: column;
+  /* 侧栏内要能自己滚动：flex 子项默认 min-height:auto 会撑破容器 */
+  min-height: 0;
+  overflow: auto;
 }
 
-.seqtk-push-list {
-  padding: 0 12px 12px;
-  overflow: auto;
+.seqtk-push-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
 }
 
 .seqtk-push-task {
@@ -1801,23 +1819,18 @@ button.seqtk-open-btn {
   font-size: var(--font-ui-small);
 }
 
-.seqtk-push-time-at { color: var(--interactive-accent); }
-.seqtk-push-time-span { color: var(--color-orange); }
-.seqtk-push-time-repeat { color: var(--color-purple); }
+/* 推送方式配色：与 LAD 里的分支芯片一致 —— 时点暖色、时段蓝、条件红 */
+.seqtk-push-time-point { color: var(--color-orange); }
+.seqtk-push-time-span { color: var(--color-blue); }
+.seqtk-push-time-condition { color: var(--color-red); }
 
-.seqtk-push-label {
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
+/* 旁注（GET / JUMP / RECO / EXEC）：不参与推送内容，弱化显示 */
+.seqtk-push-note {
+  color: var(--text-faint);
 }
 
 .seqtk-push-item {
   font-size: var(--font-ui-small);
-}
-
-.seqtk-push-err {
-  color: var(--color-red);
-  font-size: var(--font-ui-small);
-  font-family: var(--font-monospace);
 }
 
 /* ============================================================
@@ -2101,7 +2114,7 @@ button.seqtk-open-btn {
 
 /* ============================================================
    FlowDraftView — 流程草稿（规则设计）
-   泳道板：多条并行事件轴 + 自上而下的起止时间块
+   线性清单：一条条目是一个时点或时段，条目可只读关联事务节点
    ============================================================ */
 
 /* 工具栏（右栏顶部） */
@@ -2136,20 +2149,81 @@ button.seqtk-open-btn {
   flex-shrink: 0;
 }
 
-.seqtk-draft-hint {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-faint);
-  margin-left: 8px;
+/* 清单容器（FlowDraftPanel 的 ListHost）与行 */
+.seqtk-draft-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
 }
 
-/* 泳道板（横向滚动容器） */
-.seqtk-draft-board {
-  flex: 1;
-  overflow: auto;
-  padding: 10px;
+/* 顶部：这份草稿覆盖的日期 */
+.seqtk-draft-dayrow {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+
+.seqtk-draft-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.seqtk-draft-items-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-small);
+  font-style: italic;
+  padding: 8px;
+}
+
+/* 一条条目：时间 + 说明 + 关联节点 + 操作 */
+.seqtk-draft-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+}
+
+/* 时段条目左侧一道色条，与时点条目一眼分开 */
+.seqtk-draft-item-span {
+  border-left: 3px solid var(--interactive-accent);
+}
+
+.seqtk-draft-item-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.seqtk-draft-arrow {
+  color: var(--text-muted);
+}
+
+.seqtk-draft-item-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.seqtk-draft-item-odd {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.seqtk-draft-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .seqtk-draft-board-empty {
@@ -2163,65 +2237,6 @@ button.seqtk-open-btn {
   margin-top: 6px;
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
-}
-
-/* 事件轴（泳道） */
-.seqtk-draft-lane {
-  flex: 0 0 300px;
-  width: 300px;
-  min-height: 240px;
-  display: flex;
-  flex-direction: column;
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-}
-
-.seqtk-draft-lane-head {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--background-modifier-border);
-  flex-shrink: 0;
-}
-
-.seqtk-draft-lane-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: var(--font-semibold);
-  font-size: var(--font-ui-small);
-}
-
-.seqtk-draft-lane-body {
-  flex: 1;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.seqtk-draft-lane-body.seqtk-drop-tail {
-  background: var(--background-modifier-hover);
-  outline: 2px dashed var(--interactive-accent);
-  outline-offset: -4px;
-  border-radius: var(--radius-s);
-}
-
-.seqtk-draft-lane-empty {
-  padding: 18px 8px;
-  text-align: center;
-  color: var(--text-faint);
-  font-size: var(--font-ui-smaller);
-  border: 1px dashed var(--background-modifier-border);
-  border-radius: var(--radius-s);
-}
-
-.seqtk-draft-add-block {
-  width: 100%;
 }
 
 /* 图标小按钮 */
@@ -2248,59 +2263,6 @@ button.seqtk-open-btn {
 .seqtk-draft-icon-btn.seqtk-draft-icon-danger:hover {
   background: var(--background-modifier-error);
   color: var(--text-on-accent);
-}
-
-/* 时间块卡片 */
-.seqtk-draft-block {
-  background: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  padding: 6px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  cursor: default;
-}
-
-.seqtk-draft-block:hover {
-  border-color: var(--background-modifier-border-hover);
-}
-
-.seqtk-draft-block.seqtk-dragging {
-  opacity: 0.5;
-}
-
-/* 拖拽插入指示：块上沿 / 下沿 */
-.seqtk-draft-block.seqtk-drop-before {
-  box-shadow: 0 -3px 0 0 var(--interactive-accent);
-}
-
-.seqtk-draft-block.seqtk-drop-after {
-  box-shadow: 0 3px 0 0 var(--interactive-accent);
-}
-
-.seqtk-draft-block-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.seqtk-draft-index {
-  font-size: var(--font-ui-smaller);
-  color: var(--text-faint);
-  font-weight: var(--font-semibold);
-  flex-shrink: 0;
-}
-
-.seqtk-draft-grip {
-  display: inline-flex;
-  color: var(--text-faint);
-  cursor: grab;
-  flex-shrink: 0;
-}
-
-.seqtk-draft-grip:active {
-  cursor: grabbing;
 }
 
 /* 关联节点引用（head 中伸缩占位） */
@@ -2334,18 +2296,6 @@ button.seqtk-open-btn {
 }
 
 /* 时间编辑区 */
-.seqtk-draft-times {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.seqtk-draft-time-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .seqtk-draft-time-label {
   width: 18px;
   flex-shrink: 0;
@@ -2364,62 +2314,107 @@ button.seqtk-open-btn {
   color: var(--text-normal);
 }
 
-.seqtk-draft-clear-btn {
-  width: 18px;
-  height: 18px;
+/* ---------- 左栏日历 ---------- */
+.seqtk-draft-cal {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  padding: 6px;
+  flex-shrink: 0;
 }
 
-.seqtk-draft-meta-row {
+.seqtk-draft-cal-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
+  margin-bottom: 4px;
 }
 
-.seqtk-draft-span {
+.seqtk-draft-cal-title {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+}
+
+/* 7 列：星期表头 + 日期格 */
+.seqtk-draft-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.seqtk-draft-cal-week {
+  text-align: center;
   font-size: var(--font-ui-smaller);
-  color: var(--text-accent);
+  color: var(--text-faint);
+  padding: 2px 0;
 }
 
-/* 快捷敲定 chips */
-.seqtk-draft-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+.seqtk-draft-cal-blank {
+  height: 26px;
 }
 
-.seqtk-draft-chip {
-  font-size: var(--font-ui-smaller);
-  padding: 1px 6px;
+/* 日期格：数字居中；有草稿的日子在下方打一个点 */
+.seqtk-draft-cal-day {
+  position: relative;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-s);
-  border: 1px solid var(--background-modifier-border);
-  background: var(--background-secondary);
-  color: var(--text-muted);
+  background: transparent;
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
   cursor: pointer;
 }
 
-.seqtk-draft-chip:hover {
+.seqtk-draft-cal-day:hover {
   background: var(--background-modifier-hover);
-  color: var(--text-normal);
 }
 
-/* 备注 / 直接文本 */
-.seqtk-draft-text {
-  width: 100%;
-  resize: vertical;
-  min-height: 30px;
-  font-size: var(--font-ui-small);
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  padding: 3px 5px;
-  color: var(--text-normal);
+/* 今天只描个边，不跟选中态抢视觉 */
+.seqtk-draft-cal-day-today {
+  border-color: var(--background-modifier-border-hover);
 }
 
-.seqtk-draft-text:focus {
-  border-color: var(--interactive-accent);
+.seqtk-draft-cal-day-sel {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
-/* 左栏草稿列表 */
+.seqtk-draft-cal-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+}
+
+/* 选中的那一格底色已是强调色，点要反过来才看得见 */
+.seqtk-draft-cal-day-sel .seqtk-draft-cal-dot {
+  background: var(--text-on-accent);
+}
+
+.seqtk-draft-cal-actions {
+  margin: 8px 0 4px;
+}
+
+.seqtk-draft-cal-empty {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  padding: 4px 2px;
+}
+
+.seqtk-draft-cal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+/* ---------- 当日草稿列表 ---------- */
 .seqtk-draft-list-item {
   display: flex;
   flex-direction: column;
@@ -2507,24 +2502,6 @@ button.seqtk-open-btn {
 
 .seqtk-draft-prompt-input {
   width: 100%;
-}
-
-/* 轴级时间段编辑区（事件轴持有起止时间段，顺序块不携带时间） */
-.seqtk-draft-lane-times {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--background-modifier-border);
-  background: var(--background-primary);
-}
-
-.seqtk-draft-lane-times .seqtk-draft-time-input {
-  font-size: var(--font-ui-small);
-}
-
-.seqtk-draft-lane-times .seqtk-draft-chip {
-  font-size: var(--font-ui-smaller);
 }
 
 /* 占位视图骨架：功能区面板（未实现功能的可视化占位） */

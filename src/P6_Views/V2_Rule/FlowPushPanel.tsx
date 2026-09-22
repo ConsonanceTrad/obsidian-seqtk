@@ -8,22 +8,19 @@
 import { Alert, Button, List, Select, Tag, Typography } from "antd";
 import { useStore } from "../../P0_UI/useStore";
 import type { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
+import type { FlowPushTask } from "../../P2_Tools/Script/push";
 
 const { Text } = Typography;
 
-/** 推送内容块 */
-export interface PushTaskItemView {
-    kind: string;
-    text: string;
-}
+/** 一条推送任务（直接复用推送层生成的形状） */
+export type PushTaskView = FlowPushTask;
 
-/** 一条推送任务 */
-export interface PushTaskView {
-    time: string;
-    nodeType: string;
-    label: string;
-    items: PushTaskItemView[];
-}
+/** 推送方式的显示名 */
+const MODE_LABELS: Record<FlowPushTask['mode'], string> = {
+    point: '时点推送',
+    span: '时段推送',
+    condition: '条件推送',
+};
 
 /** 可选流程脚本 */
 export interface FlowPushScriptOption {
@@ -81,12 +78,20 @@ export function FlowPushPanel({ state, onSelect, onRefresh }: FlowPushPanelProps
                     <List.Item>
                         <div className="seqtk-push-task">
                             <div className="seqtk-push-task-head">
-                                <Tag className={`seqtk-push-time seqtk-push-time-${t.nodeType}`}>{t.time}</Tag>
-                                {t.label && <Text strong>{t.label}</Text>}
+                                {/* 条件推送没有时间，就只显示方式 */}
+                                <Tag className={`seqtk-push-time seqtk-push-time-${t.mode}`}>
+                                    {t.at ? (t.to ? `${t.at} → ${t.to}` : t.at) : MODE_LABELS[t.mode]}
+                                </Tag>
+                                <Text strong>{MODE_LABELS[t.mode]}</Text>
+                                {/* 有优先级的会比没指定的更先推，值得显眼 */}
+                                {t.priority !== undefined && <Tag>^{t.priority}</Tag>}
                             </div>
-                            {t.items.map((it, i) => (
-                                <div key={i} className="seqtk-push-item">
-                                    <Text type="secondary">{it.kind}</Text> {it.text}
+                            <div className="seqtk-push-item">
+                                <Text type="secondary">DO</Text> @{t.nodeId}
+                            </div>
+                            {t.notes.map((n, i) => (
+                                <div key={`note-${i}`} className="seqtk-push-item seqtk-push-note">
+                                    <Text type="secondary">·</Text> {n}
                                 </div>
                             ))}
                         </div>

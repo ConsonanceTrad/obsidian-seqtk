@@ -78,6 +78,9 @@ export interface PluginSettings {
     /** 模板模式：左栏宽度（px；0 = 使用默认宽度） */
     templateLeftPaneWidth: number;
 
+    /** 流程设计：左栏宽度（px；0 = 使用默认宽度） */
+    flowLeftPaneWidth: number;
+
     /** 模板模式：上次选中的模板框架 nodeId（重开库时恢复打开位置） */
     templateSelectedId: string | null;
 
@@ -115,7 +118,7 @@ export interface PluginSettings {
      * 取值要与那边的 DelegateOwner 对齐；这里不直接引那个类型，是因为它住在视图层，
      * 设置层不该反向依赖视图层。
      */
-    delegatedOwner: 'design' | 'template' | 'route' | null;
+    delegatedOwner: 'design' | 'template' | 'route' | 'flow' | null;
 
     /**
      * 事务设计的框架树被委托到哪里
@@ -170,6 +173,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     leftPaneWidth: 0,
     routeLeftPaneWidth: 0,
     templateLeftPaneWidth: 0,
+    flowLeftPaneWidth: 0,
     templatePolicy: 'append',
     templateSelectedId: null,
     templateExpandedIds: [],

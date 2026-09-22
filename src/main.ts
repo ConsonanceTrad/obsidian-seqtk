@@ -14,6 +14,8 @@ import {PERSIST_Delegate, RESTORE_Delegate} from "./P6_Views/Special/Delegate/De
 import {DesignView, VIEW_TYPE_DESIGN} from "./P6_Views/V1_Affair/Design/Core/Design";
 import {RouteView, VIEW_TYPE_ROUTE} from "./P6_Views/V1_Affair/Route/Core/Route";
 import {TemplateView, VIEW_TYPE_TEMPLATE} from "./P6_Views/V1_Affair/Template/Core/Template";
+import {FlowView, VIEW_TYPE_FLOW} from "./P6_Views/V3_Script/FlowDesign/Core/FlowDesign";
+import {MIGRATE_Drafts} from "./P2_Tools/Script/DraftStore";
 
 /** 缓存落盘防抖（毫秒）：文件队列跑完后延迟落盘，密集变更只写一次 */
 const CACHE_SAVE_DEBOUNCE_MS = 10_000;
@@ -78,11 +80,15 @@ export default class SeqtkPlugin extends Plugin {
     // 恢复委托状态：交给 DelegateSession（细节与理由见那边的 RESTORE_Delegate）。
     // 它**只登记、不动布局** —— 启动时不抢焦点，布局交给工作区恢复
     RESTORE_Delegate(this.settings);
+
+    // 旧版草稿（flow-drafts.json，多轴泳道结构）一次性迁移为 DRAFT 节点。
+    // 幂等：旧文件为空就直接返回；搬完把旧文件内容留档，不会再重复建节点
+    await MIGRATE_Drafts(this.dataPipe);
   }
 
   async onunload() {
-    // 会话状态先落盘：三个视图（设计 / 模板 / 线路）的展开 / 选中 / 宽度 / 打开位置都记在
-    // settings 上，而它们的写回有防抖，插件被卸载时未必来得及。
+    // 会话状态先落盘：四个视图（设计 / 模板 / 线路 / 流程设计）的展开 / 选中 / 宽度 /
+    // 打开位置都记在 settings 上，而它们的写回有防抖，插件被卸载时未必来得及。
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_DESIGN)) {
       (leaf.view as DesignView).FLUSH_Session?.();
     }
@@ -91,6 +97,9 @@ export default class SeqtkPlugin extends Plugin {
     }
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_ROUTE)) {
       (leaf.view as RouteView).FLUSH_Session?.();
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_FLOW)) {
+      (leaf.view as FlowView).FLUSH_Session?.();
     }
     // 兜底：用户动作那条路（SET_OnIntentChanged）已经写过，这里只在**确实还持有委托**时补写。
     // 刻意不无条件写 —— 若此刻 active 已空（例如落点视图先于插件卸载被关闭而 release），

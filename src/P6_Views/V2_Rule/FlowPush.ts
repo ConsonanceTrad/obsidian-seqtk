@@ -132,12 +132,7 @@ export class FlowPushView extends ReactViewBase {
             return;
         }
 
-        next.tasks = tasks.map((t) => ({
-            time: t.time,
-            nodeType: t.nodeType,
-            label: t.label,
-            items: t.items.map((i) => ({ kind: i.kind, text: i.text })),
-        }));
+        next.tasks = tasks;
         this.state.set(next);
     }
 }

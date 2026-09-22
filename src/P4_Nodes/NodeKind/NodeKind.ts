@@ -27,6 +27,7 @@ const SCRIPT = {
     FLOW : 'SCRIPT_FLOW',
     EXEC : 'SCRIPT_EXEC',
     QUERY : 'SCRIPT_QUERY',
+    DRAFT : 'SCRIPT_DRAFT',
 } as const;
 
 const NODE_CATEGORY_KIND = {

@@ -52,6 +52,7 @@ const BUILTIN_KIND_LABELS: Record<NodeKindValue, string> = {
     SCRIPT_FLOW: '流程脚本',
     SCRIPT_EXEC: '执行脚本',
     SCRIPT_QUERY: '查询脚本',
+    SCRIPT_DRAFT: '流程草稿',
 };
 
 /**
