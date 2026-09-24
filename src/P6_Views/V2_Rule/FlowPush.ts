@@ -23,6 +23,7 @@ import type SeqtkPlugin from "../../main";
 import type { PanelEntry } from "../panelRegistry";
 import type { WorkspaceLeaf } from "obsidian";
 import type { DataPipe } from "../../P5_Data/CoPipe/DataPipe";
+import type { NodeFile } from "../../P4_Nodes/Node";
 
 export const VIEW_TYPE_FLOW_PUSH = 'seqtk-flow-push';
 
@@ -82,14 +83,14 @@ export class FlowPushView extends ReactViewBase {
             state: this.state,
             onSelect: (scriptId: string) => {
                 this.scriptId = scriptId;
-                this.recompute();
+                void this.recompute();
             },
-            onRefresh: () => this.recompute(),
+            onRefresh: () => void this.recompute(),
         });
     }
 
     protected onMounted(): void {
-        this.recompute();
+        void this.recompute();
     }
 
     /** 当前选中的流程脚本 nodeId（空串 = 未选） */
@@ -99,10 +100,21 @@ export class FlowPushView extends ReactViewBase {
     // 状态重算（数据 → 视图状态）
     // ============================================================
 
-    private recompute(): void {
-        const scripts = this.pipe
-            .GET_ByKind(NODE_KIND.FLOW)
-            .map(({ nodeId, data }) => ({ nodeId, desc: data.desc }));
+    /**
+     * 状态重算（数据 → 视图状态）
+     *
+     * 流程脚本走**文件基准通道**：列表与正文都只能靠扫盘拿到。
+     * 此前这里用 `GET_ByKind` / `GET_Node` / `GET_NodeBody` —— 那三个都是缓存接口，
+     * 对脚本恒为空，于是下拉永远空着、选中也读不出正文。一次扫描把三样一起解决。
+     */
+    private async recompute(): Promise<void> {
+        let files: NodeFile[] = [];
+        try {
+            files = await this.pipe.SCAN_Files([NODE_KIND.FLOW]);
+        } catch (e) {
+            console.error('[SeqTK] 扫描流程脚本失败:', e);
+        }
+        const scripts = files.map((f) => ({ nodeId: f.nodeId, desc: f.data.desc }));
 
         const next: FlowPushState = { scripts, scriptId: this.scriptId, errors: [], tasks: [] };
 
@@ -111,14 +123,14 @@ export class FlowPushView extends ReactViewBase {
             this.state.set(next);
             return;
         }
-        if (!this.pipe.GET_Node(this.scriptId)) {
+        const picked = files.find((f) => f.nodeId === this.scriptId);
+        if (!picked) {
             next.emptyText = '脚本不存在';
             this.state.set(next);
             return;
         }
 
-        const body = this.pipe.GET_NodeBody(this.scriptId);
-        const ast = parseFlowScript(body);
+        const ast = parseFlowScript(picked.body);
         if (ast.errors.length > 0) {
             next.errors = ast.errors.map((err) => `第 ${err.line} 行：${err.message}`);
             this.state.set(next);

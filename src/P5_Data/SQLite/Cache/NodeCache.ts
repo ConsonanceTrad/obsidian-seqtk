@@ -38,6 +38,7 @@ import type { SeqtkState } from '../../../P4_Nodes/NodeField/StateKeys';
 import { GET_CacheKinds } from '../../CoPipe/KindChannel';
 import { IS_SameFingerprint } from '../../FileFingerprint';
 import { SqliteCache } from './SqliteCache';
+import type { RawQueryResult } from './SqliteCache';
 import type { NodeFileManager } from '../../MdFile/NodeFileManager';
 
 /** 树形节点 — 供后续操作口使用 */
@@ -291,6 +292,19 @@ export class NodeCache {
    */
   SEARCH_Nodes(query: string, limit = 100): { nodeId: string; data: SeqtkNode }[] {
     return this.activeCache.SEARCH_Nodes(query, limit).map((item) => ({ nodeId: item.nodeId, data: item.data }));
+  }
+
+  /**
+   * 跑一条只读 SQL（查询设计用）
+   *
+   * 走**活跃缓存**。缓存未就绪时**抛错**而不是返回空结果 —— 空结果会被读成
+   * 「查到了 0 行」，与「缓存还没准备好」是两回事，在写 SQL 的场景里分不清很折磨人。
+   */
+  QUERY_Sql(sql: string, params: unknown[] = [], limit = 500): RawQueryResult {
+    if (!this._initialized) {
+      throw new Error('[SeqTK] 查询缓存尚未就绪，请稍候重试');
+    }
+    return this.activeCache.QUERY_Raw(sql, params, limit);
   }
 
   // ============================================================

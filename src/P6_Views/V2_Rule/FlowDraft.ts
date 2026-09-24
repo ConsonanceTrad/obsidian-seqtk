@@ -42,7 +42,7 @@ import type SeqtkPlugin from "../../main";
 import type { PanelEntry } from "../panelRegistry";
 import type { DataPipe } from "../../P5_Data/CoPipe/DataPipe";
 import type { NodeKindValue } from "../../P4_Nodes/NodeKind/NodeKind";
-import type { SeqtkNode } from "../../P4_Nodes/Node";
+import type { SeqtkNode, NodeFile } from "../../P4_Nodes/Node";
 import type { FlowScript, Statement, TimeExpr } from "../../P2_Tools/Script/parser";
 
 export const VIEW_TYPE_FLOW_DRAFT = 'seqtk-flow-draft';
@@ -50,11 +50,17 @@ export const VIEW_TYPE_FLOW_DRAFT = 'seqtk-flow-draft';
 /** 正文写回的防抖（毫秒）：敲字时不必每个字符落一次盘 */
 const SAVE_DEBOUNCE = 500;
 
-/** 列表取回来的一条：节点 id + 节点数据（GET_ByKind / SEARCH_Nodes 的形状） */
-interface DraftEntry {
-    nodeId: string;
-    data: SeqtkNode;
-}
+/**
+ * 列表取回来的一条
+ *
+ * 直接用 `NodeFile`（`{ nodeId, data, body }`）—— 扫描文件时正文就一起拿到了，
+ * 之后算日期区间、数条目、解析 AST 都不必再去取一遍正文。
+ *
+ * 这一点很关键：草稿是 `NODE_KIND.DRAFT`，属**文件基准通道**，不在活跃缓存里，
+ * 用 `GET_ByKind` / `GET_NodeBody` 取它只会得到空 —— 那正是此前草稿列表恒为空、
+ * 选中后也不显示条目的原因。
+ */
+type DraftEntry = NodeFile;
 
 // ============================================================
 // 日期与时间的小工具
@@ -274,7 +280,7 @@ class NodePickModal extends Modal {
 
     private renderList(query: string): void {
         this.listEl.empty();
-        const results: DraftEntry[] = this.pipe.SEARCH_Nodes(query.trim(), 50);
+        const results: { nodeId: string; data: SeqtkNode }[] = this.pipe.SEARCH_Nodes(query.trim(), 50);
         if (results.length === 0) {
             this.listEl.createEl('div', { cls: 'seqtk-draft-node-empty', text: '无匹配节点' });
             return;
@@ -342,6 +348,8 @@ export class FlowDraftView extends ReactViewBase {
     /** 当前草稿解析出来的 AST；编辑都改它，再序列化写回正文 */
     private ast: FlowScript | null = null;
     private unsub: (() => void) | null = null;
+    /** 草稿文件（文件基准通道）变化的订阅 */
+    private unsubFiles: (() => void) | null = null;
     private saveTimer: number | null = null;
 
     /** 渲染件订阅的唯一状态源 */
@@ -393,23 +401,31 @@ export class FlowDraftView extends ReactViewBase {
             onSortByTime: () => this.sortItems(),
             onListReady: (container: HTMLDivElement) => {
                 this.listEl = container;
-                this.loadData();
+                void this.loadData();
             },
             onListDispose: () => { this.listEl = null; },
         });
     }
 
     protected onMounted(): void {
-        // 订阅节点缓存：就绪后重算左栏，并在节点改名 / 删除时刷新条目上的引用显示
+        // 订阅节点缓存：关联节点（事务 / 证据）的改名 / 删除要刷新条目上的引用显示。
+        // 草稿自身不在缓存里，它的变化走文件事件那条线（见下）
         this.unsub = this.pipe.SUB_ActiveView(() => {
             if (!this.pipe.isInitialized) return;
-            this.loadData();
+            this.renderList();
+        });
+        // 草稿是**文件基准**节点：新建 / 改名 / 删除都只体现为文件变化，
+        // 缓存订阅永远不会响 —— 不订阅这个，左栏就停在首次加载的样子
+        this.unsubFiles = this.pipe.SUB_FileChange((kind) => {
+            if (kind === NODE_KIND.DRAFT) void this.loadData();
         });
     }
 
     protected onBeforeUnmount(): void {
         this.unsub?.();
         this.unsub = null;
+        this.unsubFiles?.();
+        this.unsubFiles = null;
         this.FLUSH_Session();
     }
 
@@ -417,8 +433,21 @@ export class FlowDraftView extends ReactViewBase {
     // 数据：草稿节点 ⇄ 状态
     // ============================================================
 
-    private loadData(): void {
-        this.drafts = this.pipe.GET_ByKind(NODE_KIND.DRAFT) as DraftEntry[];
+    /**
+     * 拉取全部草稿（**异步**：扫盘）
+     *
+     * 草稿是文件基准节点，取它只能扫盘。失败时**保留现有列表**并记日志 ——
+     * 先清空再拉的话，扫描是异步的，中间那一帧会闪出「一份草稿都没有」。
+     */
+    private async loadData(): Promise<void> {
+        let files: NodeFile[];
+        try {
+            files = await this.pipe.SCAN_Files([NODE_KIND.DRAFT]);
+        } catch (e) {
+            console.error('[SeqTK] 扫描流程草稿失败:', e);
+            return;
+        }
+        this.drafts = files;
         // 选中项没了（被删）→ 退到当前日期命中的第一份；那天没有就清空
         const ids = new Set(this.drafts.map((d) => d.nodeId));
         if (this.selectedDraftId && !ids.has(this.selectedDraftId)) this.selectedDraftId = null;
@@ -429,7 +458,7 @@ export class FlowDraftView extends ReactViewBase {
 
     /** 一份草稿覆盖的日期区间（看 `#STF` / `#ENF` 两条约束） */
     private rangeOf(entry: DraftEntry): { from: string; to: string } {
-        const ast = parseFlowScript(this.pipe.GET_NodeBody(entry.nodeId));
+        const ast = parseFlowScript(entry.body);
         const from = guardDate(ast, 'STF') ?? todayIso();
         return { from, to: guardDate(ast, 'ENF') ?? from };
     }
@@ -456,10 +485,10 @@ export class FlowDraftView extends ReactViewBase {
             .sort((a, b) => a.data.desc.localeCompare(b.data.desc));
     }
 
-    /** 读选中草稿的正文并解析 */
+    /** 解析选中草稿的正文（正文在扫描时已经一并取回，不必再读一次） */
     private reloadAst(): void {
-        const id = this.selectedDraftId;
-        this.ast = id ? parseFlowScript(this.pipe.GET_NodeBody(id)) : null;
+        const entry = this.selectedNode;
+        this.ast = entry ? parseFlowScript(entry.body) : null;
     }
 
     private get selectedNode(): DraftEntry | undefined {
@@ -535,7 +564,7 @@ export class FlowDraftView extends ReactViewBase {
 
     /** 一份草稿的条目数 */
     private itemCount(entry: DraftEntry): number {
-        return parseFlowScript(this.pipe.GET_NodeBody(entry.nodeId)).statements.length;
+        return parseFlowScript(entry.body).statements.length;
     }
 
     private renderAll(): void {

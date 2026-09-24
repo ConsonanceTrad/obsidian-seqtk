@@ -1,7 +1,7 @@
 import {Load_Setting, Save_Setting, type PluginSettings} from "./P3_Settings/Settings";
 import {Plugin, type WorkspaceLeaf} from "obsidian";
 import {Load_Cache_Data, Check_Cache_Data, SAVE_Cache_Data} from "./P1_Register/Data";
-import {EventP} from "./P1_Register/Event";
+import {EVENTS} from "./P1_Register/Event";
 import {CacheDbStore} from "./P5_Data/SQLite/Cache/CacheDbStore";
 import type {NodeCache} from "./P5_Data/SQLite/Cache/NodeCache";
 import type {NodeFileManager} from "./P5_Data/MdFile/NodeFileManager";
@@ -55,7 +55,7 @@ export default class SeqtkPlugin extends Plugin {
     // 命中的缓存立即可渲染；未命中则库为空，等 onReady 全量填充
     await Load_Cache_Data(this);
     // vault 事件（文件基准 kind，自触发抑制）
-    new EventP().Register_Event(this);
+    EVENTS.Register_Event(this);
     // 写入闸门：缓存与磁盘对账完成前拒绝一切写入（对账在 onReady 进行）
     this.operationQueue.setGuard(() => this.nodeCache.isVerified);
     // 文件队列落盘完成后（防抖）把缓存写回磁盘

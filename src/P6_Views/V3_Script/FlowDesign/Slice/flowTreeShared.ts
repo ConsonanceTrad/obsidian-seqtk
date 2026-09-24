@@ -16,13 +16,31 @@ import { SimpleStore } from '../../../../P5_Data/Svelte/SimpleStore';
 import { DELEGATE, type DelegateSource } from '../../../Special/Delegate/DelegateRegistry';
 import { GET_RowMenu } from '../../../Special/Delegate/rowMenuRegistry';
 import { GET_CategoryOfNode, NODE_KIND } from '../../../../P4_Nodes/NodeKind/NodeKind';
+import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import { NODE_KIND_LABELS } from '../../../../P4_Nodes/NodeKind/NodeLabel';
+
+/** 左栏一行的脚本（文件名即 nodeId；kind 一并带上是给保存用的，理由见 FlowScriptItem 的字段注释） */
+export interface FlowScriptItem {
+    nodeId: string;
+    /** 脚本 kind（SCRIPT_FLOW）：保存时要它，拿不到就会静默失败 */
+    kind: NodeKindValue;
+    desc: string;
+}
 
 export interface FlowTreeSnapshot {
     /** 是否处于委托状态（脚本列表在委托面板显示） */
     delegated: boolean;
     /** 当前选中的脚本 nodeId */
     selectedId: string | null;
+    /**
+     * 脚本列表快照
+     *
+     * 为什么不在这里即时 `GET_ByKind`：脚本属**文件基准通道**（SCRIPT 大类），
+     * 根本不进活跃缓存，`GET_ByKind` 恒返回空数组 —— 那个空看起来跟「一个脚本都没有」
+     * 一模一样。它只能**异步扫描**得到，所以由视图拉取后写进快照，这里只负责发布。
+     * 这样 `buildItems` 仍是同步的，委托面板的既有契约不必改。
+     */
+    items: FlowScriptItem[];
 }
 
 /** 扁平列表没有展开概念；给一个共享的空集合（面板会读它，不宜每次返回新对象） */
@@ -30,10 +48,11 @@ const NO_EXPANDED = new Set<string>();
 
 export class FlowTreeShared {
     private _selectedId: string | null = null;
+    private _items: FlowScriptItem[] = [];
     /** 上次关库时的委托意图（settings.delegatedOwner 的镜像，成因见 RouteTreeShared） */
     private _pendingDelegated = false;
 
-    readonly store = new SimpleStore<FlowTreeSnapshot>({ delegated: false, selectedId: null });
+    readonly store = new SimpleStore<FlowTreeSnapshot>({ delegated: false, selectedId: null, items: [] });
 
     constructor() {
         // 登记处一动就说明「启动恢复」那段结束了：无条件清掉意图 ——
@@ -54,6 +73,22 @@ export class FlowTreeShared {
         this.publish();
     }
 
+    /** 当前脚本列表快照 */
+    get items(): FlowScriptItem[] {
+        return this._items;
+    }
+
+    /** 换一批脚本（异步扫描的结果；同时会广播，左栏与委托面板都会重渲染） */
+    SET_Items(items: FlowScriptItem[]): void {
+        this._items = items;
+        this.publish();
+    }
+
+    /** 选中脚本的 kind；没选中（或列表还没拉回来）时为 null */
+    GET_SelectedKind(): NodeKindValue | null {
+        return this._items.find((i) => i.nodeId === this._selectedId)?.kind ?? null;
+    }
+
     /** 同步「上次的委托意图」（视图挂载时、意图被作废时调用） */
     SET_PendingDelegated(v: boolean): void {
         if (this._pendingDelegated === v) return;
@@ -72,7 +107,7 @@ export class FlowTreeShared {
     }
 
     private publish(): void {
-        this.store.set({ delegated: this.delegated, selectedId: this._selectedId });
+        this.store.set({ delegated: this.delegated, selectedId: this._selectedId, items: this._items });
     }
 }
 
@@ -108,16 +143,17 @@ export const FLOW_DELEGATE: DelegateSource = {
     },
     buildItems: (ctx) => {
         const selectedId = FLOW_TREE.selectedId;
-        return ctx.pipe.GET_ByKind(NODE_KIND.FLOW).map(({ nodeId, data }) => ({
+        // 读的是异步拉回来的快照，不是缓存 —— 脚本不在缓存里（见 FlowTreeSnapshot.items）
+        return FLOW_TREE.items.map(({ nodeId, kind, desc }) => ({
             line: {
                 nodeId,
                 // 扁平列表：全部是顶级行，没有父子关系
                 parentId: '',
                 depth: 0,
-                kind: data.kind,
-                category: GET_CategoryOfNode(data.kind),
-                label: NODE_KIND_LABELS[data.kind],
-                desc: data.desc,
+                kind,
+                category: GET_CategoryOfNode(kind),
+                label: NODE_KIND_LABELS[kind],
+                desc,
                 hasChildren: false,
                 expanded: false,
                 inExpandedTree: false,
@@ -127,7 +163,7 @@ export const FLOW_DELEGATE: DelegateSource = {
             children: [],
         }));
     },
-    emptyText: (ctx) => (ctx.pipe.GET_ByKind(NODE_KIND.FLOW).length === 0 ? '暂无流程脚本' : undefined),
+    emptyText: (ctx) => (FLOW_TREE.items.length === 0 ? '暂无流程脚本' : undefined),
     release: () => {
         // 委托标记由登记处摘牌即复位（delegated 是派生的）。选中保留 ——
         // 取消委托只是把列表交还左栏，不该顺手丢掉用户的位置

@@ -3,7 +3,8 @@
  *
  * 脚本是事实源：这里编辑的就是节点的正文文本（flow 语法），LAD 态只是它的投影。
  * 所以本态只做两件事：把当前文本铺进 textarea、随手解析一遍并把错误标出来 ——
- * 不写盘（保存由视图的「保存」按钮统一负责，与 LAD 态共用一个出口）。
+ * 落盘由视图的防抖自动保存统一负责（与 LAD 态共用一个出口 `scheduleSaveScript`），
+ * 这里只负责「改了」这个事实。
  */
 
 import { parseFlowScript } from '../../../../P2_Tools/Script/parser';
@@ -36,6 +37,8 @@ export function RENDER_ScriptMode(host: FlowDesignHost, el: HTMLElement): void {
     textArea.addEventListener('input', () => {
         host.currentText = textArea.value;
         showParseErrors();
+        // 敲字也进自动保存队列 —— 手点「保存」不再是必须的
+        host.scheduleSaveScript();
     });
     showParseErrors();
 }

@@ -11,25 +11,47 @@ import { Menu, Notice } from 'obsidian';
 import { GET_FileByPath } from '../../../../P5_Data/MdFile/PathTools/PathParse';
 import { NODE_KIND } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import { NODE_KIND_LABELS } from '../../../../P4_Nodes/NodeKind/NodeLabel';
+import { FLOW_TREE } from './flowTreeShared';
+import type { FlowScriptItem } from './flowTreeShared';
 import { TransactionCreateModal } from '../../../../P7_Render/Structure/S2_Modal/TransactionModals';
 import type { FlowDesignHost } from './host';
 import type { FlowScriptRow } from '../Core/FlowDesignPanel';
 import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import type { SeqtkNode } from '../../../../P4_Nodes/Node';
 
-/** 从缓存取全部流程脚本，构建左栏行 */
+/**
+ * 构建左栏行
+ *
+ * 数据取自 `FLOW_TREE.items` 快照，**不是** `GET_ByKind` —— 脚本属**文件基准通道**，
+ * 不在活跃缓存里，查缓存只会得到空数组。快照由视图异步扫描填充
+ * （见 flowTreeShared 的 FlowTreeSnapshot.items 与 FlowDesign.REFRESH_Scripts）。
+ */
 export function BUILD_ScriptRows(host: FlowDesignHost): FlowScriptRow[] {
-    return host.pipe
-        .GET_ByKind(NODE_KIND.FLOW)
-        .map(({ nodeId, data }) => ({ nodeId, desc: data.desc, kindLabel: NODE_KIND_LABELS[data.kind] }));
+    return FLOW_TREE.items.map(({ nodeId, kind, desc }) => ({
+        nodeId,
+        desc,
+        kindLabel: NODE_KIND_LABELS[kind],
+    }));
 }
 
-/** 选中一个脚本：记下 nodeId 与正文，交回视图重算与重绘 */
+/**
+ * 选中一个脚本：记下 nodeId，异步取回正文，再交回视图重算与重绘
+ *
+ * 正文同样不在缓存里（`GET_NodeBody` 是缓存通道的，对脚本恒返回空串），只能直读文件。
+ * 读回之前先把正文清空并渲染一次 —— 否则会短暂显示上一个脚本的内容。
+ */
 export function SELECT_Script(host: FlowDesignHost, nodeId: string): void {
     host.currentScriptId = nodeId;
-    host.currentText = host.pipe.GET_NodeBody(nodeId);
+    host.currentText = '';
     host.recompute();
     host.renderContent();
+    void host.pipe.READ_FileView(NODE_KIND.FLOW, nodeId).then((nf) => {
+        // 期间用户可能已经切走：晚到的结果不该覆盖当前选中
+        if (host.currentScriptId !== nodeId) return;
+        host.currentText = nf?.body ?? '';
+        host.recompute();
+        host.renderContent();
+    });
 }
 
 /**
@@ -37,7 +59,7 @@ export function SELECT_Script(host: FlowDesignHost, nodeId: string): void {
  *
  * `nodeId = null` 表示点在左栏空白处 → 只给「新建流程脚本」。
  */
-export function SHOW_ScriptMenu(host: FlowDesignHost, nodeId: string | null, data: SeqtkNode | null, e: MouseEvent): void {
+export function SHOW_ScriptMenu(host: FlowDesignHost, nodeId: string | null, data: FlowScriptItem | null, e: MouseEvent): void {
     const menu = new Menu();
     if (nodeId && data) {
         menu.addItem((item) =>

@@ -30,4 +30,6 @@ export interface FlowDesignHost {
     renderContent(): void;
     /** LAD 改动落回脚本文本并重绘（AST → serialize） */
     commitAst(): void;
+    /** 安排一次防抖自动保存（脚本态敲字 / LAD 改动都汇到这里） */
+    scheduleSaveScript(): void;
 }

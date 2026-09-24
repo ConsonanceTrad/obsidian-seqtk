@@ -961,6 +961,116 @@ button.seqtk-open-btn {
 }
 
 /* ============================================================
+   查询设计 · SQL 编辑与结果
+   ============================================================ */
+
+/* 左栏：编辑区占满竖向空间，底部挂执行条与速查 */
+.seqtk-query-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.seqtk-query-editor {
+  flex: 1;
+  min-height: 200px;
+  width: 100%;
+  resize: none;
+  padding: 8px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+}
+
+.seqtk-query-editor:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: none;
+}
+
+.seqtk-query-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* 最近执行时间：弱化，不跟按钮抢注意力 */
+.seqtk-query-ran {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 缓存未就绪：提醒而不是错误 —— 等一会儿自然会好 */
+.seqtk-query-hint-warn {
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  color: var(--color-orange);
+  background: color-mix(in srgb, var(--color-orange) 10%, transparent);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 表结构速查：折叠着不占地方，展开是紧凑的字段清单 */
+.seqtk-query-schema {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.seqtk-query-schema summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.seqtk-query-schema-table {
+  margin: 6px 0 0 10px;
+}
+
+.seqtk-query-schema-name {
+  font-family: var(--font-monospace);
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+.seqtk-query-schema-cols {
+  font-family: var(--font-monospace);
+  line-height: 1.6;
+}
+
+/* 结果区表头：标题与计数同行 */
+.seqtk-query-result-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.seqtk-query-count {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* SQL 报错原文：等宽 + 可横向滚动，长语句不会被折行折断 */
+.seqtk-query-error {
+  margin: 0;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* NULL 与空串是两回事，给它一个看得出的弱化标记 */
+.seqtk-query-null {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+/* ============================================================
    SeqTK 中控台
    ============================================================ */
 

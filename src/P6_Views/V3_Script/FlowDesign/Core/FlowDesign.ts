@@ -45,6 +45,7 @@ import { BUILD_ScriptRows, CREATE_Script, OPEN_ScriptFile, SELECT_Script, SHOW_S
 import { RENDER_ScriptMode } from "../Slice/scriptMode";
 import { ADD_StatementByDrop, ADD_TransferByDrop, IS_BranchKind, KIND_LABELS } from "../Slice/authoring";
 import { FLOW_DELEGATE, FLOW_TREE } from "../Slice/flowTreeShared";
+import type { FlowScriptItem } from "../Slice/flowTreeShared";
 import type { FlowDesignHost } from "../Slice/host";
 
 export const VIEW_TYPE_FLOW = 'seqtk-flow';
@@ -67,6 +68,14 @@ const BLOCK_INDENT = 22;
  * 免得为一个常量把几个视图横向串起来。
  */
 const PERSIST_DEBOUNCE_MS = 600;
+
+/**
+ * 脚本正文自动保存的防抖（毫秒）
+ *
+ * 比会话状态那 600ms 长：这里一次落盘要读改写一整个 md 文件，
+ * 而且每次都会走一遍文件队列；LAD 上连点几下不该变成连写几次盘。
+ */
+const SCRIPT_SAVE_DEBOUNCE_MS = 1200;
 
 @AutoView()
 @AutoRegister()
@@ -121,10 +130,14 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
     private unsub: (() => void) | null = null;
     /** 共享源（委托状态 / 选中）的订阅 */
     private unsubShared: (() => void) | null = null;
+    /** 文件基准节点（脚本）变化订阅 */
+    private unsubFiles: (() => void) | null = null;
     /** 左栏宽度（px）：拖动结束后经 setLeftWidth 落到这里 */
     private leftWidth = PANE_WIDTH_DEFAULT;
     /** 会话状态写回的防抖计时器 */
     private persistTimer: number | null = null;
+    /** 脚本正文自动保存的防抖计时器 */
+    private scriptTimer: number | null = null;
     /** 渲染件订阅的唯一状态源 */
     private readonly state = new SimpleStore<FlowDesignState>({
         initializing: true,
@@ -169,11 +182,11 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
             onSelectScript: (nodeId: string) => this.selectScript(nodeId),
             onScriptContextMenu: (nodeId: string | null, e: globalThis.MouseEvent) => {
                 const data = nodeId ? this.pipe.GET_Node(nodeId) : null;
-                this.showScriptMenu(nodeId, data ?? null, e);
+                this.showScriptMenu(nodeId, nodeId ? (FLOW_TREE.items.find((i) => i.nodeId === nodeId) ?? null) : null, e);
             },
             onToggleDelegate: () => this.toggleDelegate(),
             onToggleMode: () => this.switchMode(this.mode === 'script' ? 'lad' : 'script'),
-            onSave: () => this.save(),
+            onSave: () => this.save(true),
             onWidthChange: (width) => this.setLeftWidth(width),
             onContentReady: (container: HTMLDivElement) => {
                 this.flowContent = container;
@@ -187,12 +200,17 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
         this.unsub = this.pipe.SUB_ActiveView(() => this.recompute());
         // 共享源一变（含委托被别处取消）就重算 —— 左栏在「让位 / 回来」之间切换
         this.unsubShared = FLOW_TREE.store.subscribe(() => this.recompute());
+        // 脚本是**文件基准**节点：列表靠异步扫描，变化靠文件事件。
+        // 上面那条缓存订阅（SUB_ActiveView）永远等不到脚本 —— 它根本不进缓存
+        this.REFRESH_Scripts();
+        this.unsubFiles = this.pipe.SUB_FileChange((kind) => {
+            if (kind === NODE_KIND.FLOW) this.REFRESH_Scripts();
+        });
         // 委托面板点「在右侧打开」时要回到本视图，来源得知道自己是哪种类型
         FLOW_DELEGATE.viewType = VIEW_TYPE_FLOW;
         // 行菜单交给登记处：委托面板里取到的就是左栏这一套（见 rowMenuRegistry）
         SET_RowMenu('flow', (ctx, e) => {
-            const data = this.pipe.GET_Node(ctx.nodeId);
-            this.showScriptMenu(ctx.nodeId, data ?? null, e);
+            this.showScriptMenu(ctx.nodeId, FLOW_TREE.items.find((i) => i.nodeId === ctx.nodeId) ?? null, e);
         });
         // 上次关库时的委托意图：先按它让位，等登记处落定自然衔接（成因见 FlowTreeShared）
         FLOW_TREE.SET_PendingDelegated(this.settings.delegatedOwner === 'flow');
@@ -204,9 +222,31 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
         this.unsub = null;
         this.unsubShared?.();
         this.unsubShared = null;
+        this.unsubFiles?.();
+        this.unsubFiles = null;
         SET_RowMenu('flow', null);
         // 视图关掉时把最后一次宽度立刻落盘（防抖那一次未必等得到）
         this.FLUSH_Session();
+        // 脚本正文也可能还有没落盘的一次自动保存
+        this.FLUSH_Script();
+    }
+
+    /**
+     * 重新扫描流程脚本列表（文件基准通道：**异步**）
+     *
+     * 脚本不在活跃缓存里，只能扫盘。结果写进 `FLOW_TREE` 快照 —— 左栏与委托面板
+     * 都订阅了它，所以一次 SET_Items 会把两边一起刷新。
+     */
+    private REFRESH_Scripts(): void {
+        void this.pipe.SCAN_Files([NODE_KIND.FLOW]).then((files) => {
+            FLOW_TREE.SET_Items(files.map((f) => ({
+                nodeId: f.nodeId,
+                kind: f.data.kind,
+                desc: f.data.desc,
+            })));
+        }).catch((e: unknown) => {
+            console.error('[SeqTK] 扫描流程脚本失败:', e);
+        });
     }
 
     /**
@@ -283,7 +323,7 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
         SELECT_Script(this, nodeId);
     }
 
-    private showScriptMenu(nodeId: string | null, data: SeqtkNode | null, e: MouseEvent): void {
+    private showScriptMenu(nodeId: string | null, data: FlowScriptItem | null, e: MouseEvent): void {
         SHOW_ScriptMenu(this, nodeId, data, e);
     }
 
@@ -712,34 +752,69 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
         });
     }
 
-    /** LAD 修改 → 序列化写回脚本文本并重渲染；切片协作可见（FlowDesignHost） */
+    /**
+     * LAD 修改 → 序列化写回脚本文本、重渲染，并**安排一次自动保存**
+     *
+     * 自动保存挂在 commitAst 上，是因为它是 LAD 侧一切改动的唯一出口
+     * （增删语句、改约束、改传送都会走到这里）。手点「保存」的按钮仍在，
+     * 只是不再是非点不可才落盘。
+     */
     public commitAst(): void {
         if (!this.currentAst) return;
         this.currentText = serializeFlowScript(this.currentAst);
         const el = this.flowContent;
         if (el) this.renderLadMode(el);
+        this.scheduleSaveScript();
     }
 
     // ============================================================
     // 保存
     // ============================================================
 
-    private save(): void {
-        if (!this.currentScriptId) return;
-        const node = this.pipe.GET_Node(this.currentScriptId);
-        if (!node) return;
+    /** 安排一次防抖自动保存（脚本态敲字与 LAD 态改动都汇到这里） */
+    public scheduleSaveScript(): void {
+        if (this.scriptTimer !== null) window.clearTimeout(this.scriptTimer);
+        this.scriptTimer = window.setTimeout(() => {
+            this.scriptTimer = null;
+            this.save();
+        }, SCRIPT_SAVE_DEBOUNCE_MS);
+    }
+
+    /** 立刻落盘（防抖到期、切脚本、关视图、插件卸载时调用）；不弹提示 */
+    public FLUSH_Script(): void {
+        if (this.scriptTimer !== null) {
+            window.clearTimeout(this.scriptTimer);
+            this.scriptTimer = null;
+        }
+        this.save(false);
+    }
+
+    /**
+     * 保存脚本正文
+     *
+     * **kind 取自左栏快照，而不是读节点** —— 此前这里先 `pipe.GET_Node(currentScriptId)`
+     * 只为拿 kind，而脚本是文件基准节点、不在活跃缓存里，于是恒为 undefined、
+     * 函数在第一句就静默返回：看起来像「保存没生效」，其实是根本没走到写。
+     *
+     * @param notify 是否弹「已保存」提示。自动保存传 false —— 否则改一下弹一次，
+     *   提示本身会变成噪音，把真正该看见的错误淹掉
+     */
+    private save(notify = false): void {
+        const scriptId = this.currentScriptId;
+        if (!scriptId) return;
+        const kind = FLOW_TREE.GET_SelectedKind();
+        if (!kind) return;
         // 脚本态下取 textarea 值；LAD 态下取 currentText（commitAst 已同步）
         const ta = this.flowContent?.querySelector('textarea.seqtk-flow-textarea') as HTMLTextAreaElement | null;
         if (this.mode === 'script' && ta) {
             this.currentText = ta.value;
         }
-        const scriptId = this.currentScriptId;
         this.pipe.EXEC_Mutation({
             op: 'setBody',
-            kind: node.kind,
+            kind,
             nodeId: scriptId,
             body: this.currentText,
         });
-        new Notice('流程脚本已保存');
+        if (notify) new Notice('流程脚本已保存');
     }
 }

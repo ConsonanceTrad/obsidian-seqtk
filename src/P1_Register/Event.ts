@@ -6,7 +6,7 @@ import {IS_FileBasedKind} from "../P5_Data/CoPipe/KindChannel";
 import type {NodeKindValue} from "../P4_Nodes/NodeKind/NodeKind";
 
 /** 文件基准变化订阅回调（脚本/日志：以文件为渲染基准的视图据此刷新） */
-type FileChangeListener = (kind: NodeKindValue, nodeId: string, action: 'create' | 'modify' | 'delete') => void;
+export type FileChangeListener = (kind: NodeKindValue, nodeId: string, action: 'create' | 'modify' | 'delete') => void;
 
 export class EventP {
     /** 文件基准 kind 变化订阅者 */
@@ -55,3 +55,12 @@ export class EventP {
         this.onFileChange(file, 'create', p);
     }
 }
+
+/**
+ * 进程内唯一的 vault 事件源
+ *
+ * 此前 main 里写的是 `new EventP().Register_Event(this)` —— 实例就地丢弃，
+ * 于是 SUB_FileChange 谁也订阅不到，脚本 / 日志这类**文件基准**节点的视图
+ * 就没有任何变化通知可用。改成模块级单例，与 FLOW_TREE / DELEGATE 同一做法。
+ */
+export const EVENTS = new EventP();

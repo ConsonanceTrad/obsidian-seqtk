@@ -22,12 +22,15 @@
 
 import type { NodeFileManager } from '../MdFile/NodeFileManager';
 import type { NodeCache } from '../SQLite/Cache/NodeCache';
+import type { RawQueryResult } from '../SQLite/Cache/SqliteCache';
 import type { OperationQueue } from '../Queue/OperationQueue';
 import type { Unsubscriber } from '../Svelte/SimpleStore';
 import type { PluginSettings } from '../../P3_Settings/Settings';
 import type { NodeKindValue } from '../../P4_Nodes/NodeKind/NodeKind';
 import type { SeqtkNode, NodeFile } from '../../P4_Nodes/Node';
 import { GET_FileByPath } from '../MdFile/PathTools/PathParse';
+import { EVENTS } from '../../P1_Register/Event';
+import type { FileChangeListener } from '../../P1_Register/Event';
 import { IS_CacheKind } from './KindChannel';
 import { BUILD_CacheSide, type Mutation } from './Pipes/ViewToCache';
 import { BUILD_FileSide } from './Pipes/CacheToFile';
@@ -217,6 +220,39 @@ export class DataPipe {
     /** 关键词检索（标题 / 正文） */
     SEARCH_Nodes(query: string, limit = 100): { nodeId: string; data: SeqtkNode }[] {
         return this.deps.cache.SEARCH_Nodes(query, limit);
+    }
+
+    /**
+     * 跑一条只读 SQL（查询设计）
+     *
+     * 语句需以 `SELECT` / `WITH` 开头，否则抛错 —— 写操作会绕过 MD 事实源，
+     * 详见 SqliteCache.QUERY_Raw 的说明。
+     */
+    QUERY_Sql(sql: string, params: unknown[] = [], limit = 500): RawQueryResult {
+        return this.deps.cache.QUERY_Sql(sql, params, limit);
+    }
+
+    // ---- 文件基准节点的读写（SCRIPT / RUNTIME 通道） ----
+
+    /**
+     * 扫描指定 kind 的节点文件（读盘 + 解析，**异步**）
+     *
+     * 文件基准 kind（脚本 / 日志）**不进活跃缓存**，取它们只有这一条路：
+     * 用 `GET_ByKind` 会得到空数组，而那个空看起来跟「一个都没有」一模一样 ——
+     * 这正是流程设计左栏列不出脚本、保存静默失败的原因。
+     */
+    async SCAN_Files(kinds: NodeKindValue[]): Promise<NodeFile[]> {
+        return this.deps.fileManager.scan.SCAN_ByKinds(kinds);
+    }
+
+    /**
+     * 订阅文件基准 kind（脚本 / 日志）的文件变化
+     *
+     * 文件基准视图靠它重拉列表；写回自身的自触发抑制已在事件源做过（IS_Pending），
+     * 所以这里不必再过滤一遍。
+     */
+    SUB_FileChange(cb: FileChangeListener): Unsubscriber {
+        return EVENTS.SUB_FileChange(cb);
     }
 
     /** 收集子孙节点（扁平，含自身） */

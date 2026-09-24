@@ -50,6 +50,22 @@ export interface NodeQueryItem {
   body: string;
 }
 
+/** 只读 SQL 的结果：列名 + 原始行 */
+export interface RawQueryResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  /** 是否因达到行数上限而截断（即结果集还有更多行没取） */
+  truncated: boolean;
+}
+
+/**
+ * 只读 SQL 的通行判定：必须以 `SELECT` 或 `WITH` 开头
+ *
+ * 允许语句前面有空白与注释（`--` 行注释、块注释）—— 把注释写在最上面
+ * 是很自然的写法，没理由因此判它不合格。
+ */
+const READONLY_SQL = /^\s*(?:(?:--[^\n]*\n)|(?:\/\*[\s\S]*?\*\/)|[ \t\r\n])*(?:SELECT|WITH)\b/i;
+
 /**
  * 当前 schema 版本（建库时写入 PRAGMA user_version）
  *
@@ -605,6 +621,38 @@ export class SqliteCache {
     }
     stmt.free();
     return items;
+  }
+
+  /**
+   * 跑一条**只读** SQL，返回原始行列
+   *
+   * 只认 `SELECT` / `WITH` 打头（前面允许注释），其余一律拒绝。卡这么死的理由：
+   * MD 文件才是事实来源，db 随时会被全量重建抹掉 —— 一旦放行写操作，用户会看到
+   * 「db 改了、文件没改」，而下一次重建又把改动抹回去，那种不一致最难排查。
+   *
+   * 值按 sql.js 的原样返回（整数是 number、NULL 是 null），**不做节点对象转换** ——
+   * 这个出口是给「直接看表」用的，不是又一个业务查询。
+   */
+  QUERY_Raw(sql: string, params: unknown[] = [], limit = 500): RawQueryResult {
+    if (!READONLY_SQL.test(sql)) {
+      throw new Error('只允许只读查询：语句需以 SELECT 或 WITH 开头');
+    }
+    const db = this.REQUIRE_Db();
+    const stmt = db.prepare(sql);
+    stmt.bind(params as any);
+    const columns = stmt.getColumnNames();
+    const rows: Record<string, unknown>[] = [];
+    let truncated = false;
+    while (stmt.step()) {
+      if (rows.length >= limit) {
+        // 已经取满上限、而结果集还没走完 —— 说明确实还有更多行
+        truncated = true;
+        break;
+      }
+      rows.push(stmt.getAsObject() as Record<string, unknown>);
+    }
+    stmt.free();
+    return { columns, rows, truncated };
   }
 
   /**
