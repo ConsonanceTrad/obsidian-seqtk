@@ -1,5 +1,5 @@
 /**
- * FlowDraftView — 规则设计 · 流程草稿
+ * FlowDraftView — 规则设计 · 事务分发
  *
  * 定位：**中间产物**。针对选定日做一份简要的线性清单，条目可关联事务节点。
  *
@@ -37,7 +37,10 @@ import { parseFlowScript } from "../../P2_Tools/Script/parser";
 import { serializeFlowScript, timeText } from "../../P2_Tools/Script/serialize";
 import { GET_FileByPath } from "../../P5_Data/MdFile/PathTools/PathParse";
 import { TransactionCreateModal } from "../../P7_Render/Structure/S2_Modal/TransactionModals";
-import { FlowDraftPanel, type FlowDraftRow, type FlowDraftState } from "./FlowDraftPanel";
+import { FlowDraftPanel, type DraftCalendarActions, type FlowDraftRow, type FlowDraftState } from "./FlowDraftPanel";
+import { DRAFT_STATE, SET_DraftCalendarActions } from "./DraftDelegate";
+import { DELEGATE } from "../Special/Delegate/DelegateRegistry";
+import { START_Delegate } from "../Special/Delegate/delegateTargets";
 import type SeqtkPlugin from "../../main";
 import type { PanelEntry } from "../panelRegistry";
 import type { DataPipe } from "../../P5_Data/CoPipe/DataPipe";
@@ -321,7 +324,7 @@ class NodePickModal extends Modal {
 export class FlowDraftView extends ReactViewBase {
     /** 面板目录条目 */
     static metas: PanelEntry[] = [
-        {viewType: VIEW_TYPE_FLOW_DRAFT, title: '流程草稿', icon: 'calendar-range', description: '针对选定日的简要清单：一条条目是一个时点或时段，可只读关联事务节点。以流程脚本形式存储、带草稿标记，不提供脚本设计功能。', category: '规则设计'},
+        {viewType: VIEW_TYPE_FLOW_DRAFT, title: '事务分发', icon: 'calendar-range', description: '把事务分发到时间轴：选定日子给一份简要清单，条目是时点或时段、关联事务节点（推送时展开为其行动项）。以流程脚本形式存储、带分发标记，不提供脚本设计功能。', category: '规则设计'},
     ];
 
     /** 视图工厂：由 Register_View 以 (leaf) 调用 */
@@ -333,7 +336,7 @@ export class FlowDraftView extends ReactViewBase {
     static registerCommands(plugin: SeqtkPlugin) {
         plugin.addCommand({
             id: 'open-flow-draft',
-            name: '打开流程草稿',
+            name: '打开事务分发',
             callback: () => plugin.activateView(VIEW_TYPE_FLOW_DRAFT),
         });
     }
@@ -352,16 +355,8 @@ export class FlowDraftView extends ReactViewBase {
     private unsubFiles: (() => void) | null = null;
     private saveTimer: number | null = null;
 
-    /** 渲染件订阅的唯一状态源 */
-    private readonly state = new SimpleStore<FlowDraftState>({
-        selectedDate: this.selectedDate,
-        markedDates: [],
-        dayDrafts: [],
-        selectedDraftId: null,
-        title: '未新建',
-        saveState: '',
-        hasDraft: false,
-    });
+    /** 渲染件订阅的唯一状态源（与委托面板共用 DRAFT_STATE） */
+    private readonly state = DRAFT_STATE;
 
     constructor(
         leaf: WorkspaceLeaf,
@@ -378,7 +373,7 @@ export class FlowDraftView extends ReactViewBase {
     }
 
     getDisplayText(): string {
-        return '流程草稿';
+        return '事务分发';
     }
 
     getIcon(): string {
@@ -389,13 +384,9 @@ export class FlowDraftView extends ReactViewBase {
     protected renderPanel(): ReactNode {
         return createElement(FlowDraftPanel, {
             state: this.state,
-            onSelectDraft: (id: string) => this.selectDraft(id),
-            onDraftContextMenu: (id: string, e: globalThis.MouseEvent) => {
-                const draft = this.drafts.find((d) => d.nodeId === id);
-                if (draft) this.showDraftMenu(e, draft);
-            },
-            onPickDate: (date: string) => this.pickDate(date),
-            onCreateOnDate: () => this.createDraft(),
+            calendar: this.CAL_ACTIONS(),
+            onToggleDelegate: () => this.TOGGLE_Delegate(),
+            onWidthChange: (width: number) => this.SET_LeftWidth(width),
             onAddPoint: () => this.addItem('point'),
             onAddSpan: () => this.addItem('span'),
             onSortByTime: () => this.sortItems(),
@@ -404,10 +395,47 @@ export class FlowDraftView extends ReactViewBase {
                 void this.loadData();
             },
             onListDispose: () => { this.listEl = null; },
+            host: { setTooltip, setIcon },
         });
     }
 
+    /** 月历动作（主视图左栏与委托面板同一套；委托面板经 SET_DraftCalendarActions 注入） */
+    private CAL_ACTIONS(): DraftCalendarActions {
+        return {
+            onPickDate: (date: string) => this.pickDate(date),
+            onCreateOnDate: () => this.createDraft(),
+            onSelectDraft: (id: string) => this.selectDraft(id),
+            onDraftContextMenu: (id: string, e: globalThis.MouseEvent) => {
+                const draft = this.drafts.find((d) => d.nodeId === id);
+                if (draft) this.showDraftMenu(e, draft);
+            },
+        };
+    }
+
+    /** 委托开关：已委托就收回，否则委托出去（落点按设置，月历整块进侧栏） */
+    private TOGGLE_Delegate(): void {
+        if (DELEGATE.isDelegated('draft')) DELEGATE.release('draft');
+        else START_Delegate(this.app, this.plugin.settings, 'draft');
+    }
+
+    /** 左栏宽度（拖动结束后一次上报；写回设置） */
+    private SET_LeftWidth(width: number): void {
+        this.state.set({ ...this.state.get(), leftPaneWidth: width });
+        this.plugin.settings.draftLeftPaneWidth = width;
+    }
+
     protected onMounted(): void {
+        // 月历动作注入委托来源（委托面板里的月历走同一套动作）
+        SET_DraftCalendarActions(this.CAL_ACTIONS());
+        // 上次关库时若正委托着，接回（与设计 / 模板 / 流程同一口径）
+        this.state.set({
+            ...this.state.get(),
+            selectedDate: this.state.get().selectedDate || this.selectedDate,
+            leftPaneWidth: this.state.get().leftPaneWidth || this.plugin.settings.draftLeftPaneWidth || 0,
+        });
+        if (this.plugin.settings.delegatedOwner === 'draft' && !DELEGATE.settled) {
+            DELEGATE.delegate('draft');
+        }
         // 订阅节点缓存：关联节点（事务 / 证据）的改名 / 删除要刷新条目上的引用显示。
         // 草稿自身不在缓存里，它的变化走文件事件那条线（见下）
         this.unsub = this.pipe.SUB_ActiveView(() => {
@@ -422,6 +450,7 @@ export class FlowDraftView extends ReactViewBase {
     }
 
     protected onBeforeUnmount(): void {
+        SET_DraftCalendarActions(null);
         this.unsub?.();
         this.unsub = null;
         this.unsubFiles?.();
@@ -444,7 +473,7 @@ export class FlowDraftView extends ReactViewBase {
         try {
             files = await this.pipe.SCAN_Files([NODE_KIND.DRAFT]);
         } catch (e) {
-            console.error('[SeqTK] 扫描流程草稿失败:', e);
+            console.error('[SeqTK] 扫描事务分发失败:', e);
             return;
         }
         this.drafts = files;
@@ -559,6 +588,8 @@ export class FlowDraftView extends ReactViewBase {
             title: entry ? entry.data.desc : '未新建',
             saveState: this.state.get().saveState,
             hasDraft: !!entry,
+            delegated: this.state.get().delegated,
+            leftPaneWidth: this.state.get().leftPaneWidth,
         });
     }
 
@@ -611,8 +642,8 @@ export class FlowDraftView extends ReactViewBase {
                     this.selectedDraftId = nodeId;
                     this.loadData();
                 }).catch((e: unknown) => {
-                    console.error('[SeqTK] 新建流程草稿失败:', e);
-                    new Notice('新建流程草稿失败，请查看控制台');
+                    console.error('[SeqTK] 新建事务分发失败:', e);
+                    new Notice('新建事务分发失败，请查看控制台');
                 });
             },
         }).open();
@@ -639,7 +670,7 @@ export class FlowDraftView extends ReactViewBase {
 
     private renameDraft(draft: DraftEntry): void {
         new DraftPromptModal(this.app, {
-            title: '重命名流程草稿',
+            title: '重命名事务分发',
             initialValue: draft.data.desc,
             onOk: (title) => {
                 this.pipe.EXEC_Mutation({
@@ -655,7 +686,7 @@ export class FlowDraftView extends ReactViewBase {
 
     private deleteDraft(draft: DraftEntry): void {
         new DraftConfirmModal(this.app, {
-            title: '删除流程草稿',
+            title: '删除事务分发',
             message: `确定删除草稿「${draft.data.desc}」？\n这会连同节点文件一起移除，且不可撤销。`,
             onConfirm: () => {
                 this.pipe.EXEC_Mutation({ op: 'remove', kind: draft.data.kind, nodeId: draft.nodeId });
@@ -691,55 +722,11 @@ export class FlowDraftView extends ReactViewBase {
             return;
         }
 
-        this.renderDayRow(host, ast);
         const list = host.createDiv('seqtk-draft-items');
         if (ast.statements.length === 0) {
             list.createEl('div', { cls: 'seqtk-draft-items-empty', text: '这一日还没有条目 —— 用上方按钮加一个时点或时段' });
         }
         ast.statements.forEach((s, i) => this.renderItem(list, s, i));
-    }
-
-    /** 顶部：这份草稿覆盖的日期（跨多日即循环草稿） */
-    private renderDayRow(host: HTMLElement, ast: FlowScript): void {
-        const row = host.createDiv('seqtk-draft-dayrow');
-        row.createEl('span', { cls: 'seqtk-draft-time-label', text: '日期' });
-        const input = row.createEl('input', { cls: 'seqtk-draft-time-input', attr: { type: 'date' } });
-        input.value = guardDate(ast, 'STF') ?? todayIso();
-        input.addEventListener('change', () => {
-            if (!input.value) return;
-            this.setDraftDate(ast, input.value);
-            this.commitAst();
-            this.syncState();
-        });
-        setTooltip(row, '这份草稿覆盖的那一天。要表达跨日的循环事项，可直接改节点正文里的 #STF / #ENF。');
-    }
-
-    /**
-     * 改草稿的日期
-     *
-     * `#STF` / `#ENF` 与**条目的时间戳日期一起挪** —— 否则把草稿从 8/24 改到 8/25 后，
-     * 条目还留在 8/24，清单上就会出现「这一天里排着别的日期的条目」。
-     */
-    private setDraftDate(ast: FlowScript, date: string): void {
-        const upsert = (kind: 'STF' | 'ENF', hhmm: string): void => {
-            const value = stampOf(date, `${hhmm.slice(0, 2)}:${hhmm.slice(2)}`);
-            const g = ast.guards.find((x) => x.kind === kind);
-            if (g) g.value = value;
-            else ast.guards.push({ line: 0, kind, value });
-        };
-        upsert('STF', '0000');
-        upsert('ENF', '2359');
-
-        for (const s of ast.statements) {
-            if (s.branch.kind !== 'AT') continue;
-            const at = s.branch.time;
-            const to = s.branch.toTime;
-            setItemTime(
-                s,
-                at && at.kind === 'stamp' ? { kind: 'stamp', date: compact(date), time: at.time } : (at ?? stampOf(date, '00:00')),
-                to && to.kind === 'stamp' ? { kind: 'stamp', date: compact(date), time: to.time } : to,
-            );
-        }
     }
 
     /** 一条条目：时间（时点或时段）+ 关联节点 + 操作 */

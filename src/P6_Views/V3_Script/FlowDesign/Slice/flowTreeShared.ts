@@ -6,8 +6,9 @@
  * 出现在另一个视图里。所以这里只服务流程设计，结构照抄线路那份（含 pendingDelegated
  * 那段消抖逻辑，成因见 RouteTreeShared）。
  *
- * 与线路的差别只有一处：流程脚本是**扁平列表**（没有父子层级），所以没有展开集合 ——
- * `expanded` 恒为空、`markExpandedChanged` 是空操作，委托面板里只是永远不出现折叠方块。
+ * 与线路的差别：流程脚本是**层级树**（parent 归属同类脚本形成分组，见
+ * P2_Tools/Script/scriptTree）—— 有同类子脚本的是分组（徽章显示「分组」），
+ * 叶子是脚本实体，展开集合是真实的一份。
  *
  * 委托本身仍是**全局互斥**的（见 DelegateRegistry）。
  */
@@ -18,6 +19,8 @@ import { GET_RowMenu } from '../../../Special/Delegate/rowMenuRegistry';
 import { GET_CategoryOfNode, NODE_KIND } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import type { NodeKindValue } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import { NODE_KIND_LABELS } from '../../../../P4_Nodes/NodeKind/NodeLabel';
+import { BUILD_ScriptTree, SCRIPT_GROUP_LABEL } from '../../../../P2_Tools/Script/scriptTree';
+import type { TreeNodeItem } from '../../../../P7_Render/Composition/C2_Tree/NodeTree';
 
 /** 左栏一行的脚本（文件名即 nodeId；kind 一并带上是给保存用的，理由见 FlowScriptItem 的字段注释） */
 export interface FlowScriptItem {
@@ -25,6 +28,8 @@ export interface FlowScriptItem {
     /** 脚本 kind（SCRIPT_FLOW）：保存时要它，拿不到就会静默失败 */
     kind: NodeKindValue;
     desc: string;
+    /** 父脚本 nodeId（空 = 根级）；同类父子构成分组层级 */
+    parent: string;
 }
 
 export interface FlowTreeSnapshot {
@@ -43,10 +48,11 @@ export interface FlowTreeSnapshot {
     items: FlowScriptItem[];
 }
 
-/** 扁平列表没有展开概念；给一个共享的空集合（面板会读它，不宜每次返回新对象） */
-const NO_EXPANDED = new Set<string>();
+/** 扁平列表没有展开概念时的占位已移除：脚本树是层级的，展开集合是真实的一份 */
 
 export class FlowTreeShared {
+    /** 展开的分组（与左栏、委托面板共用同一个实例） */
+    readonly expanded = new Set<string>();
     private _selectedId: string | null = null;
     private _items: FlowScriptItem[] = [];
     /** 上次关库时的委托意图（settings.delegatedOwner 的镜像，成因见 RouteTreeShared） */
@@ -96,6 +102,11 @@ export class FlowTreeShared {
         this.publish();
     }
 
+    /** 展开集合被就地改动后广播（左栏与委托面板各自重算） */
+    markExpandedChanged(): void {
+        this.publish();
+    }
+
     /** 左栏是否要让位（真委托中，或上次的委托正在接回） */
     get delegated(): boolean {
         return DELEGATE.isDelegated('flow') || this._pendingDelegated;
@@ -128,40 +139,42 @@ export const FLOW_DELEGATE: DelegateSource = {
     title: '流程脚本',
     childKind: NODE_KIND.FLOW,
     get expanded(): Set<string> {
-        return NO_EXPANDED;
+        return FLOW_TREE.expanded;
     },
     getSelectedId: () => FLOW_TREE.selectedId,
     setSelectedId: (nodeId) => {
         FLOW_TREE.selectedId = nodeId;
     },
     markExpandedChanged: () => {
-        // 扁平列表没有展开态，无需广播
+        // Set 就地增删不换引用，借 publish 广播一次（左栏与面板各自重算）
+        FLOW_TREE.markExpandedChanged();
     },
     subscribe: (cb) => FLOW_TREE.store.subscribe(cb),
     get rowMenu() {
         return GET_RowMenu('flow');
     },
     buildItems: (ctx) => {
-        const selectedId = FLOW_TREE.selectedId;
         // 读的是异步拉回来的快照，不是缓存 —— 脚本不在缓存里（见 FlowTreeSnapshot.items）
-        return FLOW_TREE.items.map(({ nodeId, kind, desc }) => ({
-            line: {
-                nodeId,
-                // 扁平列表：全部是顶级行，没有父子关系
-                parentId: '',
-                depth: 0,
-                kind,
-                category: GET_CategoryOfNode(kind),
-                label: NODE_KIND_LABELS[kind],
-                desc,
-                hasChildren: false,
-                expanded: false,
-                inExpandedTree: false,
-                selected: selectedId === nodeId,
-                showsOpenButton: true,
-            },
-            children: [],
-        }));
+        const tree = BUILD_ScriptTree(FLOW_TREE.items);
+        const walk = (nodes: ReturnType<typeof BUILD_ScriptTree>, parentId: string, depth: number): TreeNodeItem[] =>
+            nodes.map((n) => ({
+                line: {
+                    nodeId: n.nodeId,
+                    parentId,
+                    depth,
+                    kind: n.kind as NodeKindValue,
+                    category: GET_CategoryOfNode(n.kind as NodeKindValue),
+                    label: n.isGroup ? SCRIPT_GROUP_LABEL : (NODE_KIND_LABELS[n.kind as NodeKindValue] ?? n.kind),
+                    desc: n.desc,
+                    hasChildren: n.children.length > 0,
+                    expanded: FLOW_TREE.expanded.has(n.nodeId),
+                    inExpandedTree: depth > 0,
+                    selected: FLOW_TREE.selectedId === n.nodeId,
+                    showsOpenButton: true,
+                },
+                children: walk(n.children, n.nodeId, depth + 1),
+            }));
+        return walk(tree, '', 0);
     },
     emptyText: (ctx) => (FLOW_TREE.items.length === 0 ? '暂无流程脚本' : undefined),
     release: () => {

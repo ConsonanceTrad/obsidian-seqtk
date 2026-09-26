@@ -307,6 +307,11 @@ export class NodeCache {
     return this.activeCache.QUERY_Raw(sql, params, limit);
   }
 
+  /** SQL 语法检查（试编译不执行）：null = 通过，否则是错误原文 */
+  CHECK_Sql(sql: string): string | null {
+    return this.activeCache.CHECK_Sql(sql);
+  }
+
   // ============================================================
   // Body（正文/描述）操作
   // ============================================================

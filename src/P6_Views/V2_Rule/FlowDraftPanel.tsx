@@ -1,23 +1,21 @@
 /**
- * FlowDraftPanel — 流程草稿视图的渲染件
+ * FlowDraftPanel — 事务分发视图的渲染件
  *
- * 纯渲染：左栏**日历**（选日期）+ 右栏工具栏（加时点 / 加时段 / 排序 / 保存状态）+ 清单容器。
+ * 纯渲染：不含业务逻辑，不 import obsidian，不触碰数据层。
+ * 逻辑侧见同目录 FlowDraft.ts。
  *
- * 为什么左栏是日历而不是列表：「一份草稿 = 一天」是这份数据的骨架，按日期找比按标题找
- * 更贴近它的用法。有草稿的日子在日历上打点，点一下就切过去；同一天有多份时，
- * 它们列在日历下方，右栏工具栏也提供一个下拉。
- *
- * 日历是自绘的（不引 antd Calendar）：这里只需要「月份翻页 + 选中 + 打点」，
- * 自绘既省掉对 antd 版本差异的依赖，也不掺进它自带的那套日期逻辑。
- *
- * 清单（一条一行：时间 + 说明 + 关联节点）是命令式 DOM，因此本组件只提供容器，
- * 渲染与编辑仍由 FlowDraftView 掌管 —— 与 FlowDesign 的 FlowHost 同一原则。
+ * 布局：左栏 = 月历 + 当日草稿列表（`DraftCalendarPanel`，委托面板复用同一份），
+ * 右栏 = 选中草稿的条目清单。双栏把手与委托让位复用统一框架
+ * （usePaneResize + seqtk-split 骨架），与设计 / 模板 / 流程 / 查询同一套交互。
  */
 
-import { Button, Select } from "antd";
 import { useEffect, useRef, useState } from "react";
+import { Button, Select } from "antd";
 import { useStore } from "../../P0_UI/useStore";
+import { usePaneResize, PANE_WIDTH_DEFAULT } from "../../P0_UI/usePaneResize";
+import { IconButton } from "../../P7_Render/Composition/C1_NodeLine/IconButton";
 import type { SimpleStore } from "../../P5_Data/Svelte/SimpleStore";
+import type { NodeLineHost } from "../../P7_Render/Composition/C1_NodeLine/NodeLine";
 
 /** 草稿条目 */
 export interface FlowDraftRow {
@@ -27,7 +25,7 @@ export interface FlowDraftRow {
     meta: string;
 }
 
-/** 流程草稿状态（渲染件订阅的唯一来源） */
+/** 事务分发状态（渲染件订阅的唯一来源） */
 export interface FlowDraftState {
     /** 当前选中的日期（YYYY-MM-DD） */
     selectedDate: string;
@@ -42,16 +40,25 @@ export interface FlowDraftState {
     saveState: string;
     /** 当前是否有选中草稿（决定工具栏按钮是否可用） */
     hasDraft: boolean;
+    /** 委托中（左栏让位右栏） */
+    delegated: boolean;
+    /** 左栏宽度（0 = 用默认） */
+    leftPaneWidth: number;
+}
+
+/** 月历侧的动作（主视图左栏与委托面板同一套） */
+export interface DraftCalendarActions {
+    onPickDate: (date: string) => void;
+    onCreateOnDate: () => void;
+    onSelectDraft: (id: string) => void;
+    onDraftContextMenu: (id: string, e: globalThis.MouseEvent) => void;
 }
 
 export interface FlowDraftPanelProps {
     state: SimpleStore<FlowDraftState>;
-    /** 在日历上选一个日期 */
-    onPickDate: (date: string) => void;
-    /** 在选中日期新建一份草稿 */
-    onCreateOnDate: () => void;
-    onSelectDraft: (id: string) => void;
-    onDraftContextMenu: (id: string, e: globalThis.MouseEvent) => void;
+    calendar: DraftCalendarActions;
+    onToggleDelegate: () => void;
+    onWidthChange: (width: number) => void;
     /** 加一个时点条目 */
     onAddPoint: () => void;
     /** 加一个时段条目 */
@@ -60,6 +67,7 @@ export interface FlowDraftPanelProps {
     onSortByTime: () => void;
     onListReady: (container: HTMLDivElement) => void;
     onListDispose?: () => void;
+    host: NodeLineHost;
 }
 
 // ============================================================
@@ -80,45 +88,26 @@ function parseYmd(s: string): Date {
     return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
 }
 
-/** 某月 1 号是这一周的第几格（0 = 周一） */
+/** 本月 1 号是周几（周一 = 0） */
 function firstWeekdayIndex(d: Date): number {
-    return (new Date(d.getFullYear(), d.getMonth(), 1).getDay() + 6) % 7;
+    return (d.getDay() + 6) % 7;
 }
 
-/**
- * 自绘月历：‹ › 翻月、点日期选中、有草稿的日子打点
- *
- * 显示的月份由内部游标控制；选中的日期换到别的月时（比如从别处切过来），游标跟着翻过去。
- */
+/** 月历（纯显示 + 选日期） */
 function MonthCalendar({ selected, marked, onPickDate }: {
     selected: string;
     marked: string[];
     onPickDate: (date: string) => void;
 }) {
-    const sel = parseYmd(selected);
-    const [cursor, setCursor] = useState(() => new Date(sel.getFullYear(), sel.getMonth(), 1));
-
-    // 选中日期落入别的月 → 翻到那个月（同月就不动，免得打断用户正在翻的页）
-    useEffect(() => {
-        const d = parseYmd(selected);
-        setCursor((c) => (c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth()
-            ? c
-            : new Date(d.getFullYear(), d.getMonth(), 1)));
-    }, [selected]);
-
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth();
-    const lead = firstWeekdayIndex(cursor);
-    const days = new Date(year, month + 1, 0).getDate();
+    const cur = parseYmd(selected);
+    const [view, setView] = useState(() => new Date(cur.getFullYear(), cur.getMonth(), 1));
+    const year = view.getFullYear();
+    const month = view.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const lead = firstWeekdayIndex(view);
     const markedSet = new Set(marked);
-    const now = new Date();
-    const todayKey = ymd(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const cells: (string | null)[] = [];
-    for (let i = 0; i < lead; i++) cells.push(null);
-    for (let d = 1; d <= days; d++) cells.push(ymd(year, month, d));
-
-    const shift = (delta: number): void => setCursor(new Date(year, month + delta, 1));
+    const shift = (delta: number): void => setView(new Date(year, month + delta, 1));
 
     return (
         <div className="seqtk-draft-cal">
@@ -131,23 +120,26 @@ function MonthCalendar({ selected, marked, onPickDate }: {
                 {WEEKDAYS.map((w) => (
                     <span key={w} className="seqtk-draft-cal-week">{w}</span>
                 ))}
-                {cells.map((key, i) => key === null
-                    ? <span key={`blank-${i}`} className="seqtk-draft-cal-blank" />
-                    : (
+                {Array.from({ length: lead }, (_, i) => (
+                    <span key={`blank-${i}`} className="seqtk-draft-cal-blank" />
+                ))}
+                {Array.from({ length: daysInMonth }, (_, i) => {
+                    const day = i + 1;
+                    const key = ymd(year, month, day);
+                    return (
                         <button
                             key={key}
                             className={
                                 'seqtk-draft-cal-day'
-                                + (key === selected ? ' seqtk-draft-cal-day-sel' : '')
-                                + (key === todayKey ? ' seqtk-draft-cal-day-today' : '')
+                                + (key === selected ? ' seqtk-draft-cal-day-active' : '')
                             }
                             onClick={() => onPickDate(key)}
-                            title={key}
                         >
-                            {Number(key.slice(8))}
+                            {day}
                             {markedSet.has(key) && <span className="seqtk-draft-cal-dot" />}
                         </button>
-                    ))}
+                    );
+                })}
             </div>
         </div>
     );
@@ -171,16 +163,22 @@ function ListHost({ onReady, onDispose }: { onReady: (el: HTMLDivElement) => voi
     return <div className="seqtk-draft-list" ref={ref} />;
 }
 
-export function FlowDraftPanel(props: FlowDraftPanelProps) {
-    const { state, onCreateOnDate, onSelectDraft } = props;
-    const { selectedDate, markedDates, dayDrafts, selectedDraftId, title, saveState, hasDraft } = useStore(state);
-
-    const left = (
-        <div className="seqtk-pane">
-            <div className="seqtk-split-title">流程草稿</div>
-            <MonthCalendar selected={selectedDate} marked={markedDates} onPickDate={props.onPickDate} />
+/**
+ * 分发日历面板（左栏内容）
+ *
+ * 主视图左栏与委托面板共用这一份 —— 月历、当日列表与动作完全一致，
+ * 委托只是把这块内容挪到侧栏显示。
+ */
+export function DraftCalendarPanel({ state, actions }: {
+    state: SimpleStore<FlowDraftState>;
+    actions: DraftCalendarActions;
+}) {
+    const { selectedDate, markedDates, dayDrafts, selectedDraftId } = useStore(state);
+    return (
+        <>
+            <MonthCalendar selected={selectedDate} marked={markedDates} onPickDate={actions.onPickDate} />
             <div className="seqtk-draft-cal-actions">
-                <Button size="small" type="primary" onClick={onCreateOnDate}>+ 在这天新建</Button>
+                <Button size="small" type="primary" onClick={actions.onCreateOnDate}>+ 在这天新建</Button>
             </div>
             {dayDrafts.length === 0 ? (
                 <div className="seqtk-draft-cal-empty">这一天还没有草稿</div>
@@ -190,11 +188,11 @@ export function FlowDraftPanel(props: FlowDraftPanelProps) {
                         <div
                             key={d.id}
                             className={'seqtk-draft-list-item' + (d.id === selectedDraftId ? ' seqtk-draft-list-item-active' : '')}
-                            onClick={() => onSelectDraft(d.id)}
+                            onClick={() => actions.onSelectDraft(d.id)}
                             onContextMenu={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                props.onDraftContextMenu(d.id, e.nativeEvent);
+                                actions.onDraftContextMenu(d.id, e.nativeEvent);
                             }}
                         >
                             <span className="seqtk-draft-list-title">{d.title}</span>
@@ -203,26 +201,54 @@ export function FlowDraftPanel(props: FlowDraftPanelProps) {
                     ))}
                 </div>
             )}
+        </>
+    );
+}
+
+export function FlowDraftPanel(props: FlowDraftPanelProps) {
+    const { state, calendar, onListReady, onListDispose } = props;
+    const s = useStore(state);
+
+    const [leftWidth, setLeftWidth] = useState(s.leftPaneWidth || PANE_WIDTH_DEFAULT);
+    const { paneRef, handleProps } = usePaneResize(leftWidth, (width) => {
+        setLeftWidth(width);
+        props.onWidthChange(width);
+    });
+
+    const left = (
+        <div className="seqtk-pane">
+            <div className="seqtk-board-titlebar">
+                <span className="seqtk-split-title">事务分发</span>
+                {/* 委托开关收在标题末尾（图标按钮）：与设计 / 模板 / 查询同一套 */}
+                <IconButton
+                    className="seqtk-icon-btn seqtk-delegate-btn"
+                    icon="chevrons-left"
+                    tip="把分发日历委托到侧栏"
+                    host={props.host}
+                    onClick={() => props.onToggleDelegate()}
+                />
+            </div>
+            <DraftCalendarPanel state={state} actions={calendar} />
         </div>
     );
 
     const right = (
         <div className="seqtk-pane">
             <div className="seqtk-draft-toolbar">
-                <span className={'seqtk-draft-toolbar-title' + (hasDraft ? '' : ' seqtk-draft-toolbar-title-dim')}>
-                    {selectedDate} · {title}
+                <span className={'seqtk-draft-toolbar-title' + (s.hasDraft ? '' : ' seqtk-draft-toolbar-title-dim')}>
+                    {s.selectedDate} · {s.title}
                 </span>
                 {/* 同一天有多份时才需要选择器 —— 只有一份时它只是噪音 */}
-                {dayDrafts.length > 1 && (
+                {s.dayDrafts.length > 1 && (
                     <Select
                         size="small"
                         style={{ minWidth: 130 }}
-                        value={selectedDraftId ?? undefined}
-                        onChange={(id: string) => onSelectDraft(id)}
-                        options={dayDrafts.map((d) => ({ value: d.id, label: d.title }))}
+                        value={s.selectedDraftId ?? undefined}
+                        onChange={(id: string) => calendar.onSelectDraft(id)}
+                        options={s.dayDrafts.map((d) => ({ value: d.id, label: d.title }))}
                     />
                 )}
-                {hasDraft && (
+                {s.hasDraft && (
                     <>
                         <Button size="small" onClick={props.onAddPoint} title="加一个时点条目">
                             + 时点
@@ -235,15 +261,23 @@ export function FlowDraftPanel(props: FlowDraftPanelProps) {
                         </Button>
                     </>
                 )}
-                <span className="seqtk-draft-save-state">{saveState}</span>
+                <span className="seqtk-draft-save-state">{s.saveState}</span>
             </div>
-            <ListHost onReady={props.onListReady} onDispose={props.onListDispose} />
+            <ListHost onReady={onListReady} onDispose={onListDispose} />
         </div>
     );
 
     return (
-        <div className="seqtk-split">
-            <div className="seqtk-split-left">{left}</div>
+        // 委托期间左栏与把手让位右栏（与其余视图一致）
+        <div className={'seqtk-split' + (s.delegated ? ' seqtk-split-delegated' : '')}>
+            {!s.delegated && (
+                <>
+                    <div className="seqtk-split-left" ref={paneRef} style={{ width: leftWidth, flexBasis: leftWidth }}>
+                        {left}
+                    </div>
+                    <div className="seqtk-split-handle" {...handleProps} />
+                </>
+            )}
             <div className="seqtk-split-right">{right}</div>
         </div>
     );

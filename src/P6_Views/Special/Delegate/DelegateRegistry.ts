@@ -17,6 +17,7 @@
 
 import { SimpleStore } from '../../../P5_Data/Svelte/SimpleStore';
 import type { App } from 'obsidian';
+import type { ReactNode } from 'react';
 import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
 import type { PluginSettings } from '../../../P3_Settings/Settings';
 import type { NodeKindValue } from '../../../P4_Nodes/NodeKind/NodeKind';
@@ -25,8 +26,8 @@ import type { TreeNodeItem } from '../../../P7_Render/Composition/C2_Tree/NodeTr
 import type { LineOverlay } from '../../V1_Affair/Design/Tool/viewModel';
 import type { NodeEditHost } from '../../V1_Affair/Design/Slice/actions';
 
-/** 委托来源：设计 / 模板 / 线路 / 流程各一棵树，全局互斥（同时只有一个被委托出去） */
-export type DelegateOwner = 'design' | 'template' | 'route' | 'flow';
+/** 委托来源：设计 / 模板 / 线路 / 流程 / 查询 / 草稿各一份，全局互斥（同时只有一个被委托出去） */
+export type DelegateOwner = 'design' | 'template' | 'route' | 'flow' | 'query' | 'draft';
 
 /** 委托快照（落点据它决定「渲染谁的那一节」） */
 export interface DelegateSnapshot {
@@ -67,6 +68,19 @@ export interface DelegateTreeCtx {
 }
 
 /**
+ * 自定义面板的宿主（非树来源用，如事务分发的月历）
+ *
+ * 依赖由落点给全，来源不持有它们 —— 来源视图关掉之后委托面板照样能用。
+ */
+export interface DelegatePanelHost {
+    readonly app: App;
+    readonly pipe: DataPipe;
+    readonly settings: PluginSettings;
+    /** 取消委托（释放登记处并收掉落点面板） */
+    cancel(): void;
+}
+
+/**
  * 委托来源（每个来源一份单例实例）
  *
  * 状态（展开 / 选中）由来源持有 —— 委托面板与来源视图改的是同一份，
@@ -95,6 +109,13 @@ export interface DelegateSource {
     buildItems(ctx: DelegateTreeCtx): TreeNodeItem[];
     /** 树为空时的文案 */
     emptyText(ctx: DelegateTreeCtx): string | undefined;
+    /**
+     * 自定义面板内容（非树左栏用：如事务分发的月历、查询编辑器）
+     *
+     * 给了它就整块替换落点的树渲染（标题与「取消委托」按钮仍由落点提供）。
+     * 树来源不给；给它的来源 `buildItems` 返回空数组即可（接口保持必填，落点不必分叉判定）。
+     */
+    renderPanel?(host: DelegatePanelHost): ReactNode;
     /**
      * 来源视图的 viewType（面板里点「在右侧打开」时回到它）
      *

@@ -44,6 +44,17 @@ export class EventP {
         for (const cb of this.fileListeners) cb(kind, nodeId, action);
     }
 
+    /**
+     * 手动补发一次文件基准变化广播（不经 IS_Pending 检查）
+     *
+     * 自触发抑制会把「经 EXEC_Mutation 写回」的文件变化挡掉（防回环），可订阅者
+     * 那边正是靠这个事件刷新列表快照的 —— 挡掉就表现为「归档 / 删除后列表不刷新」。
+     * 所以写回**完成后**由 DataPipe 补发这一次广播：订阅者只读刷新，没有回环风险。
+     */
+    NOTIFY_FileChange(kind: NodeKindValue, nodeId: string, action: 'create' | 'modify' | 'delete'): void {
+        for (const cb of this.fileListeners) cb(kind, nodeId, action);
+    }
+
     /** 重命名（文件名即 nodeId）视为 旧 id 删除 + 新 id 创建 */
     private onFileRename(file: unknown, oldPath: string, p: SeqtkPlugin): void {
         if (!(file instanceof TFile)) return;

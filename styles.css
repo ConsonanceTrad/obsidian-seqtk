@@ -1007,6 +1007,13 @@ button.seqtk-open-btn {
 }
 
 /* 缓存未就绪：提醒而不是错误 —— 等一会儿自然会好 */
+/* 右栏底部提示（只读口径说明） */
+.seqtk-query-hint {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
 .seqtk-query-hint-warn {
   padding: 4px 8px;
   border-radius: var(--radius-s);
@@ -1652,7 +1659,7 @@ button.seqtk-open-btn {
   border-color: var(--interactive-accent);
 }
 
-/* 脚本级约束块：#STF / #ENF 逐条列出 */
+/* 脚本级约束块：#STF / #ENF 按起止对配对，一对一行 */
 .seqtk-lad-window {
   display: flex;
   align-items: center;
@@ -1941,6 +1948,175 @@ button.seqtk-open-btn {
 
 .seqtk-push-item {
   font-size: var(--font-ui-small);
+}
+
+/* 聚焦指示器（①C 顶部：当前活跃项 / 下一件预告） */
+.seqtk-push-focus {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.seqtk-push-focus-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.seqtk-push-focus-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-ui-medium);
+}
+
+.seqtk-push-focus-sub {
+  margin-top: 2px;
+  padding-left: 2px;
+  display: flex;
+  gap: 6px;
+  font-size: var(--font-ui-smaller);
+}
+
+/* 流程勾选行 */
+.seqtk-push-scripts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-push-section {
+  padding: 8px 12px 2px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+/* 完成项：原位保留、划线弱化（日终才清空） */
+.seqtk-push-item-row.is-done {
+  opacity: 0.55;
+}
+
+/* 组推送的单元清单（展开后逐项完成） */
+.seqtk-push-units {
+  margin: 4px 0 2px;
+  padding-left: 8px;
+  border-left: 2px solid var(--background-modifier-border);
+}
+
+.seqtk-push-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-push-unit.is-done {
+  opacity: 0.55;
+}
+
+.seqtk-push-unit .seqtk-push-done-btn {
+  margin-left: auto;
+}
+
+.seqtk-push-done-btn {
+  margin-left: auto;
+}
+
+.seqtk-push-status {
+  cursor: pointer;
+}
+
+/* 脚本树的折叠方块（流程设计左栏；叶子给同宽占位保持对齐） */
+.seqtk-flow-twisty {
+  width: 14px;
+  flex: 0 0 auto;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  user-select: none;
+}
+
+/* ============================================================
+   日志阅览（LogView）
+   ============================================================ */
+.seqtk-log-kind {
+  margin-bottom: 2px;
+}
+
+.seqtk-log-kind-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  font-size: var(--font-ui-small);
+}
+
+.seqtk-log-kind-head:hover {
+  background: var(--background-modifier-hover);
+}
+
+.seqtk-log-kind-head.is-active {
+  background: var(--background-modifier-hover);
+  font-weight: var(--font-semibold);
+}
+
+.seqtk-log-dates {
+  padding-left: 12px;
+}
+
+.seqtk-log-date {
+  padding: 2px 8px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.seqtk-log-date:hover {
+  background: var(--background-modifier-hover);
+}
+
+.seqtk-log-date.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.seqtk-log-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.seqtk-log-toolbar .seqtk-split-title {
+  margin-right: auto;
+  white-space: nowrap;
+}
+
+.seqtk-log-item {
+  gap: 8px;
+}
+
+.seqtk-log-time {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+
+.seqtk-log-text {
+  font-size: var(--font-ui-small);
+  word-break: break-word;
 }
 
 /* ============================================================
@@ -2865,6 +3041,28 @@ button.seqtk-open-btn {
   font-size: var(--font-ui-smaller);
   text-transform: none;
   letter-spacing: normal;
+}
+
+/* 非树来源的委托面板外壳（如流程草稿的月历）：标题行 + 内容区 */
+.seqtk-delegated-custom {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.seqtk-delegated-custom-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.seqtk-delegated-custom-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 8px;
 }
 
 /* ============================================================

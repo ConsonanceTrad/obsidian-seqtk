@@ -213,7 +213,7 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
             this.showScriptMenu(ctx.nodeId, FLOW_TREE.items.find((i) => i.nodeId === ctx.nodeId) ?? null, e);
         });
         // 上次关库时的委托意图：先按它让位，等登记处落定自然衔接（成因见 FlowTreeShared）
-        FLOW_TREE.SET_PendingDelegated(this.settings.delegatedOwner === 'flow');
+        FLOW_TREE.SET_PendingDelegated(this.settings.delegatedOwner === 'flow' && !DELEGATE.settled);
         this.recompute();
     }
 
@@ -243,6 +243,7 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
                 nodeId: f.nodeId,
                 kind: f.data.kind,
                 desc: f.data.desc,
+                parent: (f.data as { parent?: string }).parent ?? '',
             })));
         }).catch((e: unknown) => {
             console.error('[SeqTK] 扫描流程脚本失败:', e);
@@ -466,26 +467,67 @@ export class FlowView extends ReactViewBase implements FlowDesignHost {
     // ---- 约束指令（#STF / #ENF） ----
 
     /**
-     * 渲染约束行
+     * 把约束条目配成「起止对」
      *
-     * 约束是**脚本级**的（不属于任何语句），所以排在语句序列之上。点击改值、右键删除、
+     * 顺序扫描：`#STF` 开一对，紧随的 `#ENF` 并入；没有未闭合的起就让止自成一对。
+     * 只做忠实配对（多余 / 缺半的照样显示成行），合法性仍交给评估层。
+     */
+    private pairGuards(guards: FlowScript['guards']): { stf: number | null; enf: number | null }[] {
+        const pairs: { stf: number | null; enf: number | null }[] = [];
+        let open = -1;
+        guards.forEach((g, i) => {
+            if (g.kind === 'STF') {
+                pairs.push({ stf: i, enf: null });
+                open = pairs.length - 1;
+                return;
+            }
+            if (open >= 0 && pairs[open].enf === null) {
+                pairs[open].enf = i;
+                open = -1;
+            } else {
+                pairs.push({ stf: null, enf: i });
+            }
+        });
+        return pairs;
+    }
+
+    /**
+     * 渲染约束区
+     *
+     * 约束是**脚本级**的（不属于任何语句），所以排在语句序列之上。**以起止对为组、
+     * 每对独立成行**（`#STF` 绿 / `#ENF` 红，一眼看出一头一尾）。点击改值、右键删除、
      * 「+」加一条。可以有多组 —— 合法性（EVER 组不重叠等）交给评估层，这里只忠实呈现。
      */
     private renderGuardRow(parent: HTMLElement, ast: FlowScript): void {
-        const row = parent.createDiv('seqtk-lad-window');
-        row.createEl('span', { cls: 'seqtk-lad-section-title', text: '约束' });
-        ast.guards.forEach((g, i) => {
-            const chip = row.createEl('span', {
-                cls: `seqtk-lad-decl seqtk-lad-decl-${g.kind.toLowerCase()}`,
-                text: guardText(g),
-            });
-            setTooltip(chip, '点击改值；右键删除');
-            chip.addEventListener('click', () => this.editGuard(ast, i));
-            this.attachDeleteMenu(chip, () => { ast.guards.splice(i, 1); });
-        });
-        const add = row.createEl('span', { cls: 'seqtk-lad-add', text: '+' });
-        setTooltip(add, '加一条约束');
-        add.addEventListener('click', (e) => this.showAddGuardMenu(e, ast));
+        parent.createEl('div', { cls: 'seqtk-lad-section-title', text: '约束' });
+
+        const pairs = this.pairGuards(ast.guards);
+        /** 渲染一行约束（一对起止 + 行末的添加入口） */
+        const renderPairRow = (pair: { stf: number | null; enf: number | null }, withAdd: boolean): void => {
+            const row = parent.createDiv('seqtk-lad-window');
+            for (const idx of [pair.stf, pair.enf]) {
+                if (idx === null) continue;
+                const g = ast.guards[idx];
+                const chip = row.createEl('span', {
+                    cls: `seqtk-lad-decl seqtk-lad-decl-${g.kind.toLowerCase()}`,
+                    text: guardText(g),
+                });
+                setTooltip(chip, '点击改值；右键删除');
+                chip.addEventListener('click', () => this.editGuard(ast, idx));
+                this.attachDeleteMenu(chip, () => { ast.guards.splice(idx, 1); });
+            }
+            if (withAdd) {
+                const add = row.createEl('span', { cls: 'seqtk-lad-add', text: '+' });
+                setTooltip(add, '加一条约束');
+                add.addEventListener('click', (e) => this.showAddGuardMenu(e, ast));
+            }
+        };
+
+        if (pairs.length === 0) {
+            renderPairRow({ stf: null, enf: null }, true);
+            return;
+        }
+        pairs.forEach((pair, i) => renderPairRow(pair, i === pairs.length - 1));
     }
 
     /** 弹窗问出一个约束值：`EVER` 或 `@` 时间表达式 */

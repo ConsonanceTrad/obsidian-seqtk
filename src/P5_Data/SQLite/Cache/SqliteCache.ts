@@ -656,6 +656,26 @@ export class SqliteCache {
   }
 
   /**
+   * 语法检查（试编译，不执行）
+   *
+   * 与 QUERY_Raw 同一道只读闸门；`prepare` 就会抛语法错误，编译通过立即释放语句。
+   * 返回 null 表示通过，否则是错误原文（原文就是最准的诊断，与查询错误同口径）。
+   */
+  CHECK_Sql(sql: string): string | null {
+    if (!READONLY_SQL.test(sql)) {
+      return '只允许只读查询：语句需以 SELECT 或 WITH 开头';
+    }
+    try {
+      const db = this.REQUIRE_Db();
+      const stmt = db.prepare(sql);
+      stmt.free();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  /**
    * 一次性查询全部出边关系，构建 from_id → 关系列表映射
    *
    * 供批量读取（GET_AllNodes / QUERY_Nodes / SEARCH_Nodes）复用，

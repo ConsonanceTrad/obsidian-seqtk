@@ -50,6 +50,7 @@ import {
 } from '../../V1_Affair/Design/Slice/inlineEdit';
 import { archiveNode, type NodeEditHost } from '../../V1_Affair/Design/Slice/actions';
 import { REVEAL_SourceView } from './delegateTargets';
+import { DelegatedCustomPanel } from './DelegatedCustomPanel';
 import { SYNC_FromFiles } from '../../V0_Common/SyncFromFiles';
 import type { DataPipe } from '../../../P5_Data/CoPipe/DataPipe';
 import type { PluginSettings } from '../../../P3_Settings/Settings';
@@ -186,6 +187,21 @@ export class DelegateTreeController implements NodeEditHost, DelegateTreeHost, I
 
     /** 待渲染的 React 树（两个落点共用同一份装配） */
     render(): ReactElement {
+        // 非树来源（renderPanel）：整块内容由来源给，落点只套统一外壳
+        const renderCustom = this.source.renderPanel;
+        if (renderCustom) {
+            return createElement(DelegatedCustomPanel, {
+                title: this.source.title,
+                content: renderCustom({
+                    app: this.app,
+                    pipe: this.pipe,
+                    settings: this.settings,
+                    cancel: () => this.onCancel(),
+                }),
+                onCancelDelegate: () => this.onCancel(),
+                host: { setTooltip, setIcon },
+            });
+        }
         return createElement(DelegatedTreePanel, {
             store: this.state,
             actions: {

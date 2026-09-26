@@ -11,6 +11,7 @@ import { Menu, Notice } from 'obsidian';
 import { GET_FileByPath } from '../../../../P5_Data/MdFile/PathTools/PathParse';
 import { NODE_KIND } from '../../../../P4_Nodes/NodeKind/NodeKind';
 import { NODE_KIND_LABELS } from '../../../../P4_Nodes/NodeKind/NodeLabel';
+import { BUILD_ScriptTree, SCRIPT_GROUP_LABEL } from '../../../../P2_Tools/Script/scriptTree';
 import { FLOW_TREE } from './flowTreeShared';
 import type { FlowScriptItem } from './flowTreeShared';
 import { TransactionCreateModal } from '../../../../P7_Render/Structure/S2_Modal/TransactionModals';
@@ -27,11 +28,35 @@ import type { SeqtkNode } from '../../../../P4_Nodes/Node';
  * （见 flowTreeShared 的 FlowTreeSnapshot.items 与 FlowDesign.REFRESH_Scripts）。
  */
 export function BUILD_ScriptRows(host: FlowDesignHost): FlowScriptRow[] {
-    return FLOW_TREE.items.map(({ nodeId, kind, desc }) => ({
-        nodeId,
-        desc,
-        kindLabel: NODE_KIND_LABELS[kind],
-    }));
+    const tree = BUILD_ScriptTree(FLOW_TREE.items);
+    const rows: FlowScriptRow[] = [];
+    const walk = (nodes: ReturnType<typeof BUILD_ScriptTree>, depth: number): void => {
+        for (const n of nodes) {
+            const hasChildren = n.children.length > 0;
+            const expanded = FLOW_TREE.expanded.has(n.nodeId);
+            rows.push({
+                nodeId: n.nodeId,
+                desc: n.desc,
+                kindLabel: n.isGroup ? SCRIPT_GROUP_LABEL : (NODE_KIND_LABELS[n.kind as NodeKindValue] ?? n.kind),
+                depth,
+                isGroup: n.isGroup,
+                hasChildren,
+                expanded,
+            });
+            // 折叠的分组不下发后代（rows 就是可见行，渲染侧不必再过滤）
+            if (hasChildren && expanded) walk(n.children, depth + 1);
+        }
+    };
+    walk(tree, 0);
+    return rows;
+}
+
+/** 切换分组展开/收起（点分组行就是它，不进入选中） */
+export function TOGGLE_ScriptGroup(nodeId: string): void {
+    const exp = FLOW_TREE.expanded;
+    if (exp.has(nodeId)) exp.delete(nodeId);
+    else exp.add(nodeId);
+    FLOW_TREE.markExpandedChanged();
 }
 
 /**
@@ -41,6 +66,15 @@ export function BUILD_ScriptRows(host: FlowDesignHost): FlowScriptRow[] {
  * 读回之前先把正文清空并渲染一次 —— 否则会短暂显示上一个脚本的内容。
  */
 export function SELECT_Script(host: FlowDesignHost, nodeId: string): void {
+    // 分组是分类目录（模板口径）：点它只展开/收起，不进入选中
+    const flatten = (nodes: ReturnType<typeof BUILD_ScriptTree>): ReturnType<typeof BUILD_ScriptTree> =>
+        nodes.flatMap((n) => [n, ...flatten(n.children)]);
+    const node = flatten(BUILD_ScriptTree(FLOW_TREE.items)).find((n) => n.nodeId === nodeId);
+    if (node?.isGroup) {
+        TOGGLE_ScriptGroup(nodeId);
+        host.recompute();
+        return;
+    }
     host.currentScriptId = nodeId;
     host.currentText = '';
     host.recompute();

@@ -26,12 +26,15 @@ import type { RawQueryResult } from '../SQLite/Cache/SqliteCache';
 import type { OperationQueue } from '../Queue/OperationQueue';
 import type { Unsubscriber } from '../Svelte/SimpleStore';
 import type { PluginSettings } from '../../P3_Settings/Settings';
-import type { NodeKindValue } from '../../P4_Nodes/NodeKind/NodeKind';
+import type { NodeKindValue, NodeRuntimeKindValue } from '../../P4_Nodes/NodeKind/NodeKind';
 import type { SeqtkNode, NodeFile } from '../../P4_Nodes/Node';
 import { GET_FileByPath } from '../MdFile/PathTools/PathParse';
+import { LogStore } from '../Log/LogStore';
 import { EVENTS } from '../../P1_Register/Event';
 import type { FileChangeListener } from '../../P1_Register/Event';
 import { IS_CacheKind } from './KindChannel';
+import { COMPUTE_Propagation } from '../../P4_Nodes/NodeField/Propagation';
+import type { SeqtkState } from '../../P4_Nodes/NodeField/StateKeys';
 import { BUILD_CacheSide, type Mutation } from './Pipes/ViewToCache';
 import { BUILD_FileSide } from './Pipes/CacheToFile';
 import { READ_FileView } from './Pipes/FileToView';
@@ -48,7 +51,21 @@ export interface DataPipeDeps {
 }
 
 export class DataPipe {
-    constructor(private deps: DataPipeDeps) {}
+    /** 日志写入编排（RUNTIME 日志节点按日聚合；文件基准通道，不进缓存） */
+    private logStore: LogStore;
+
+    constructor(private deps: DataPipeDeps) {
+        this.logStore = new LogStore(deps.fileManager);
+    }
+
+    /**
+     * 追加一条日志（RUNTIME_EDIT_LOG / RUNTIME_BEHAVE_LOG / RUNTIME_FLOW_LOG）
+     *
+     * 排队写入不等待落盘；审计流水不做业务拦截，失败仅记控制台。
+     */
+    LOG_Append(kind: NodeRuntimeKindValue, text: string): void {
+        this.logStore.APPEND(kind, text);
+    }
 
     /** 自身写回中的文件路径集合（vault 事件据此忽略，防回环） */
     private pendingPaths = new Set<string>();
@@ -141,10 +158,17 @@ export class DataPipe {
         return async (file) => {
             const path = GET_FileByPath(m.kind, m.nodeId, this.deps.settings);
             this.pendingPaths.add(path);
+            let ok = false;
             try {
                 await run(file);
+                ok = true;
             } finally {
                 this.pendingPaths.delete(path);
+                // 文件基准节点（脚本 / 日志）：自触发事件被抑制，订阅者收不到自己的写 ——
+                // 写回成功后补发一次广播，列表快照靠它刷新（归档 / 删除后不刷新的根因）
+                if (ok && !IS_CacheKind(m.kind)) {
+                    EVENTS.NOTIFY_FileChange(m.kind, m.nodeId, m.op === 'remove' ? 'delete' : 'modify');
+                }
             }
         };
     }
@@ -167,6 +191,59 @@ export class DataPipe {
     /** 按 nodeId 查活跃缓存节点（文件基准类请用 READ_FileView；弃置类请用 GET_NodeArchive） */
     GET_Node(nodeId: string): SeqtkNode | undefined {
         return this.deps.cache.GET_Node(nodeId);
+    }
+
+    /**
+     * 状态变更 + 传播编排（状态传播规则的第一个真实执行端）
+     *
+     * 把 nodeId 的状态改为 state，随后按 `settings.stateRules` 计算传播
+     * （`COMPUTE_Propagation` 是纯函数，上下文在此从缓存取齐），一并写入被波及的
+     * 后代 / 祖先。本体与传播变更都走 `EXEC_Mutation` 同一条写意图，缓存 + 文件两侧一致。
+     */
+    EXEC_StateChange(nodeId: string, state: SeqtkState): void {
+        const node = this.deps.cache.GET_Node(nodeId);
+        if (!node) return;
+
+        // 祖先链（由近及远；多归属取全，防环用 seen）
+        const ancestors: { nodeId: string; state: SeqtkState }[] = [];
+        const seen = new Set<string>([nodeId]);
+        let frontier = this.deps.cache.GET_Parents(nodeId);
+        while (frontier.length > 0) {
+            const next: string[] = [];
+            for (const pid of frontier) {
+                if (seen.has(pid)) continue;
+                seen.add(pid);
+                const p = this.deps.cache.GET_Node(pid);
+                if (!p) continue;
+                ancestors.push({ nodeId: pid, state: (p.state ?? 'plan') as SeqtkState });
+                next.push(...this.deps.cache.GET_Parents(pid));
+            }
+            frontier = next;
+        }
+
+        // 后代（扁平，排除自身）
+        const descendants = this.deps.cache.COLLECT_Descendants(nodeId)
+            .filter((d) => d.nodeId !== nodeId)
+            .map((d) => ({ nodeId: d.nodeId, state: (d.data.state ?? 'plan') as SeqtkState }));
+
+        const changes = COMPUTE_Propagation(this.deps.settings.stateRules, {
+            nodeId,
+            state,
+            ancestors,
+            descendants,
+            childrenOf: (pid) =>
+                this.deps.cache.GET_Children(pid).map((c) => ({
+                    nodeId: c.nodeId,
+                    state: ((c.data as SeqtkNode | undefined)?.state ?? 'plan') as SeqtkState,
+                })),
+        });
+
+        this.EXEC_Mutation({ op: 'update', kind: node.kind, nodeId, updates: { state } });
+        for (const ch of changes) {
+            const target = this.deps.cache.GET_Node(ch.nodeId);
+            if (!target) continue;
+            this.EXEC_Mutation({ op: 'update', kind: target.kind, nodeId: ch.nodeId, updates: { state: ch.state } });
+        }
     }
 
     /** 按 nodeId 查弃置缓存节点（archive 未就绪返回 undefined） */
@@ -232,6 +309,11 @@ export class DataPipe {
         return this.deps.cache.QUERY_Sql(sql, params, limit);
     }
 
+    /** SQL 语法检查（试编译不执行）：null = 通过，否则是错误原文 */
+    CHECK_Sql(sql: string): string | null {
+        return this.deps.cache.CHECK_Sql(sql);
+    }
+
     // ---- 文件基准节点的读写（SCRIPT / RUNTIME 通道） ----
 
     /**
@@ -240,9 +322,13 @@ export class DataPipe {
      * 文件基准 kind（脚本 / 日志）**不进活跃缓存**，取它们只有这一条路：
      * 用 `GET_ByKind` 会得到空数组，而那个空看起来跟「一个都没有」一模一样 ——
      * 这正是流程设计左栏列不出脚本、保存静默失败的原因。
+     *
+     * 只返回**活跃**节点（`open !== false`）：归档（open: false）的不进列表 ——
+     * 归档后不消失的话，界面刷新了也看不出变化。
      */
     async SCAN_Files(kinds: NodeKindValue[]): Promise<NodeFile[]> {
-        return this.deps.fileManager.scan.SCAN_ByKinds(kinds);
+        const all = await this.deps.fileManager.scan.SCAN_ByKinds(kinds);
+        return all.filter((f) => f.data.open !== false);
     }
 
     /**

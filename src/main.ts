@@ -16,6 +16,8 @@ import {RouteView, VIEW_TYPE_ROUTE} from "./P6_Views/V1_Affair/Route/Core/Route"
 import {TemplateView, VIEW_TYPE_TEMPLATE} from "./P6_Views/V1_Affair/Template/Core/Template";
 import {FlowView, VIEW_TYPE_FLOW} from "./P6_Views/V3_Script/FlowDesign/Core/FlowDesign";
 import {MIGRATE_Drafts} from "./P2_Tools/Script/DraftStore";
+import {PushRuntime} from "./P6_Views/V2_Rule/PushRuntime";
+import {VIEW_TYPE_FLOW_PUSH} from "./P6_Views/V2_Rule/FlowPush";
 
 /** 缓存落盘防抖（毫秒）：文件队列跑完后延迟落盘，密集变更只写一次 */
 const CACHE_SAVE_DEBOUNCE_MS = 10_000;
@@ -28,6 +30,8 @@ export default class SeqtkPlugin extends Plugin {
   dataPipe!: DataPipe;
   /** 缓存数据库的持久化载体（落在设置的数据根文件夹下，见 CacheDbStore） */
   cacheDbStore!: CacheDbStore;
+  /** 流程推送运行时（非视图服务：重算 / 到点提醒 / 状态栏 / 完成回写） */
+  pushRuntime!: PushRuntime;
   /** 面板目录：由 Register_View 填充（仅带 category 的 @AutoView 条目），中控台据此渲染 */
   panelRegistry: PanelEntry[] = [];
   /** 缓存落盘防抖计时器 */
@@ -62,6 +66,10 @@ export default class SeqtkPlugin extends Plugin {
     this.operationQueue.setOnFileOpsComplete(() => this.scheduleSaveCache());
     // 布局结束后的行为，不阻塞插件注册与库的整体启动速度
     this.app.workspace.onLayoutReady(() => void this.onReady());
+    // 流程推送运行时：实例化随插件生命周期，启动放在 onReady（缓存对账完成后）
+    this.pushRuntime = new PushRuntime(this, this.dataPipe, this.settings, () =>
+      this.activateView(VIEW_TYPE_FLOW_PUSH, 'right'),
+    );
     // 委托状态在**用户动作**上落盘：登记处的 delegate / release 会回调到这里。
     //
     // 刻意**不**订阅 DELEGATE.store：那条通道包含启动期的内部触发与 NOTIFY，它们不是用户
@@ -77,6 +85,9 @@ export default class SeqtkPlugin extends Plugin {
     // 指纹对账（差异文件才扫描解析）→ 打开写入闸门 → 落盘一次
     await Check_Cache_Data(this);
 
+    // 流程推送：对账完成后启动（状态栏 + 60s 对齐定时器 + 首次重算）
+    this.pushRuntime.START();
+
     // 恢复委托状态：交给 DelegateSession（细节与理由见那边的 RESTORE_Delegate）。
     // 它**只登记、不动布局** —— 启动时不抢焦点，布局交给工作区恢复
     RESTORE_Delegate(this.settings);
@@ -87,6 +98,8 @@ export default class SeqtkPlugin extends Plugin {
   }
 
   async onunload() {
+    // 流程推送运行时：停定时器、撤状态栏
+    this.pushRuntime?.STOP();
     // 会话状态先落盘：四个视图（设计 / 模板 / 线路 / 流程设计）的展开 / 选中 / 宽度 /
     // 打开位置都记在 settings 上，而它们的写回有防抖，插件被卸载时未必来得及。
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_DESIGN)) {

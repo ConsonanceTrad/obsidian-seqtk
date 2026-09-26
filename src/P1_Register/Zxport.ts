@@ -12,7 +12,7 @@ import type SeqtkPlugin from "../main"; // 类型引用，防止环依赖访问�
 //     暂不登记以免阻塞构建；待视图内部迁移完成后取消注释即重新启用其注册与打开指令。
 import "../P6_Views/Special/Blank/Blank";
 import "../P6_Views/Special/Hub/Hub";
-import "../P6_Views/V0_Common/Log";
+import "../P6_Views/V0_Common/Log/Core/Log";
 import "../P6_Views/V0_Common/Recycle";
 import "../P6_Views/Special/Delegate/DelegatedTree";
 import "../P6_Views/V1_Affair/Design/Core/Design";
@@ -24,7 +24,7 @@ import "../P6_Views/V2_Rule/FlowDraft";
 import "../P6_Views/V2_Rule/FlowPush";
 import "../P6_Views/V3_Script/ExecDesign";
 import "../P6_Views/V3_Script/FlowDesign/Core/FlowDesign";
-import "../P6_Views/V3_Script/QueryDesign";
+import "../P6_Views/V3_Script/QueryDesign/Core/QueryDesign";
 import "../P6_Views/V4_Agent/AgentDesign";
 import "../P6_Views/V4_Agent/AgentHook";
 import "../P6_Views/V4_Agent/SubInter";

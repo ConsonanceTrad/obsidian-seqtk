@@ -31,6 +31,12 @@ export interface FlowScriptRow {
     nodeId: string;
     desc: string;
     kindLabel: string;
+    /** 层级深度（缩进用；根级 0） */
+    depth: number;
+    /** 分组（有同类子脚本）：徽章文本是「分组」，点击只展开/收起 */
+    isGroup: boolean;
+    hasChildren: boolean;
+    expanded: boolean;
 }
 
 /** 流程设计状态（渲染件订阅的唯一来源） */
@@ -123,6 +129,13 @@ export function FlowDesignPanel(props: FlowDesignPanelProps) {
                                 props.onScriptContextMenu(s.nodeId, e.nativeEvent);
                             }}
                         >
+                            {/* 层级缩进 + 分组折叠方块（叶子给同宽占位保持对齐） */}
+                            <span style={{ width: s.depth * 14, flex: '0 0 auto' }} />
+                            {s.hasChildren ? (
+                                <span className="seqtk-flow-twisty">{s.expanded ? '▾' : '▸'}</span>
+                            ) : (
+                                <span className="seqtk-flow-twisty" />
+                            )}
                             <Tag>{s.kindLabel}</Tag>
                             <Text>{s.desc}</Text>
                         </List.Item>

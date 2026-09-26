@@ -118,7 +118,7 @@ export interface PluginSettings {
      * 取值要与那边的 DelegateOwner 对齐；这里不直接引那个类型，是因为它住在视图层，
      * 设置层不该反向依赖视图层。
      */
-    delegatedOwner: 'design' | 'template' | 'route' | 'flow' | null;
+    delegatedOwner: 'design' | 'template' | 'route' | 'flow' | 'query' | 'draft' | null;
 
     /**
      * 事务设计的框架树被委托到哪里
@@ -159,6 +159,18 @@ export interface PluginSettings {
      * 核心配置读不到时一律回退到 'own' 那份，不弹错。
      */
     timestampConfig: 'core' | 'own';
+
+    /**
+     * 流程推送：被禁用参与推送的流程脚本 nodeId 列表
+     *
+     * 缺省/空 = 全部启用。勾选状态由推送面板维护（多流程并行，合并单流推送）。
+     */
+    flowPushDisabled: string[];
+
+    /** 查询设计左栏宽度（0 = 用默认） */
+    queryLeftPaneWidth: number;
+    /** 流程草稿左栏宽度（0 = 用默认） */
+    draftLeftPaneWidth: number;
 }
 
 /** 默认设置 */
@@ -190,6 +202,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
     timestampFormat: 'YYYYMMDDHHmmss',
     timestampFolder: '',
     timestampConfig: 'core',
+    flowPushDisabled: [],
+    queryLeftPaneWidth: 0,
+    draftLeftPaneWidth: 0,
 };
 
 /**
